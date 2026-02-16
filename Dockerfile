@@ -26,14 +26,15 @@ COPY src/neuralnav ./src/neuralnav
 # Copy data files (Knowledge Base)
 COPY data ./data
 
-# Create directories for generated files and uv cache
-RUN mkdir -p /app/generated_configs /app/logs /app/.cache/uv && \
-    chmod -R 777 /app/.cache /app/generated_configs /app/logs
+# Create directories for generated files
+RUN mkdir -p /app/generated_configs /app/logs && \
+    chmod -R 777 /app/generated_configs /app/logs
 
 # Set environment variables
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
-ENV UV_CACHE_DIR=/app/.cache/uv
+# Use the venv created by uv sync (avoids uv run writing to .venv at runtime)
+ENV PATH="/app/.venv/bin:$PATH"
 
 ARG MODEL_CATALOG_URL
 
@@ -42,7 +43,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD uv run python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+  CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
 
 # Run the backend API server
-CMD ["uv", "run", "uvicorn", "neuralnav.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "neuralnav.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
