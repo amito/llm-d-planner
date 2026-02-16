@@ -282,6 +282,14 @@ docker-build: ## Build all Docker images
 	DOCKER_BUILDKIT=1 docker-compose build --parallel
 	@printf "$(GREEN)✓ All images built$(NC)\n"
 
+docker-push: ## Push backend and UI images to $(REGISTRY)/$(REGISTRY_ORG)
+	@printf "$(BLUE)Tagging and pushing images to $(REGISTRY)/$(REGISTRY_ORG)...$(NC)\n"
+	docker tag neuralnav-backend $(REGISTRY)/$(REGISTRY_ORG)/neuralnav-backend:latest
+	docker tag neuralnav-ui $(REGISTRY)/$(REGISTRY_ORG)/neuralnav-ui:latest
+	docker push $(REGISTRY)/$(REGISTRY_ORG)/neuralnav-backend:latest
+	docker push $(REGISTRY)/$(REGISTRY_ORG)/neuralnav-ui:latest
+	@printf "$(GREEN)✓ Images pushed to $(REGISTRY)/$(REGISTRY_ORG)$(NC)\n"
+
 docker-up: ## Start all services with Docker Compose
 	@printf "$(BLUE)Starting all services with Docker Compose...$(NC)\n"
 	docker-compose up -d
