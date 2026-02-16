@@ -33,7 +33,11 @@ class OllamaClient:
         self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
         self.host = host or os.getenv("OLLAMA_HOST")
 
-        if not OLLAMA_AVAILABLE:
+        if OLLAMA_AVAILABLE:
+            client_kwargs = {"host": self.host} if self.host else {}
+            self._client = ollama.Client(**client_kwargs)
+        else:
+            self._client = None
             logger.error("Ollama library not installed. Install with: pip install ollama")
 
     def chat(
@@ -76,10 +80,7 @@ class OllamaClient:
             if format_json:
                 kwargs["format"] = "json"
 
-            if self.host:
-                kwargs["host"] = self.host
-
-            response = ollama.chat(**kwargs)
+            response = self._client.chat(**kwargs)
 
             # Log the full response
             response_content = response.get("message", {}).get("content", "")
@@ -159,12 +160,12 @@ Return ONLY valid JSON matching the schema above. Do not include any explanation
 
     def is_available(self) -> bool:
         """Check if Ollama service is available."""
-        if not OLLAMA_AVAILABLE:
+        if not self._client:
             return False
 
         try:
             # Try to list models to verify connection
-            ollama.list()
+            self._client.list()
             return True
         except Exception as e:
             logger.warning(f"Ollama service not available: {e}")
@@ -177,16 +178,16 @@ Return ONLY valid JSON matching the schema above. Do not include any explanation
         Returns:
             True if model is available, False otherwise
         """
-        if not OLLAMA_AVAILABLE:
+        if not self._client:
             return False
 
         try:
-            models = ollama.list()
+            models = self._client.list()
             model_names = [m["name"] for m in models.get("models", [])]
 
             if self.model not in model_names:
                 logger.info(f"Pulling model {self.model}...")
-                ollama.pull(self.model)
+                self._client.pull(self.model)
                 logger.info(f"Model {self.model} pulled successfully")
 
             return True
