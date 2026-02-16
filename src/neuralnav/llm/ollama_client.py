@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from typing import Any
 
 try:
@@ -19,16 +20,18 @@ logger = logging.getLogger(__name__)
 class OllamaClient:
     """Client for interacting with Ollama LLM service."""
 
-    def __init__(self, model: str = "qwen2.5:7b", host: str | None = None):
+    def __init__(self, model: str | None = None, host: str | None = None):
         """
         Initialize Ollama client.
 
         Args:
-            model: Model name to use (default: llama3.1:8b)
-            host: Optional Ollama host URL (defaults to localhost:11434)
+            model: Model name to use. Falls back to OLLAMA_MODEL env var,
+                   then "qwen2.5:7b".
+            host: Optional Ollama host URL. Falls back to OLLAMA_HOST env var,
+                  then localhost:11434.
         """
-        self.model = model
-        self.host = host
+        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        self.host = host or os.getenv("OLLAMA_HOST")
 
         if not OLLAMA_AVAILABLE:
             logger.error("Ollama library not installed. Install with: pip install ollama")

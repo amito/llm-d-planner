@@ -28,6 +28,8 @@ spec:
                 secretKeyRef:
                   name: neuralnav-secrets
                   key: postgres-password
+            - name: DATABASE_URL
+              value: postgresql://neuralnav:$(POSTGRES_PASSWORD)@postgres:5432/neuralnav
             - name: MODEL_CATALOG_URL
               value: http://model-registry.odh-model-registries.svc:8080
             - name: OLLAMA_HOST
