@@ -1,5 +1,5 @@
 # Backend Dockerfile for NeuralNav
-FROM python:3.11-slim
+FROM --platform=linux/amd64 python:3.11-slim
 
 # Set working directory
 WORKDIR /app
@@ -26,12 +26,16 @@ COPY src/neuralnav ./src/neuralnav
 # Copy data files (Knowledge Base)
 COPY data ./data
 
-# Create directories for generated files
-RUN mkdir -p /app/generated_configs /app/logs
+# Create directories for generated files and uv cache
+RUN mkdir -p /app/generated_configs /app/logs /app/.cache/uv && \
+    chmod -R 777 /app/.cache /app/generated_configs /app/logs
 
 # Set environment variables
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
+ENV UV_CACHE_DIR=/app/.cache/uv
+
+ARG MODEL_CATALOG_URL
 
 # Expose backend API port
 EXPOSE 8000
