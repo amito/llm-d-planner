@@ -26,6 +26,9 @@ COPY src/neuralnav ./src/neuralnav
 # Copy data files (Knowledge Base)
 COPY data ./data
 
+# Copy scripts (schema init, benchmark loading — used by db-init Job)
+COPY scripts ./scripts
+
 # Create directories for generated files
 RUN mkdir -p /app/generated_configs /app/logs && \
     chmod -R 777 /app/generated_configs /app/logs
