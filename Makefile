@@ -51,6 +51,7 @@ KIND_CLUSTER_NAME ?= neuralnav
 PGDUMP_INPUT ?= data/benchmarks/performance/integ-oct-29.sql
 PGDUMP_OUTPUT ?= data/benchmarks/performance/benchmarks_GuideLLM.json
 
+SRC_DIR := src
 UI_DIR := ui
 SIMULATOR_DIR := simulator
 
@@ -478,35 +479,35 @@ test: test-unit ## Run all tests
 
 test-unit: ## Run unit tests
 	@printf "$(BLUE)Running unit tests...$(NC)\n"
-	cd $(BACKEND_DIR) && uv run pytest ../tests/ -v -m "not integration and not e2e"
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m "not integration and not e2e"
 
 test-integration: setup-ollama ## Run integration tests (requires Ollama)
 	@printf "$(BLUE)Running integration tests...$(NC)\n"
-	cd $(BACKEND_DIR) && uv run pytest ../tests/ -v -m integration
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m integration
 
 test-e2e: ## Run end-to-end tests (requires cluster)
 	@printf "$(BLUE)Running end-to-end tests...$(NC)\n"
 	@kubectl cluster-info > /dev/null 2>&1 || (printf "$(RED)✗ Kubernetes cluster not accessible$(NC). Run: make cluster-start\n" && exit 1)
-	cd $(BACKEND_DIR) && uv run pytest ../tests/ -v -m e2e
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m e2e
 
 test-workflow: setup-ollama ## Run workflow integration test
 	@printf "$(BLUE)Running workflow test...$(NC)\n"
-	cd $(BACKEND_DIR) && uv run $(PYTHON) test_workflow.py
+	cd $(SRC_DIR) && uv run $(PYTHON) test_workflow.py
 
 test-watch: ## Run tests in watch mode
 	@printf "$(BLUE)Running tests in watch mode...$(NC)\n"
-	cd $(BACKEND_DIR) && uv run pytest-watch
+	cd $(SRC_DIR) && uv run pytest-watch
 
 ##@ Code Quality
 
 lint: ## Run linters
 	@printf "$(BLUE)Running linters...$(NC)\n"
-	@uv run ruff check $(BACKEND_DIR)/src/ $(UI_DIR)/*.py || printf "$(YELLOW)ruff not installed, skipping$(NC)\n"
+	@uv run ruff check $(SRC_DIR)/ $(UI_DIR)/ || printf "$(YELLOW)ruff not installed, skipping$(NC)\n"
 	@printf "$(GREEN)✓ Linting complete$(NC)\n"
 
 format: ## Auto-format code
 	@printf "$(BLUE)Formatting code...$(NC)\n"
-	@uv run ruff format $(BACKEND_DIR)/ $(UI_DIR)/ || printf "$(YELLOW)ruff not installed, skipping$(NC)\n"
+	@uv run ruff format $(SRC_DIR)/ $(UI_DIR)/ || printf "$(YELLOW)ruff not installed, skipping$(NC)\n"
 	@printf "$(GREEN)✓ Formatting complete$(NC)\n"
 
 ##@ Cleanup
@@ -544,6 +545,6 @@ info: ## Show configuration and platform info
 	@printf "  KIND Cluster: $(KIND_CLUSTER_NAME)\n"
 	@printf "\n"
 	@printf "$(BLUE)Paths:$(NC)\n"
-	@printf "  Backend: $(BACKEND_DIR)\n"
+	@printf "  Source: $(SRC_DIR)\n"
 	@printf "  UI: $(UI_DIR)\n"
 	@printf "  Simulator: $(SIMULATOR_DIR)\n"
