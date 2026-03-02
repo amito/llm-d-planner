@@ -20,7 +20,8 @@ TODO (Phase 2+): Parametric Performance Models
 import logging
 import math
 
-from neuralnav.knowledge_base.benchmarks import BenchmarkData, BenchmarkRepository
+from neuralnav.knowledge_base.benchmark_source import BenchmarkSource
+from neuralnav.knowledge_base.benchmarks import BenchmarkData
 from neuralnav.knowledge_base.model_catalog import ModelCatalog, ModelInfo
 from neuralnav.shared.schemas import (
     ConfigurationScores,
@@ -42,16 +43,21 @@ class ConfigFinder:
     """Plan GPU capacity to meet SLO targets and traffic requirements."""
 
     def __init__(
-        self, benchmark_repo: BenchmarkRepository | None = None, catalog: ModelCatalog | None = None
+        self, benchmark_repo: BenchmarkSource | None = None, catalog: ModelCatalog | None = None
     ):
         """
         Initialize capacity planner.
 
         Args:
-            benchmark_repo: Benchmark repository
+            benchmark_repo: Any BenchmarkSource implementation (PostgreSQL, Model Catalog, etc.)
             catalog: Model catalog
         """
-        self.benchmark_repo = benchmark_repo or BenchmarkRepository()
+        if benchmark_repo is not None:
+            self.benchmark_repo = benchmark_repo
+        else:
+            from neuralnav.knowledge_base.benchmarks import BenchmarkRepository
+
+            self.benchmark_repo = BenchmarkRepository()
         self.catalog = catalog or ModelCatalog()
 
     def _calculate_required_replicas(self, qps_per_replica: float, required_qps: float) -> int:
