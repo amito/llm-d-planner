@@ -38,7 +38,11 @@ class ModelCatalogQualityScorer:
             model_name = model.get("name", "")
             if not model_name:
                 continue
-            artifacts = self._client.get_model_artifacts(model_name)
+            try:
+                artifacts = self._client.get_model_artifacts(model_name)
+            except Exception:
+                logger.warning("Failed to fetch artifacts for %s, skipping", model_name)
+                continue
             for artifact in artifacts:
                 if (
                     artifact.get("artifactType") == "metrics-artifact"

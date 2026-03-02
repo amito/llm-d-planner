@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from neuralnav.knowledge_base.model_catalog import ModelInfo
 
 if TYPE_CHECKING:
+    from neuralnav.knowledge_base.model_catalog import ModelCatalog
     from neuralnav.knowledge_base.model_catalog_client import ModelCatalogClient
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ class ModelCatalogModelSource:
         self._client = client
         self._models: dict[str, ModelInfo] = {}
         self._loaded_at: float = 0
+        self._local_catalog: ModelCatalog | None = None
 
     def _ensure_loaded(self) -> None:
         if self._models and (time.time() - self._loaded_at) < _CACHE_TTL:
@@ -162,11 +164,19 @@ class ModelCatalogModelSource:
             if task in m.supported_tasks and m.approval_status == "approved"
         ]
 
+    def _get_local_catalog(self) -> ModelCatalog:
+        """Lazily create and cache local ModelCatalog for GPU pricing."""
+        if self._local_catalog is None:
+            from neuralnav.knowledge_base.model_catalog import (
+                ModelCatalog as _ModelCatalog,
+            )
+
+            self._local_catalog = _ModelCatalog()
+        return self._local_catalog
+
     def get_gpu_type(self, gpu_type: str):
         """Delegate to local JSON catalog for GPU pricing."""
-        from neuralnav.knowledge_base.model_catalog import ModelCatalog
-
-        return ModelCatalog().get_gpu_type(gpu_type)
+        return self._get_local_catalog().get_gpu_type(gpu_type)
 
     def calculate_gpu_cost(
         self,
@@ -176,12 +186,8 @@ class ModelCatalogModelSource:
         provider: str | None = None,
     ) -> float | None:
         """Delegate to local JSON catalog for GPU pricing."""
-        from neuralnav.knowledge_base.model_catalog import ModelCatalog
-
-        return ModelCatalog().calculate_gpu_cost(gpu_type, gpu_count, hours_per_month, provider)
+        return self._get_local_catalog().calculate_gpu_cost(gpu_type, gpu_count, hours_per_month, provider)
 
     def get_all_gpu_types(self):
         """Delegate to local JSON catalog."""
-        from neuralnav.knowledge_base.model_catalog import ModelCatalog
-
-        return ModelCatalog().get_all_gpu_types()
+        return self._get_local_catalog().get_all_gpu_types()
