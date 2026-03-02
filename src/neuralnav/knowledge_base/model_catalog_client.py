@@ -75,7 +75,7 @@ class ModelCatalogClient:
             return resp.json()
 
     def list_models(self, page_size: int = 200) -> list[dict]:
-        """List all models from the configured source.
+        """List all models from the catalog.
 
         Handles pagination automatically via nextPageToken.
 
@@ -89,38 +89,44 @@ class ModelCatalogClient:
         next_token = ""
         while True:
             token_param = f"&nextPageToken={next_token}" if next_token else ""
-            data = self._get_json(
-                f"/sources/{self.source_id}/models" f"?pageSize={page_size}{token_param}"
-            )
-            all_items.extend(data.get("items", []))
+            data = self._get_json(f"/models?pageSize={page_size}{token_param}")
+            # API may return models under "models" or "items" key
+            all_items.extend(data.get("models", data.get("items", [])))
             next_token = data.get("nextPageToken", "")
             if not next_token:
                 break
         logger.info("Fetched %d models from Model Catalog", len(all_items))
         return all_items
 
-    def get_model_artifacts(self, model_name: str, page_size: int = 200) -> list[dict]:
+    def get_model_artifacts(
+        self, model_name: str, source_id: str | None = None, page_size: int = 200
+    ) -> list[dict]:
         """Get all artifacts (model + metrics) for a model.
 
         Handles pagination automatically via nextPageToken.
 
         Args:
             model_name: Full model name (e.g. "RedHatAI/granite-3.1-8b-instruct").
+            source_id: Source identifier for the artifacts endpoint.
+                       Falls back to the configured source_id if not provided.
             page_size: Number of items per page request.
 
         Returns:
             List of raw artifact dicts from the API.
         """
-        encoded = quote(model_name, safe="")
+        source = source_id or self.source_id
+        encoded_source = quote(source, safe="")
+        encoded_name = quote(model_name, safe="")
         all_items: list[dict] = []
         next_token = ""
         while True:
             token_param = f"&nextPageToken={next_token}" if next_token else ""
             data = self._get_json(
-                f"/sources/{self.source_id}/models/{encoded}/artifacts"
+                f"/sources/{encoded_source}/models/{encoded_name}/artifacts"
                 f"?pageSize={page_size}{token_param}"
             )
-            all_items.extend(data.get("items", []))
+            # API may return artifacts under "artifacts" or "items" key
+            all_items.extend(data.get("artifacts", data.get("items", [])))
             next_token = data.get("nextPageToken", "")
             if not next_token:
                 break

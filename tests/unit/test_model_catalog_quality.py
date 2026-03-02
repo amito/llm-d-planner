@@ -14,7 +14,7 @@ def mock_client():
         {"name": "RedHatAI/model-a"},
         {"name": "RedHatAI/model-b"},
     ]
-    client.get_model_artifacts.side_effect = lambda name: {
+    client.get_model_artifacts.side_effect = lambda name, source_id=None: {
         "RedHatAI/model-a": [
             {
                 "artifactType": "metrics-artifact",

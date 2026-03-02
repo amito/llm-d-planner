@@ -145,8 +145,9 @@ class ModelCatalogBenchmarkSource:
             model_name = model.get("name", "")
             if not model_name:
                 continue
+            source_id = model.get("source_id")
             try:
-                artifacts = self._client.get_model_artifacts(model_name)
+                artifacts = self._client.get_model_artifacts(model_name, source_id=source_id)
             except Exception:
                 logger.warning("Failed to fetch artifacts for %s, skipping", model_name)
                 continue

@@ -77,7 +77,7 @@ def mock_client():
         {"name": "RedHatAI/test-model", "source_id": "redhat_ai_validated_models"},
         {"name": "RedHatAI/other-model", "source_id": "redhat_ai_validated_models"},
     ]
-    client.get_model_artifacts.side_effect = lambda name: {
+    client.get_model_artifacts.side_effect = lambda name, source_id=None: {
         "RedHatAI/test-model": [
             _perf_artifact(
                 model_id="RedHatAI/test-model",
