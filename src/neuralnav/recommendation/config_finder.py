@@ -43,7 +43,10 @@ class ConfigFinder:
     """Plan GPU capacity to meet SLO targets and traffic requirements."""
 
     def __init__(
-        self, benchmark_repo: BenchmarkSource | None = None, catalog: ModelCatalog | None = None
+        self,
+        benchmark_repo: BenchmarkSource | None = None,
+        catalog: ModelCatalog | None = None,
+        quality_scorer: object | None = None,
     ):
         """
         Initialize capacity planner.
@@ -51,6 +54,8 @@ class ConfigFinder:
         Args:
             benchmark_repo: Any BenchmarkSource implementation (PostgreSQL, Model Catalog, etc.)
             catalog: Model catalog
+            quality_scorer: Optional scorer with get_quality_score(model_name, use_case) method.
+                           When provided, replaces the default UseCaseQualityScorer.
         """
         if benchmark_repo is not None:
             self.benchmark_repo = benchmark_repo
@@ -59,6 +64,7 @@ class ConfigFinder:
 
             self.benchmark_repo = BenchmarkRepository()
         self.catalog = catalog or ModelCatalog()
+        self._quality_scorer = quality_scorer
 
     def _calculate_required_replicas(self, qps_per_replica: float, required_qps: float) -> int:
         """
@@ -252,18 +258,24 @@ class ConfigFinder:
             if slo_status == "exceeds" and not include_near_miss:
                 continue
 
-            # Calculate accuracy score - USE RAW AA BENCHMARK SCORE
-            # This is the actual model accuracy from Artificial Analysis benchmarks
+            # Calculate accuracy score - USE RAW BENCHMARK SCORE
+            # This is the actual model accuracy from benchmarks (AA or Model Catalog)
             # NOT a composite score with latency/budget bonuses
-            from .quality import score_model_quality
-
-            # Try to get raw AA score using the benchmark model name
             model_name_for_scoring = model.name if model else bench.model_hf_repo
-            raw_accuracy = score_model_quality(model_name_for_scoring, intent.use_case)
+            if self._quality_scorer is not None:
+                raw_accuracy = self._quality_scorer.get_quality_score(
+                    model_name_for_scoring, intent.use_case
+                )
+                if raw_accuracy == 0 and bench.model_hf_repo:
+                    raw_accuracy = self._quality_scorer.get_quality_score(
+                        bench.model_hf_repo, intent.use_case
+                    )
+            else:
+                from .quality import score_model_quality
 
-            # If no score found, try with benchmark's model_hf_repo
-            if raw_accuracy == 0 and bench.model_hf_repo:
-                raw_accuracy = score_model_quality(bench.model_hf_repo, intent.use_case)
+                raw_accuracy = score_model_quality(model_name_for_scoring, intent.use_case)
+                if raw_accuracy == 0 and bench.model_hf_repo:
+                    raw_accuracy = score_model_quality(bench.model_hf_repo, intent.use_case)
 
             accuracy_score = int(raw_accuracy)
 
