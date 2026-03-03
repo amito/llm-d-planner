@@ -22,6 +22,9 @@ spec:
           image: quay.io/neuralnav/neuralnav-backend:latest
           ports:
             - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: neuralnav-config
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
@@ -30,8 +33,12 @@ spec:
                   key: postgres-password
             - name: DATABASE_URL
               value: postgresql://neuralnav:$(POSTGRES_PASSWORD)@postgres:5432/neuralnav
-            - name: MODEL_CATALOG_URL
-              value: http://model-registry.odh-model-registries.svc:8080
+            - name: MODEL_CATALOG_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: neuralnav-secrets
+                  key: model-catalog-token
+                  optional: true
             - name: OLLAMA_HOST
               value: http://ollama:11434
             - name: OLLAMA_MODEL

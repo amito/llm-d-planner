@@ -5,6 +5,7 @@ echo "Deploying NeuralNav..."
 
 oc apply -f deploy/kubernetes/namespace.yaml \
          -f deploy/kubernetes/secrets.yaml \
+         -f deploy/kubernetes/configmap.yaml \
          -f deploy/kubernetes/postgres.yaml \
          -f deploy/kubernetes/ollama.yaml \
          -f deploy/kubernetes/backend.yaml \
