@@ -12,6 +12,6 @@ data:
   # Model Catalog connection (only used when NEURALNAV_BENCHMARK_SOURCE=model_catalog)
   MODEL_CATALOG_URL: https://model-catalog.rhoai-model-registries.svc:8443
   MODEL_CATALOG_SOURCE_ID: redhat_ai_validated_models
-  # Model Catalog uses the OpenShift service-serving signer (self-signed);
-  # disable verification for intra-cluster traffic
-  MODEL_CATALOG_VERIFY_SSL: "false"
+  MODEL_CATALOG_VERIFY_SSL: "true"
+  # Path to the OpenShift service-serving CA bundle (mounted via service-ca ConfigMap)
+  MODEL_CATALOG_CA_BUNDLE: /etc/pki/service-ca/service-ca.crt

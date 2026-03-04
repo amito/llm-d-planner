@@ -11,6 +11,8 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+import httpx
+
 from neuralnav.knowledge_base.benchmarks import BenchmarkData
 
 if TYPE_CHECKING:
@@ -25,7 +27,7 @@ _CACHE_TTL = 3600
 def _prop_str(props: dict, key: str, default: str = "") -> str:
     """Extract string value from customProperties."""
     entry = props.get(key)
-    if entry is None:
+    if not isinstance(entry, dict):
         return default
     return entry.get("string_value", default)
 
@@ -33,7 +35,7 @@ def _prop_str(props: dict, key: str, default: str = "") -> str:
 def _prop_float(props: dict, key: str, default: float = 0.0) -> float:
     """Extract double/float value from customProperties."""
     entry = props.get(key)
-    if entry is None:
+    if not isinstance(entry, dict):
         return default
     return float(entry.get("double_value", default))
 
@@ -41,7 +43,7 @@ def _prop_float(props: dict, key: str, default: float = 0.0) -> float:
 def _prop_int(props: dict, key: str, default: int = 0) -> int:
     """Extract int value from customProperties."""
     entry = props.get(key)
-    if entry is None:
+    if not isinstance(entry, dict):
         return default
     return int(entry.get("int_value", entry.get("double_value", default)))
 
@@ -84,10 +86,15 @@ def _artifact_to_benchmark_data(artifact: dict) -> BenchmarkData | None:
     if not model_id or not hardware:
         return None
 
+    hardware_count = _prop_int(props, "hardware_count")
+    requests_per_second = _prop_float(props, "requests_per_second")
+    if hardware_count <= 0 or requests_per_second <= 0:
+        return None
+
     data = {
         "model_hf_repo": model_id,
         "hardware": hardware,
-        "hardware_count": _prop_int(props, "hardware_count"),
+        "hardware_count": hardware_count,
         "framework": _prop_str(props, "framework_type", "vllm"),
         "framework_version": _prop_str(props, "framework_version"),
         "prompt_tokens": prompt_tokens,
@@ -111,7 +118,7 @@ def _artifact_to_benchmark_data(artifact: dict) -> BenchmarkData | None:
         "tps_p95": _prop_float(props, "tps_p95"),
         "tps_p99": _prop_float(props, "tps_p99"),
         "tokens_per_second": tps_mean,
-        "requests_per_second": _prop_float(props, "requests_per_second"),
+        "requests_per_second": requests_per_second,
         "estimated": False,
     }
 
@@ -137,14 +144,23 @@ class ModelCatalogBenchmarkSource:
 
     def _ensure_loaded(self) -> None:
         """Load or refresh benchmark cache if stale."""
-        if self._benchmarks and (time.time() - self._loaded_at) < _CACHE_TTL:
+        if self._loaded_at > 0 and (time.time() - self._loaded_at) < _CACHE_TTL:
             return
         self._load_all()
 
     def _load_all(self) -> None:
         """Fetch all models and their performance-metrics artifacts."""
         benchmarks: list[BenchmarkData] = []
-        models = self._client.list_models()
+        try:
+            models = self._client.list_models()
+        except Exception:
+            logger.warning(
+                "Failed to list models from Model Catalog; keeping existing benchmark cache"
+            )
+            if self._benchmarks:
+                # throttle retries only when stale data exists
+                self._loaded_at = time.time()
+            return
         for model in models:
             model_name = model.get("name", "")
             if not model_name:
@@ -152,7 +168,7 @@ class ModelCatalogBenchmarkSource:
             source_id = model.get("source_id")
             try:
                 artifacts = self._client.get_model_artifacts(model_name, source_id=source_id)
-            except Exception:
+            except httpx.HTTPError:
                 logger.warning("Failed to fetch artifacts for %s, skipping", model_name)
                 continue
             for artifact in artifacts:
@@ -160,7 +176,13 @@ class ModelCatalogBenchmarkSource:
                     artifact.get("artifactType") == "metrics-artifact"
                     and artifact.get("metricsType") == "performance-metrics"
                 ):
-                    bench = _artifact_to_benchmark_data(artifact)
+                    try:
+                        bench = _artifact_to_benchmark_data(artifact)
+                    except (KeyError, ValueError, TypeError):
+                        logger.warning(
+                            "Malformed performance artifact for %s, skipping", model_name
+                        )
+                        continue
                     if bench is not None:
                         benchmarks.append(bench)
 
@@ -206,10 +228,14 @@ class ModelCatalogBenchmarkSource:
             if gpu_filter and bench.hardware.upper() not in gpu_filter:
                 continue
 
-            # SLO check at requested percentile
-            ttft = getattr(bench, f"ttft_{percentile}", 0) or 0
-            itl = getattr(bench, f"itl_{percentile}", 0) or 0
-            e2e = getattr(bench, f"e2e_{percentile}", 0) or 0
+            # SLO check at requested percentile (skip if metrics are missing/zero)
+            ttft = getattr(bench, f"ttft_{percentile}", None)
+            itl = getattr(bench, f"itl_{percentile}", None)
+            e2e = getattr(bench, f"e2e_{percentile}", None)
+            if ttft is None or itl is None or e2e is None:
+                continue
+            if ttft <= 0 or itl <= 0 or e2e <= 0:
+                continue
 
             if ttft > ttft_p95_max_ms or itl > itl_p95_max_ms or e2e > e2e_p95_max_ms:
                 continue

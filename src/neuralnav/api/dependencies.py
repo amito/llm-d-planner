@@ -6,6 +6,7 @@ for the API routes. All shared state is initialized here.
 
 import logging
 import os
+import threading
 
 from neuralnav.cluster import KubernetesClusterManager, KubernetesDeploymentError
 from neuralnav.configuration import DeploymentGenerator, YAMLValidator
@@ -26,16 +27,28 @@ logger = logging.getLogger(__name__)
 
 # Singleton instances
 _workflow: RecommendationWorkflow | None = None
+_model_catalog_client = None  # ModelCatalogClient, if created
 _model_catalog: ModelCatalog | None = None
 _slo_repo: SLOTemplateRepository | None = None
 _deployment_generator: DeploymentGenerator | None = None
 _yaml_validator: YAMLValidator | None = None
 _cluster_manager: KubernetesClusterManager | None = None
+_workflow_lock = threading.Lock()
+
+
+_VALID_BENCHMARK_SOURCES = {"postgresql", "model_catalog"}
 
 
 def _get_benchmark_source_type() -> str:
     """Get configured benchmark source type."""
-    return os.getenv("NEURALNAV_BENCHMARK_SOURCE", "postgresql")
+    source = os.getenv("NEURALNAV_BENCHMARK_SOURCE", "postgresql").strip().lower()
+    if source not in _VALID_BENCHMARK_SOURCES:
+        logger.warning(
+            "Unknown NEURALNAV_BENCHMARK_SOURCE='%s'; defaulting to 'postgresql'",
+            source,
+        )
+        return "postgresql"
+    return source
 
 
 def _preload_model_catalog_async(benchmark_source, catalog, quality_scorer) -> None:
@@ -62,39 +75,54 @@ def _preload_model_catalog_async(benchmark_source, catalog, quality_scorer) -> N
 
 def get_workflow() -> RecommendationWorkflow:
     """Get the recommendation workflow singleton."""
-    global _workflow
+    global _workflow, _model_catalog_client
     if _workflow is None:
-        source_type = _get_benchmark_source_type()
-        if source_type == "model_catalog":
-            from neuralnav.knowledge_base.model_catalog_benchmarks import (
-                ModelCatalogBenchmarkSource,
-            )
-            from neuralnav.knowledge_base.model_catalog_client import ModelCatalogClient
-            from neuralnav.knowledge_base.model_catalog_models import (
-                ModelCatalogModelSource,
-            )
-            from neuralnav.knowledge_base.model_catalog_quality import (
-                ModelCatalogQualityScorer,
-            )
-            from neuralnav.recommendation.config_finder import ConfigFinder
+        with _workflow_lock:
+            if _workflow is None:
+                source_type = _get_benchmark_source_type()
+                if source_type == "model_catalog":
+                    from neuralnav.knowledge_base.model_catalog_benchmarks import (
+                        ModelCatalogBenchmarkSource,
+                    )
+                    from neuralnav.knowledge_base.model_catalog_client import (
+                        ModelCatalogClient,
+                    )
+                    from neuralnav.knowledge_base.model_catalog_models import (
+                        ModelCatalogModelSource,
+                    )
+                    from neuralnav.knowledge_base.model_catalog_quality import (
+                        ModelCatalogQualityScorer,
+                    )
+                    from neuralnav.recommendation.config_finder import ConfigFinder
 
-            client = ModelCatalogClient()
-            benchmark_source = ModelCatalogBenchmarkSource(client)
-            catalog = ModelCatalogModelSource(client)
-            quality_scorer = ModelCatalogQualityScorer(client)
-            config_finder = ConfigFinder(
-                benchmark_repo=benchmark_source,
-                catalog=catalog,
-                quality_scorer=quality_scorer,
-            )
-            logger.info("Using Model Catalog as benchmark source")
-            _workflow = RecommendationWorkflow(config_finder=config_finder)
-            # Preload in background so the app starts serving health probes immediately
-            _preload_model_catalog_async(benchmark_source, catalog, quality_scorer)
-        else:
-            logger.info("Using PostgreSQL as benchmark source")
-            _workflow = RecommendationWorkflow()
+                    client = ModelCatalogClient()
+                    _model_catalog_client = client
+                    benchmark_source = ModelCatalogBenchmarkSource(client)
+                    catalog = ModelCatalogModelSource(client)
+                    quality_scorer = ModelCatalogQualityScorer(client)
+                    config_finder = ConfigFinder(
+                        benchmark_repo=benchmark_source,
+                        catalog=catalog,
+                        quality_scorer=quality_scorer,
+                    )
+                    logger.info("Using Model Catalog as benchmark source")
+                    _workflow = RecommendationWorkflow(config_finder=config_finder)
+                    _preload_model_catalog_async(
+                        benchmark_source, catalog, quality_scorer
+                    )
+                else:
+                    logger.info("Using PostgreSQL as benchmark source")
+                    _workflow = RecommendationWorkflow()
     return _workflow
+
+
+def close_workflow_resources() -> None:
+    """Close long-lived resources created during workflow init."""
+    if _model_catalog_client is not None and hasattr(_model_catalog_client, "close"):
+        try:
+            _model_catalog_client.close()
+        except Exception:
+            logger.exception("Error closing Model Catalog client")
 
 
 def get_model_catalog() -> ModelCatalog:

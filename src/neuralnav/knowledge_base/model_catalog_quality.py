@@ -6,6 +6,8 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+import httpx
+
 if TYPE_CHECKING:
     from neuralnav.knowledge_base.model_catalog_client import ModelCatalogClient
 
@@ -31,13 +33,22 @@ class ModelCatalogQualityScorer:
         self._load_all()
 
     def _ensure_loaded(self) -> None:
-        if self._scores and (time.time() - self._loaded_at) < _CACHE_TTL:
+        if self._loaded_at > 0 and (time.time() - self._loaded_at) < _CACHE_TTL:
             return
         self._load_all()
 
     def _load_all(self) -> None:
         scores: dict[str, float] = {}
-        models = self._client.list_models()
+        try:
+            models = self._client.list_models()
+        except Exception:
+            logger.warning(
+                "Failed to list models from Model Catalog; keeping existing quality cache"
+            )
+            if self._scores:
+                # throttle retries only when stale data exists
+                self._loaded_at = time.time()
+            return
         for model in models:
             model_name = model.get("name", "")
             if not model_name:
@@ -45,7 +56,7 @@ class ModelCatalogQualityScorer:
             source_id = model.get("source_id")
             try:
                 artifacts = self._client.get_model_artifacts(model_name, source_id=source_id)
-            except Exception:
+            except httpx.HTTPError:
                 logger.warning("Failed to fetch artifacts for %s, skipping", model_name)
                 continue
             for artifact in artifacts:
@@ -54,9 +65,14 @@ class ModelCatalogQualityScorer:
                     and artifact.get("metricsType") == "accuracy-metrics"
                 ):
                     props = artifact.get("customProperties", {})
+                    if not isinstance(props, dict):
+                        continue
                     avg_entry = props.get("overall_average")
-                    if avg_entry:
-                        scores[model_name.lower()] = float(avg_entry.get("double_value", 0))
+                    if isinstance(avg_entry, dict):
+                        try:
+                            scores[model_name.lower()] = float(avg_entry.get("double_value", 0))
+                        except (ValueError, TypeError):
+                            logger.warning("Invalid accuracy value for %s, skipping", model_name)
                     break  # One accuracy artifact per model
         self._scores = scores
         self._loaded_at = time.time()

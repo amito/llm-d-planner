@@ -77,6 +77,9 @@ class ConfigFinder:
         Returns:
             Number of replicas (minimum 1)
         """
+        if qps_per_replica <= 0:
+            return 1
+
         # Add 20% headroom for safety
         headroom_factor = 1.2
         required_capacity = required_qps * headroom_factor

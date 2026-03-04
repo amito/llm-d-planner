@@ -4,6 +4,22 @@ from unittest.mock import patch
 
 import pytest
 
+import neuralnav.api.dependencies as deps
+
+
+@pytest.fixture(autouse=True)
+def _reset_workflow_singleton():
+    """Ensure dependency singletons are reset before and after each test."""
+    prev_workflow = deps._workflow
+    prev_client = deps._model_catalog_client
+    deps._workflow = None
+    deps._model_catalog_client = None
+    try:
+        yield
+    finally:
+        deps._workflow = prev_workflow
+        deps._model_catalog_client = prev_client
+
 
 @pytest.mark.unit
 @patch.dict("os.environ", {}, clear=False)
@@ -12,39 +28,41 @@ def test_default_source_is_postgresql():
     import os
 
     os.environ.pop("NEURALNAV_BENCHMARK_SOURCE", None)
-    from neuralnav.api.dependencies import _get_benchmark_source_type
-
-    assert _get_benchmark_source_type() == "postgresql"
+    assert deps._get_benchmark_source_type() == "postgresql"
 
 
 @pytest.mark.unit
 @patch.dict("os.environ", {"NEURALNAV_BENCHMARK_SOURCE": "postgresql"}, clear=False)
 def test_explicit_postgresql_source():
     """When NEURALNAV_BENCHMARK_SOURCE=postgresql, return postgresql."""
-    from neuralnav.api.dependencies import _get_benchmark_source_type
-
-    assert _get_benchmark_source_type() == "postgresql"
+    assert deps._get_benchmark_source_type() == "postgresql"
 
 
 @pytest.mark.unit
 @patch.dict("os.environ", {"NEURALNAV_BENCHMARK_SOURCE": "model_catalog"}, clear=False)
 def test_model_catalog_source():
     """When NEURALNAV_BENCHMARK_SOURCE=model_catalog, return model_catalog."""
-    from neuralnav.api.dependencies import _get_benchmark_source_type
+    assert deps._get_benchmark_source_type() == "model_catalog"
 
-    assert _get_benchmark_source_type() == "model_catalog"
+
+@pytest.mark.unit
+@patch.dict("os.environ", {"NEURALNAV_BENCHMARK_SOURCE": " Model_Catalog "}, clear=False)
+def test_benchmark_source_normalization():
+    """Whitespace and case in NEURALNAV_BENCHMARK_SOURCE are normalized."""
+    assert deps._get_benchmark_source_type() == "model_catalog"
+
+
+@pytest.mark.unit
+@patch.dict("os.environ", {"NEURALNAV_BENCHMARK_SOURCE": "invalid_source"}, clear=False)
+def test_unknown_benchmark_source_defaults_to_postgresql():
+    """Unknown NEURALNAV_BENCHMARK_SOURCE values default to postgresql."""
+    assert deps._get_benchmark_source_type() == "postgresql"
 
 
 @pytest.mark.unit
 @patch.dict("os.environ", {"NEURALNAV_BENCHMARK_SOURCE": "model_catalog"}, clear=False)
 def test_model_catalog_workflow_creates_correct_components():
     """When source is model_catalog, get_workflow() should wire up Model Catalog components."""
-    import neuralnav.api.dependencies as deps
-
-    # Reset singleton so get_workflow() re-creates it
-    deps._workflow = None
-
-    # Patch at source modules since get_workflow() uses local imports
     with (
         patch(
             "neuralnav.knowledge_base.model_catalog_client.ModelCatalogClient"
@@ -60,6 +78,7 @@ def test_model_catalog_workflow_creates_correct_components():
         ) as mock_quality_cls,
         patch("neuralnav.recommendation.config_finder.ConfigFinder") as mock_finder_cls,
         patch("neuralnav.api.dependencies.RecommendationWorkflow") as mock_wf_cls,
+        patch("neuralnav.api.dependencies._preload_model_catalog_async"),
     ):
         deps.get_workflow()
 
@@ -82,22 +101,11 @@ def test_model_catalog_workflow_creates_correct_components():
         # Verify workflow created with the custom config_finder
         mock_wf_cls.assert_called_once_with(config_finder=mock_finder_cls.return_value)
 
-    # Clean up singleton
-    deps._workflow = None
-
 
 @pytest.mark.unit
 @patch.dict("os.environ", {"NEURALNAV_BENCHMARK_SOURCE": "postgresql"}, clear=False)
 def test_postgresql_workflow_uses_defaults():
     """When source is postgresql, get_workflow() creates default RecommendationWorkflow."""
-    import neuralnav.api.dependencies as deps
-
-    # Reset singleton
-    deps._workflow = None
-
     with patch("neuralnav.api.dependencies.RecommendationWorkflow") as mock_wf_cls:
         deps.get_workflow()
         mock_wf_cls.assert_called_once_with()
-
-    # Clean up singleton
-    deps._workflow = None

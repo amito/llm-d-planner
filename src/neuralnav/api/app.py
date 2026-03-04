@@ -1,5 +1,6 @@
 """FastAPI application factory for NeuralNav API."""
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -31,11 +32,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize singletons on startup; cache warming runs in background."""
-    from .dependencies import get_workflow
+    from .dependencies import close_workflow_resources, get_workflow
 
     logger.info("Initializing workflow (cache warming in background)...")
-    get_workflow()
-    yield
+    try:
+        await asyncio.to_thread(get_workflow)
+    except Exception:
+        logger.exception(
+            "Workflow initialization failed during startup; will retry on first request"
+        )
+    try:
+        yield
+    finally:
+        close_workflow_resources()
 
 
 def create_app() -> FastAPI:

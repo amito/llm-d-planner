@@ -73,7 +73,8 @@ def _catalog_model_to_model_info(model: dict) -> ModelInfo:
 
     size_str = props.get("size", {}).get("string_value", "")
     validated_on = props.get("validated_on", {}).get("string_value", "")
-    has_validated = "validated" in props or bool(validated_on)
+    validated_val = props.get("validated", {}).get("string_value", "").lower()
+    has_validated = validated_val in ("true", "yes") or bool(validated_on)
 
     # Map tasks
     catalog_tasks = model.get("tasks", [])
@@ -127,14 +128,33 @@ class ModelCatalogModelSource:
         self._load_all()
 
     def _ensure_loaded(self) -> None:
-        if self._models and (time.time() - self._loaded_at) < _CACHE_TTL:
+        if self._loaded_at > 0 and (time.time() - self._loaded_at) < _CACHE_TTL:
             return
         self._load_all()
 
     def _load_all(self) -> None:
         models: dict[str, ModelInfo] = {}
-        for raw in self._client.list_models():
-            info = _catalog_model_to_model_info(raw)
+        try:
+            raw_models = self._client.list_models()
+        except Exception:
+            logger.warning("Failed to list models from Model Catalog; keeping existing cache")
+            if self._models:
+                # throttle retries only when stale cache exists
+                self._loaded_at = time.time()
+            return
+        for raw in raw_models:
+            try:
+                info = _catalog_model_to_model_info(raw)
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                raw_name = raw.get("name", "<unknown>") if isinstance(raw, dict) else "<unknown>"
+                logger.warning(
+                    "Malformed model payload for %s, skipping: %s",
+                    raw_name,
+                    exc,
+                )
+                continue
+            if not info.model_id:
+                continue
             models[info.model_id] = info
         self._models = models
         self._loaded_at = time.time()
@@ -190,7 +210,9 @@ class ModelCatalogModelSource:
         provider: str | None = None,
     ) -> float | None:
         """Delegate to local JSON catalog for GPU pricing."""
-        return self._get_local_catalog().calculate_gpu_cost(gpu_type, gpu_count, hours_per_month, provider)
+        return self._get_local_catalog().calculate_gpu_cost(
+            gpu_type, gpu_count, hours_per_month, provider
+        )
 
     def get_all_gpu_types(self):
         """Delegate to local JSON catalog."""

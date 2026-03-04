@@ -17,9 +17,18 @@ spec:
         app.kubernetes.io/name: backend
         app.kubernetes.io/part-of: neuralnav
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: backend
           image: quay.io/neuralnav/neuralnav-backend:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8000
           envFrom:
@@ -49,6 +58,10 @@ spec:
               value: "8000"
             - name: CORS_ORIGINS
               value: "*"
+          volumeMounts:
+            - name: service-ca
+              mountPath: /etc/pki/service-ca
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -70,6 +83,11 @@ spec:
             limits:
               cpu: "2"
               memory: 2Gi
+      volumes:
+        - name: service-ca
+          configMap:
+            name: neuralnav-service-ca
+            optional: true
 ---
 apiVersion: v1
 kind: Service

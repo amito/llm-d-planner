@@ -96,8 +96,8 @@ def test_list_models(mock_httpx, client):
 
     mock_http = MagicMock()
     mock_http.get.return_value = mock_response
-    mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_http)
-    mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
+    mock_http.is_closed = False
+    mock_httpx.Client.return_value = mock_http
 
     models = client.list_models()
     assert len(models) == 1
@@ -114,8 +114,8 @@ def test_get_artifacts(mock_httpx, client):
 
     mock_http = MagicMock()
     mock_http.get.return_value = mock_response
-    mock_httpx.Client.return_value.__enter__ = MagicMock(return_value=mock_http)
-    mock_httpx.Client.return_value.__exit__ = MagicMock(return_value=False)
+    mock_http.is_closed = False
+    mock_httpx.Client.return_value = mock_http
 
     artifacts = client.get_model_artifacts("RedHatAI/granite-3.1-8b-instruct")
     perf = [a for a in artifacts if a.get("metricsType") == "performance-metrics"]
