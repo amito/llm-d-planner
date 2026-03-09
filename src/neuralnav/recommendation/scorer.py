@@ -17,6 +17,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class Scorer:
             with open(config_path) as f:
                 data = json.load(f)
             logger.debug(f"Loaded SLO ranges from {config_path}")
-            return data.get("use_case_slo_workload", {})
+            return dict(data.get("use_case_slo_workload", {}))
         except (FileNotFoundError, json.JSONDecodeError) as e:
             logger.warning(f"Could not load SLO ranges from {config_path}: {e}")
             return {}
@@ -244,9 +245,9 @@ class Scorer:
         target_ttft_ms: int,
         target_itl_ms: int,
         target_e2e_ms: int,
-        use_case: str = None,
+        use_case: str | None = None,
         near_miss_tolerance: float = 0.0,
-    ) -> tuple[int, str]:
+    ) -> tuple[int, Literal["compliant", "near_miss", "exceeds"]]:
         """
         Score latency using CAPPED RANGE SCORING.
 
@@ -294,6 +295,7 @@ class Scorer:
         worst_ratio = max(ratios)
 
         # Determine SLO status using the tolerance passed from config_finder
+        slo_status: Literal["compliant", "near_miss", "exceeds"]
         if worst_ratio <= 1.0:
             slo_status = "compliant"
         elif worst_ratio <= (1.0 + near_miss_tolerance):
