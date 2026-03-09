@@ -443,10 +443,10 @@ async def list_all_deployments():
 
         deployments = []
         for deployment_id in deployment_ids:
-            status = manager.get_inferenceservice_status(deployment_id)
+            svc_status = manager.get_inferenceservice_status(deployment_id)
             pods = manager.get_deployment_pods(deployment_id)
 
-            deployments.append({"deployment_id": deployment_id, "status": status, "pods": pods})
+            deployments.append({"deployment_id": deployment_id, "status": svc_status, "pods": pods})
 
         return {
             "success": True,

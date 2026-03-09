@@ -57,11 +57,11 @@ class GPUType:
         self.memory_gb = data["memory_gb"]
         self.compute_capability = data["compute_capability"]
         self.typical_use_cases = data["typical_use_cases"]
-        self.cost_per_hour_usd = data["cost_per_hour_usd"]  # Base/minimum price
+        self.cost_per_hour_usd: float = data["cost_per_hour_usd"]  # Base/minimum price
         # Cloud provider-specific pricing (optional)
-        self.cost_per_hour_aws = data.get("cost_per_hour_aws")
-        self.cost_per_hour_gcp = data.get("cost_per_hour_gcp")
-        self.cost_per_hour_azure = data.get("cost_per_hour_azure")
+        self.cost_per_hour_aws: float | None = data.get("cost_per_hour_aws")
+        self.cost_per_hour_gcp: float | None = data.get("cost_per_hour_gcp")
+        self.cost_per_hour_azure: float | None = data.get("cost_per_hour_azure")
         self.availability = data["availability"]
         self.notes = data.get("notes", "")
 
@@ -75,11 +75,11 @@ class GPUType:
         Returns:
             Cost per hour in USD
         """
-        if provider == "aws" and self.cost_per_hour_aws:
+        if provider == "aws" and self.cost_per_hour_aws is not None:
             return self.cost_per_hour_aws
-        elif provider == "gcp" and self.cost_per_hour_gcp:
+        elif provider == "gcp" and self.cost_per_hour_gcp is not None:
             return self.cost_per_hour_gcp
-        elif provider == "azure" and self.cost_per_hour_azure:
+        elif provider == "azure" and self.cost_per_hour_azure is not None:
             return self.cost_per_hour_azure
         return self.cost_per_hour_usd
 
@@ -313,13 +313,25 @@ class ModelCatalog:
             "hourly_rate_azure": gpu.cost_per_hour_azure,
             "cost_per_hour_total": gpu.cost_per_hour_usd * total_gpus,
             "cost_per_month_base": gpu.cost_per_hour_usd * total_gpus * hours_per_month,
-            "cost_per_month_aws": (gpu.cost_per_hour_aws or gpu.cost_per_hour_usd)
+            "cost_per_month_aws": (
+                gpu.cost_per_hour_aws
+                if gpu.cost_per_hour_aws is not None
+                else gpu.cost_per_hour_usd
+            )
             * total_gpus
             * hours_per_month,
-            "cost_per_month_gcp": (gpu.cost_per_hour_gcp or gpu.cost_per_hour_usd)
+            "cost_per_month_gcp": (
+                gpu.cost_per_hour_gcp
+                if gpu.cost_per_hour_gcp is not None
+                else gpu.cost_per_hour_usd
+            )
             * total_gpus
             * hours_per_month,
-            "cost_per_month_azure": (gpu.cost_per_hour_azure or gpu.cost_per_hour_usd)
+            "cost_per_month_azure": (
+                gpu.cost_per_hour_azure
+                if gpu.cost_per_hour_azure is not None
+                else gpu.cost_per_hour_usd
+            )
             * total_gpus
             * hours_per_month,
         }
