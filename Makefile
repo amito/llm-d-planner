@@ -418,6 +418,15 @@ clean-deployments: ## Delete all InferenceServices from cluster
 	kubectl delete inferenceservices --all
 	@printf "$(GREEN)✓ All deployments deleted$(NC)\n"
 
+##@ Kustomize
+
+kustomize-validate: ## Validate all Kustomize overlays build without errors
+	@printf "$(BLUE)Validating Kustomize overlays...$(NC)\n"
+	@kustomize build deploy/kustomize/overlays/kind > /dev/null && printf "  $(GREEN)✓ kind$(NC)\n"
+	@kustomize build deploy/kustomize/overlays/kubernetes > /dev/null && printf "  $(GREEN)✓ kubernetes$(NC)\n"
+	@kustomize build deploy/kustomize/overlays/openshift > /dev/null && printf "  $(GREEN)✓ openshift$(NC)\n"
+	@printf "$(GREEN)✓ All overlays valid$(NC)\n"
+
 ##@ PostgreSQL Database
 
 db-start: ## Start PostgreSQL (initializes schema on first run)
