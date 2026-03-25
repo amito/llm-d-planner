@@ -1,0 +1,9 @@
+[
+  {"op": "replace", "path": "/spec/template/spec/containers/0/image", "value": "docker.io/library/postgres:16"},
+  {"op": "replace", "path": "/spec/template/spec/containers/0/env", "value": [
+    {"name": "POSTGRES_DB", "value": "neuralnav"},
+    {"name": "POSTGRES_USER", "value": "neuralnav"},
+    {"name": "POSTGRES_PASSWORD", "valueFrom": {"secretKeyRef": {"name": "neuralnav-secrets", "key": "postgres-password"}}}
+  ]},
+  {"op": "replace", "path": "/spec/template/spec/containers/0/volumeMounts/0/mountPath", "value": "/var/lib/postgresql/data"}
+]
