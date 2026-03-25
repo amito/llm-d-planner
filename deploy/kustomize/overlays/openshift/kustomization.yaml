@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  - route.yaml
+  - service-ca-configmap.yaml
+  - networkpolicy-model-catalog.yaml
+
+patches:
+  - path: patches/ollama-gpu.yaml
+  - path: patches/backend-service-ca.yaml
+  - path: patches/configmap-patch.yaml
+
+# The NetworkPolicy lives in the foreign namespace rhoai-model-registries.
+# The namespace transformer would incorrectly override it, so replacements
+# (which run AFTER the namespace transformer) fix it back.
+# The namespaceSelector is also updated to match the deployment namespace
+# so wrapping overlays that change namespace: get correct ingress rules.
+replacements:
+  - source:
+      kind: NetworkPolicy
+      name: allow-neuralnav-to-model-catalog
+      fieldPath: metadata.annotations.neuralnav\.io/foreign-namespace
+    targets:
+      - select:
+          kind: NetworkPolicy
+          name: allow-neuralnav-to-model-catalog
+        fieldPaths:
+          - metadata.namespace
+  - source:
+      kind: Namespace
+      fieldPath: metadata.name
+    targets:
+      - select:
+          kind: NetworkPolicy
+          name: allow-neuralnav-to-model-catalog
+        fieldPaths:
+          - spec.ingress.0.from.0.namespaceSelector.matchLabels.kubernetes\.io/metadata\.name
