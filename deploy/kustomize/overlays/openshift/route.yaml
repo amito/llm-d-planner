@@ -2,6 +2,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: neuralnav
+  namespace: neuralnav
   labels:
     app.kubernetes.io/name: ui
 spec:
@@ -18,6 +19,7 @@ apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
   name: neuralnav-backend
+  namespace: neuralnav
   labels:
     app.kubernetes.io/name: backend
 spec:
