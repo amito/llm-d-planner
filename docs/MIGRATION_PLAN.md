@@ -5,7 +5,7 @@
 The repository has moved from `redhat-et/neuralnav` to `llm-d-incubation/llm-d-planner`. We need to:
 1. Rename all "NeuralNav"/"neuralnav" references to "Planner"/"planner"
 2. Integrate the imported `config_explorer/` into the unified project structure
-3. Add Config Explorer UI as new tabs in the existing Streamlit UI
+3. Add Config Explorer UI as separate pages accessible via a view toggle in the Streamlit UI
 
 Config Explorer has 2 functional areas: **Capacity Planner** (memory/KV cache calculations) and **GPU Recommender** (BentoML roofline estimation + cost).
 
@@ -23,7 +23,7 @@ src/planner/                          # renamed from src/neuralnav/
 ├── cli/                             # NEW: CLI package (shared entry point)
 │   ├── __init__.py
 │   ├── __main__.py                  # python -m planner.cli
-│   └── config_explorer_cli.py       # plan + estimate subcommands (from config_explorer/cli.py)
+│   └── planner_cli.py               # plan + estimate subcommands (from config_explorer/cli.py)
 ├── cluster/
 ├── configuration/
 ├── gpu_recommender/                 # NEW: from config_explorer/recommender/
@@ -39,7 +39,7 @@ src/planner/                          # renamed from src/neuralnav/
 └── specification/
 
 ui/                                   # unified UI
-├── app.py                            # updated: "Planner" branding, 2 new tabs
+├── app.py                            # updated: "Planner" branding, view toggle
 ├── api_client.py
 ├── state.py                          # merged session state
 ├── helpers.py
@@ -84,7 +84,7 @@ tests/
 | Current Path | Purpose | New Path | Action |
 |---|---|---|---|
 | `config_explorer/src/config_explorer/capacity_planner.py` | Memory/KV cache calculations (984 lines) | `src/planner/capacity_planner.py` | Move as-is |
-| `config_explorer/src/config_explorer/cli.py` | CLI interface (plan + estimate) | `src/planner/cli/config_explorer_cli.py` | Move, update imports |
+| `config_explorer/src/config_explorer/cli.py` | CLI interface (plan + estimate) | `src/planner/cli/planner_cli.py` | Move, update imports. Named generically to support adding NeuralNav CLI features later. |
 | `config_explorer/src/config_explorer/__main__.py` | CLI entry point | `src/planner/cli/__main__.py` | Move, update imports |
 | `config_explorer/src/config_explorer/__init__.py` | Package marker | Not needed (modules flattened) | Delete |
 | `config_explorer/src/config_explorer/recommender/` | GPURecommender + CostManager | `src/planner/gpu_recommender/` | Move, update imports |
@@ -112,7 +112,7 @@ tests/
 
 | Area | NeuralNav | Config Explorer | Recommendation |
 |---|---|---|---|
-| **GPU specs/data** | `gpu_normalizer.py` with CANONICAL_GPUS set; `model_catalog.json` has GPU aliases | `db.json` with 12 GPU types (memory + prefix) | Keep separate for now. Different purposes: NeuralNav normalizes benchmark GPU names; Config Explorer needs memory sizes for capacity planning. Future: unify into single GPU registry. |
+| **GPU specs/data** | `gpu_normalizer.py` with CANONICAL_GPUS set; `model_catalog.json` has GPU aliases | `db.json` with 12 GPU types (memory + prefix) | Keep separate during migration. Different purposes: NeuralNav normalizes benchmark GPU names; Config Explorer needs memory sizes for capacity planning. **A high priority after restructure**: unify into single GPU registry (see Follow-on Step 1). |
 | **GPU cost data** | Scorer uses cost from benchmark DB (monthly cost per config) | `gpu_costs.json` with $/hr reference values per GPU type | Keep separate. Different cost models: NeuralNav costs are per-deployment; Config Explorer costs are per-GPU-hour for comparison. |
 | **Recommendation concept** | SLO-driven: user intent → traffic profile → benchmark lookup → ranked configs | HW-driven: model params → memory calc → roofline perf estimate → GPU ranking | Keep separate. Complementary approaches. Future integration noted in requirements but NOT this step. |
 | **Pydantic models** | `shared/schemas/` (DeploymentIntent, GPUConfig, etc.) | None (uses dataclasses: KVCacheDetail, Scenario) | Keep separate. No overlap in actual data models. |
@@ -135,19 +135,30 @@ No code should be merged at this stage. The two systems are complementary, not d
 
 ### Integration approach
 
-Add 2 new tabs to `ui/app.py`, making it 8 tabs total:
+Keep Config Explorer as a **separate view** rather than adding tabs to the existing NeuralNav workflow. The UI defaults to the NeuralNav view and provides a toggle (e.g., sidebar selector or button) to switch to Config Explorer. This preserves the existing NeuralNav workflow without disruption.
 
 ```python
-tabs = st.tabs([
-    "Define Use Case",           # existing
-    "Technical Specification",   # existing
-    "Recommendations",           # existing
-    "Deployment",                # existing
-    "Deployment Management",     # existing
-    "Capacity Planner",          # NEW - from Config Explorer
-    "GPU Recommender",           # NEW - from Config Explorer
-    "Configuration",             # existing (moved to last)
-])
+# In ui/app.py — view selector in sidebar
+view = st.sidebar.selectbox("View", ["Planner", "Config Explorer"])
+
+if view == "Planner":
+    # Existing 6-tab NeuralNav workflow (unchanged)
+    tabs = st.tabs([
+        "Define Use Case",
+        "Technical Specification",
+        "Recommendations",
+        "Deployment",
+        "Deployment Management",
+        "Configuration",
+    ])
+    # ... existing tab rendering ...
+elif view == "Config Explorer":
+    # Config Explorer pages
+    ce_tabs = st.tabs(["Capacity Planner", "GPU Recommender"])
+    with ce_tabs[0]:
+        render_capacity_planner()
+    with ce_tabs[1]:
+        render_gpu_recommender()
 ```
 
 ### Files involved
@@ -158,21 +169,22 @@ tabs = st.tabs([
    - GPU specs loading (absorb `db.py` logic, update path to `data/configuration/gpu_specs.json`)
 
 2. **`ui/components/capacity_planner.py`** (new) - From `config_explorer/Capacity_Planner.py`:
-   - Wrap entire page content in `def render_capacity_planner_tab():` function
+   - Wrap entire page content in `def render_capacity_planner():` function
    - Replace `import db` → use `config_explorer_state` GPU specs loading
-   - Replace `from src.config_explorer.capacity_planner import *` → `from planner.config_explorer.capacity_planner import ...`
+   - Replace `from src.config_explorer.capacity_planner import *` → `from planner.capacity_planner import ...`
    - Replace `import util` → `from components.config_explorer_state import ...`
    - Remove `st.set_page_config()` call (already set in app.py)
 
 3. **`ui/components/gpu_recommender.py`** (new) - From `config_explorer/pages/2_GPU_Recommender.py`:
-   - Wrap in `def render_gpu_recommender_tab():` function
+   - Wrap in `def render_gpu_recommender():` function
    - Fix `sys.path` hack → proper import `from planner.gpu_recommender.recommender import GPURecommender`
    - Fix `from config_explorer.recommender.cost_manager import CostManager` → `from planner.gpu_recommender.cost_manager import CostManager`
 
 4. **`ui/app.py`** - Modifications:
-   - Add imports for new tab render functions
+   - Add view selector (sidebar toggle between "Planner" and "Config Explorer")
+   - Add imports for new component render functions
    - Add init call for config_explorer session state
-   - Add 2 new tabs
+   - Render Config Explorer view when selected
    - Rename "NeuralNav" → "Planner" in page title, hero, branding
 
 5. **`ui/state.py`** - Add config_explorer session state init (call `config_explorer_state.init_session_state()`)
@@ -216,11 +228,11 @@ cp config_explorer/src/config_explorer/recommender/cost_manager.py src/planner/g
 # CLI package
 mkdir -p src/planner/cli
 cp config_explorer/src/config_explorer/__main__.py src/planner/cli/__main__.py
-cp config_explorer/src/config_explorer/cli.py src/planner/cli/config_explorer_cli.py
+cp config_explorer/src/config_explorer/cli.py src/planner/cli/planner_cli.py
 ```
 
 - Create `src/planner/cli/__init__.py`
-- Update imports in `config_explorer_cli.py`: `from config_explorer.capacity_planner` → `from planner.capacity_planner`, `from config_explorer.recommender` → `from planner.gpu_recommender`
+- Update imports in `planner_cli.py`: `from config_explorer.capacity_planner` → `from planner.capacity_planner`, `from config_explorer.recommender` → `from planner.gpu_recommender`
 - Update imports in `cli/__main__.py`: `from config_explorer.cli` → `from planner.cli.config_explorer_cli`
 - Update `gpu_recommender/__init__.py` imports if any
 - Update `cost_manager.py` to load `gpu_costs.json` from `data/configuration/gpu_costs.json` (relative path resolution)
@@ -239,7 +251,7 @@ cp config_explorer/gpu_costs.json data/configuration/gpu_costs.json
 
 ```bash
 cp config_explorer/tests/capacity_planner_test.py tests/test_capacity_planner.py
-cp config_explorer/tests/test_cli.py tests/test_config_explorer_cli.py
+cp config_explorer/tests/test_cli.py tests/test_planner_cli.py
 cp config_explorer/tests/test_cost_integration.py tests/test_cost_integration.py
 cp config_explorer/tests/test_cost_manager.py tests/test_cost_manager.py
 cp config_explorer/tests/test_recommender_cost.py tests/test_recommender_cost.py
@@ -250,6 +262,8 @@ cp config_explorer/tests/test_recommender_cost.py tests/test_recommender_cost.py
 - Ensure test markers are compatible with root pytest config
 
 ### Step 5: Merge dependencies into root `pyproject.toml`
+
+Config Explorer currently uses pip/setuptools with `requirements.txt` files (no uv). This step consolidates everything under the root `pyproject.toml` managed by uv, eliminating the separate Config Explorer packaging.
 
 Add to `[project.dependencies]`:
 
@@ -267,12 +281,12 @@ Add CLI entry point:
 
 ```toml
 [project.scripts]
-config-explorer = "planner.cli.config_explorer_cli:main"
+planner = "planner.cli.planner_cli:main"
 ```
 
 Update `plotly` version in ui extras if needed (Config Explorer needs `>=6.3.0`, current NeuralNav has `>=5.0.0`).
 
-### Step 6: Integrate Config Explorer UI as new tabs
+### Step 6: Integrate Config Explorer UI as a separate view
 
 1. Create `ui/components/config_explorer_state.py` from `config_explorer/util.py`:
    - Update `from src.config_explorer.capacity_planner import *` → `from planner.capacity_planner import ...`
@@ -336,10 +350,10 @@ cd src && uv run pytest ../tests/ -v -m "not database and not integration"
 
 1. **Lint & typecheck**: `make lint && make typecheck`
 2. **Unit tests**: `make test-unit` — all existing tests pass with renamed imports
-3. **Config Explorer tests**: `cd src && uv run pytest ../tests/test_capacity_planner.py ../tests/test_config_explorer_cli.py ../tests/test_cost_manager.py ../tests/test_cost_integration.py ../tests/test_recommender_cost.py -v`
-4. **CLI**: `uv run config-explorer plan --model Qwen/Qwen2.5-3B --gpu-memory 80 --max-model-len 16000`
+3. **Config Explorer tests**: `cd src && uv run pytest ../tests/test_capacity_planner.py ../tests/test_planner_cli.py ../tests/test_cost_manager.py ../tests/test_cost_integration.py ../tests/test_recommender_cost.py -v`
+4. **CLI**: `uv run planner plan --model Qwen/Qwen2.5-3B --gpu-memory 80 --max-model-len 16000`
 5. **Backend**: `make start-backend && curl http://localhost:8000/health`
-6. **UI**: `make start-ui` — verify all 8 tabs render, including new Capacity Planner and GPU Recommender tabs
+6. **UI**: `make start-ui` — verify view toggle works, existing Planner tabs render unchanged, and Config Explorer view renders Capacity Planner and GPU Recommender
 7. **No residual references**: `grep -r "neuralnav" src/ ui/ tests/ scripts/ Makefile Dockerfile docker-compose*.yml .github/ deploy/` should return nothing
 
 ---
@@ -348,24 +362,7 @@ cd src && uv run pytest ../tests/ -v -m "not database and not integration"
 
 These are recommended next steps after the migration is complete:
 
-### 1. Add FastAPI endpoints for Capacity Planner and GPU Recommender
-
-Create API routes so the UI accesses all backend logic consistently via HTTP rather than direct library imports. This ensures the UI and backend can run in separate containers and keeps the architecture uniform.
-
-- Add `src/planner/api/routes/capacity_planner.py` — thin route handlers calling `planner.capacity_planner`
-- Add `src/planner/api/routes/gpu_recommender.py` — route handlers calling `planner.gpu_recommender`
-- Add corresponding functions in `ui/api_client.py`
-- Update the UI tab components to call the API instead of importing library code directly
-
-### 2. Use Capacity Planner and GPU Recommender for estimated recommendations
-
-Integrate Config Explorer's capabilities into the existing recommendation pipeline to provide estimated recommendations when benchmark data is unavailable for a model/GPU combination:
-
-- Use `capacity_planner.py` to determine which GPU configurations can physically fit a model (memory feasibility filtering)
-- Use `gpu_recommender` (BentoML roofline model) to generate synthetic performance estimates for configurations that lack benchmark data
-- Feed these estimates into the existing scoring/ranking pipeline as a fallback when PostgreSQL benchmark data has no matching entries
-
-### 3. Unify GPU data
+### 1. Unify GPU data
 
 Consolidate the separate GPU data sources into a single registry:
 
@@ -373,11 +370,28 @@ Consolidate the separate GPU data sources into a single registry:
 - `gpu_normalizer.py` + `model_catalog.json` (NeuralNav: GPU name aliases and canonical names)
 - `gpu_costs.json` (Config Explorer: reference $/hr costs)
 
-A unified GPU registry would provide memory, cost, aliases, and canonical names in one place.
+A unified GPU registry would provide memory, cost, aliases, and canonical names in one place. Keeping a single source of truth for the GPU registry is critical.
+
+### 2. Add FastAPI endpoints for Capacity Planner and GPU Recommender
+
+Create API routes so the UI accesses all backend logic consistently via HTTP rather than direct library imports. This ensures the UI and backend can run in separate containers and keeps the architecture uniform.
+
+- Add `src/planner/api/routes/capacity_planner.py` — thin route handlers calling `planner.capacity_planner`
+- Add `src/planner/api/routes/gpu_recommender.py` — route handlers calling `planner.gpu_recommender`
+- Add corresponding functions in `ui/api_client.py`
+- Update the UI components to call the API instead of importing library code directly
+
+### 3. Use Capacity Planner and GPU Recommender for estimated recommendations
+
+Integrate Config Explorer's capabilities into the existing recommendation pipeline to provide estimated recommendations when benchmark data is unavailable for a model/GPU combination:
+
+- Use `capacity_planner.py` to determine which GPU configurations can physically fit a model (memory feasibility filtering)
+- Use `gpu_recommender` (BentoML roofline model) to generate synthetic performance estimates for configurations that lack benchmark data
+- Feed these estimates into the existing scoring/ranking pipeline as a fallback when PostgreSQL benchmark data has no matching entries
 
 ### 4. Add NeuralNav functionality to the CLI
 
-Extend `src/planner/cli/` with subcommands for existing NeuralNav functionality (e.g., `planner recommend`, `planner deploy`) alongside the existing Config Explorer commands (`config-explorer plan`, `config-explorer estimate`). Consider unifying under a single `planner` CLI entry point.
+Extend `src/planner/cli/` with subcommands for existing NeuralNav functionality (e.g., `planner recommend`, `planner deploy`) alongside the existing Config Explorer commands (`planner plan`, `planner estimate`).
 
 ### 5. Consolidate data models
 
