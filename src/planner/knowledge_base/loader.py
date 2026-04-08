@@ -11,7 +11,7 @@ import logging
 import uuid
 from datetime import datetime
 
-from psycopg2.extras import execute_batch
+from psycopg2.extras import RealDictCursor, execute_batch
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +214,7 @@ def get_db_stats(conn) -> dict:
         Dict with total_benchmarks, num_models, num_hardware_types,
         num_traffic_profiles, traffic_distribution
     """
-    cursor = conn.cursor()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
 
     cursor.execute("""
         SELECT
@@ -227,10 +227,10 @@ def get_db_stats(conn) -> dict:
     row = cursor.fetchone()
 
     stats = {
-        "num_models": row[0] if row else 0,
-        "num_hardware_types": row[1] if row else 0,
-        "num_traffic_profiles": row[2] if row else 0,
-        "total_benchmarks": row[3] if row else 0,
+        "num_models": row["num_models"] if row else 0,
+        "num_hardware_types": row["num_hardware_types"] if row else 0,
+        "num_traffic_profiles": row["num_traffic_profiles"] if row else 0,
+        "total_benchmarks": row["total_benchmarks"] if row else 0,
     }
 
     # Get traffic profile distribution
@@ -241,7 +241,12 @@ def get_db_stats(conn) -> dict:
         ORDER BY prompt_tokens, output_tokens;
     """)
     stats["traffic_distribution"] = [
-        {"prompt_tokens": r[0], "output_tokens": r[1], "count": r[2]} for r in cursor.fetchall()
+        {
+            "prompt_tokens": r["prompt_tokens"],
+            "output_tokens": r["output_tokens"],
+            "count": r["num_benchmarks"],
+        }
+        for r in cursor.fetchall()
     ]
 
     cursor.close()

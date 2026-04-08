@@ -268,6 +268,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
                 st.session_state.slo_approved = None
                 st.session_state.edited_extraction = None
                 st.session_state.ranked_response = None
+                st.session_state.preferred_models = extraction.get("preferred_models", [])
                 st.session_state.pop("_last_spec_fingerprint", None)
 
                 for key in [

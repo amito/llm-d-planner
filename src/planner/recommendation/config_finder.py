@@ -531,15 +531,29 @@ class ConfigFinder:
             min_qps=0,
             percentile=percentile,
             gpu_types=normalized_gpus if normalized_gpus else None,
+            exclude_estimated=not enable_estimated,
         )
 
-        # Fallback: if cluster-detected GPUs had no benchmark data, retry
+        # Fallback: if the GPU filter produced no benchmark data, retry
         # without GPU filter so the user still gets recommendations.
-        if not matching_configs and normalized_gpus and gpu_filter_from_cluster:
-            logger.warning(
-                f"No benchmarks found for cluster GPUs {normalized_gpus} — "
-                f"falling back to all available GPUs"
-            )
+        all_warnings: list[str] = []
+        gpu_fallback = False
+        if not matching_configs and normalized_gpus:
+            if gpu_filter_from_cluster:
+                msg = (
+                    f"No benchmarks found for cluster GPUs "
+                    f"({', '.join(normalized_gpus)}). "
+                    f"Showing other available GPU configurations."
+                )
+            else:
+                msg = (
+                    f"No configurations found for preferred GPUs "
+                    f"({', '.join(intent.preferred_gpu_types)}). "
+                    f"Showing other available GPU configurations."
+                )
+            logger.warning(msg)
+            all_warnings.append(msg)
+            gpu_fallback = True
             matching_configs = self.benchmark_repo.find_configurations_meeting_slo(
                 prompt_tokens=traffic_profile.prompt_tokens,
                 output_tokens=traffic_profile.output_tokens,
@@ -549,18 +563,18 @@ class ConfigFinder:
                 min_qps=0,
                 percentile=percentile,
                 gpu_types=None,
+                exclude_estimated=not enable_estimated,
             )
 
         # Estimated performance flow: generate roofline estimates for
         # preferred models (and optionally catalog models) that lack benchmark data.
-        all_warnings: list[str] = []
         if enable_estimated and preferred_models:
             estimated_configs, estimation_warnings = self._generate_estimated_configs(
                 traffic_profile=traffic_profile,
                 slo_targets=slo_targets,
                 preferred_models=preferred_models,
                 existing_benchmarks=matching_configs,
-                gpu_types=normalized_gpus if normalized_gpus else None,
+                gpu_types=normalized_gpus if normalized_gpus and not gpu_fallback else None,
             )
             all_warnings.extend(estimation_warnings)
             if estimated_configs:
@@ -585,7 +599,13 @@ class ConfigFinder:
                 )
                 matching_configs = preferred_configs
             else:
-                logger.info("No configs for preferred models — showing all available")
+                model_list = ", ".join(preferred_models)
+                msg = (
+                    f"No configurations found for preferred models "
+                    f"({model_list}). Showing other available solutions."
+                )
+                logger.warning(msg)
+                all_warnings.append(msg)
 
         if not matching_configs:
             logger.warning(

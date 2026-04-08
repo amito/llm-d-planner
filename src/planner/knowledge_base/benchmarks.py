@@ -349,6 +349,7 @@ class BenchmarkRepository:
         min_qps: float = 0,
         percentile: str = "p95",
         gpu_types: list[str] | None = None,
+        exclude_estimated: bool = False,
     ) -> list[BenchmarkData]:
         """
         Find all configurations that meet SLO requirements for a traffic profile.
@@ -368,6 +369,7 @@ class BenchmarkRepository:
             min_qps: Minimum required QPS
             percentile: Which percentile column to use (mean, p90, p95, p99)
             gpu_types: Optional list of GPU types to filter by (normalized canonical names)
+            exclude_estimated: If True, exclude rows with confidence_level='estimated'
 
         Returns:
             List of benchmarks meeting all criteria (one per system configuration)
@@ -383,11 +385,15 @@ class BenchmarkRepository:
         itl_col = f"itl_{percentile}"
         e2e_col = f"e2e_{percentile}"
 
-        # Build optional GPU filter clause
+        # Build optional filter clauses
         gpu_filter = ""
         if gpu_types:
             gpu_filter = "AND hardware = ANY(%s)"
             logger.info(f"Filtering by GPU types: {gpu_types}")
+
+        estimated_filter = ""
+        if exclude_estimated:
+            estimated_filter = "AND confidence_level != 'estimated'"
 
         logger.info(
             f"Querying benchmarks with percentile={percentile} (columns: {ttft_col}, {itl_col}, {e2e_col})"
@@ -412,6 +418,7 @@ class BenchmarkRepository:
                   AND {e2e_col} <= %s
                   AND requests_per_second >= %s
                   {gpu_filter}
+                  {estimated_filter}
             )
             SELECT
                 id, config_id, model_hf_repo, provider, type,

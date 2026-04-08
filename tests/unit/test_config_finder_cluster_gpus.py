@@ -134,16 +134,18 @@ class TestClusterGPUIntersection:
         # Second call: no GPU filter (fallback)
         assert calls[1].kwargs.get("gpu_types") is None
 
-    def test_cluster_gpu_no_benchmarks_no_fallback_when_user_pref(self):
-        """Cluster+user GPU intersection has no benchmarks -> no fallback (user chose)."""
+    def test_cluster_gpu_no_benchmarks_fallback_with_warning_when_user_pref(self):
+        """Cluster+user GPU intersection has no benchmarks -> fallback with warning."""
         self.mock_repo.find_configurations_meeting_slo.return_value = []
         intent = _make_intent(preferred_gpu_types=["H100"])
-        result, _warnings = self.finder.plan_all_capacities(
+        result, warnings = self.finder.plan_all_capacities(
             traffic_profile=_make_traffic(),
             slo_targets=_make_slo(),
             intent=intent,
             cluster_gpu_types=["H100", "L4"],
         )
         assert result == []
-        # Should only call once (no fallback since user expressed a GPU preference)
-        assert self.mock_repo.find_configurations_meeting_slo.call_count == 1
+        # Should call twice: first with preferred GPUs, then fallback without
+        assert self.mock_repo.find_configurations_meeting_slo.call_count == 2
+        # Should warn that preferred GPUs had no results
+        assert any("preferred GPUs" in w for w in warnings)

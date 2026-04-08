@@ -488,6 +488,8 @@ def render_slo_with_approval(extraction: dict):
             disabled=not is_valid,
         ):
             st.session_state.slo_approved = True
+            st.session_state.recommendation_result = None
+            st.session_state.pop("_last_spec_fingerprint", None)
             st.session_state._pending_tab = 2
             for _cat in ("balanced", "accuracy", "latency", "cost"):
                 st.session_state[f"cat_idx_{_cat}"] = 0
