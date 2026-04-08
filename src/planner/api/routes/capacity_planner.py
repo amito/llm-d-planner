@@ -2,39 +2,21 @@
 
 import logging
 import os
-from typing import Any, NoReturn
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 import planner.capacity_planner as cp
+from planner.api.routes.common import handle_hf_error
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["capacity-planner"])
 
 
-# ---------------------------------------------------------------------------
-# Shared helper
-# ---------------------------------------------------------------------------
-
-
 def _get_hf_token() -> str | None:
     return os.getenv("HF_TOKEN") or None
-
-
-def _handle_hf_error(e: Exception) -> NoReturn:
-    """Raise the appropriate HTTPException for HuggingFace errors."""
-    msg = str(e).lower()
-    if "gated" in msg or "403" in msg or "unauthorized" in msg:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Model is gated. Set HF_TOKEN on the backend: {e}",
-        )
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Could not fetch model from HuggingFace: {e}",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -113,123 +95,11 @@ async def model_info(request: ModelInfoRequest) -> ModelInfoResponse:
     Reads HF_TOKEN from backend environment — never from the request.
     """
     hf_token = _get_hf_token()
-
     try:
-        model_config = cp.get_model_config_from_hf(request.model_id, hf_token)
+        summary = cp.get_model_info_summary(request.model_id, hf_token)
     except Exception as e:
-        _handle_hf_error(e)
-
-    text_config = cp.get_text_config(model_config)
-
-    # --- model_info ---
-    try:
-        params_by_dtype = cp.model_params_by_dtype(request.model_id, hf_token)
-    except Exception:
-        params_by_dtype = {}
-    total_params = (
-        sum(params_by_dtype.values())
-        if params_by_dtype
-        else cp.model_total_params(request.model_id, hf_token)
-    )
-
-    memory_gb = cp.model_memory_req(request.model_id, model_config, hf_token)
-
-    # --- architecture ---
-    archs = getattr(model_config, "architectures", None) or []
-    arch_name: str | None = archs[0] if archs else None
-    is_moe_model = cp.is_moe(text_config)
-    is_multimodal_model = cp.is_multimodal(model_config)
-    if is_moe_model:
-        model_type = "MoE"
-    elif is_multimodal_model:
-        model_type = "Multimodal"
-    else:
-        model_type = "Dense"
-
-    # --- quantization ---
-    is_quantized_model = cp.is_quantized(model_config)
-    quant_method_val = cp.get_quant_method(model_config) if is_quantized_model else None
-    quant_bytes_val = cp.get_quant_bytes(model_config) if is_quantized_model else None
-
-    # --- activation memory ---
-    if arch_name and arch_name in cp.VALIDATED_ACTIVATION_PROFILES:
-        act_gb = cp.VALIDATED_ACTIVATION_PROFILES[arch_name]
-        act_source = f"Validated profile for {arch_name}"
-    elif is_moe_model:
-        act_gb = cp.ACTIVATION_MEMORY_BASE_MOE_GIB
-        act_source = "MoE default"
-    elif is_multimodal_model:
-        act_gb = cp.ACTIVATION_MEMORY_BASE_MULTIMODAL_GIB
-        act_source = "Multimodal default"
-    else:
-        act_gb = cp.ACTIVATION_MEMORY_BASE_DENSE_GIB
-        act_source = "Dense default"
-
-    # --- memory breakdown (one row per dtype) ---
-    breakdown: list[MemoryBreakdownRow] = []
-    quant_method_str = quant_method_val or ""
-    quant_bytes_float = quant_bytes_val or 0.0
-    for dtype, param_count in params_by_dtype.items():
-        try:
-            param_bytes = cp.precision_to_byte(dtype)
-        except ValueError:
-            param_bytes = 0.0
-        if param_bytes >= 2 or not quant_method_str:
-            q_dtype = dtype
-            q_bytes = param_bytes
-            mem_gb = cp.parameter_memory_req(param_count, dtype) if param_bytes > 0 else 0.0
-        else:
-            q_dtype = quant_method_str
-            q_bytes = quant_bytes_float
-            mem_gb = cp.parameter_precision_memory_req(param_count, quant_bytes_float)
-        breakdown.append(
-            MemoryBreakdownRow(
-                dtype=dtype,
-                quantized_dtype=q_dtype,
-                bytes_per_param=q_bytes,
-                num_parameters=param_count,
-                memory_gb=round(mem_gb, 2),
-            )
-        )
-
-    return ModelInfoResponse(
-        success=True,
-        model_id=request.model_id,
-        model_memory_gb=round(memory_gb, 2),
-        possible_tp_values=cp.find_possible_tp(model_config),
-        model_info=ModelInfoDetail(
-            total_parameters=total_params,
-            parameters_by_dtype=params_by_dtype,
-        ),
-        architecture=ArchitectureInfo(
-            architecture_name=arch_name,
-            model_type=model_type,
-            num_hidden_layers=text_config.num_hidden_layers,
-            num_attention_heads=text_config.num_attention_heads,
-            inference_dtype=cp.inference_dtype(model_config),
-            max_context_len=cp.max_context_len(text_config),
-            is_moe=is_moe_model,
-            is_multimodal=is_multimodal_model,
-            num_experts=cp.get_num_experts(model_config) if is_moe_model else None,
-        ),
-        quantization=QuantizationInfo(
-            is_quantized=is_quantized_model,
-            quant_method=quant_method_val,
-            quant_bytes=quant_bytes_val,
-        ),
-        activation_memory=ActivationMemoryInfo(
-            activation_memory_gb=act_gb,
-            source=act_source,
-            model_type=model_type,
-            validated_profiles=dict(cp.VALIDATED_ACTIVATION_PROFILES),
-            base_constants={
-                "dense_gib": cp.ACTIVATION_MEMORY_BASE_DENSE_GIB,
-                "moe_gib": cp.ACTIVATION_MEMORY_BASE_MOE_GIB,
-                "multimodal_gib": cp.ACTIVATION_MEMORY_BASE_MULTIMODAL_GIB,
-            },
-        ),
-        memory_breakdown=breakdown,
-    )
+        handle_hf_error(e)
+    return ModelInfoResponse(**summary)
 
 
 # ---------------------------------------------------------------------------
@@ -301,7 +171,7 @@ async def calculate(request: CalculateRequest) -> CalculateResponse:
     try:
         model_config = cp.get_model_config_from_hf(request.model_id, hf_token)
     except Exception as e:
-        _handle_hf_error(e)
+        handle_hf_error(e)
 
     text_config = cp.get_text_config(model_config)
 

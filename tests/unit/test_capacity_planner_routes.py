@@ -54,43 +54,67 @@ ROUTE = "/api/v1/model-info"
 
 MOCK_PATH = "planner.capacity_planner"
 
+_SAMPLE_MODEL_INFO = {
+    "success": True,
+    "model_id": "meta-llama/Llama-3-8B",
+    "model_memory_gb": 14.0,
+    "possible_tp_values": [1, 2, 4],
+    "model_info": {
+        "total_parameters": 7_000_000_000,
+        "parameters_by_dtype": {"BF16": 7_000_000_000},
+    },
+    "architecture": {
+        "architecture_name": "LlamaForCausalLM",
+        "model_type": "Dense",
+        "num_hidden_layers": 32,
+        "num_attention_heads": 32,
+        "inference_dtype": "fp8",
+        "max_context_len": 131072,
+        "is_moe": False,
+        "is_multimodal": False,
+    },
+    "quantization": {"is_quantized": False},
+    "activation_memory": {
+        "activation_memory_gb": 4.8,
+        "source": "Validated profile for LlamaForCausalLM",
+        "model_type": "Dense",
+        "validated_profiles": {"LlamaForCausalLM": 4.8},
+        "base_constants": {"dense_gib": 5.5, "moe_gib": 8.0, "multimodal_gib": 2.5},
+    },
+    "memory_breakdown": [],
+}
+
 
 @pytest.mark.unit
-@patch(f"{MOCK_PATH}.model_memory_req", return_value=14.0)
-@patch(f"{MOCK_PATH}.model_total_params", return_value=7_000_000_000)
-@patch(f"{MOCK_PATH}.model_params_by_dtype", return_value={"BF16": 7_000_000_000})
-@patch(f"{MOCK_PATH}.find_possible_tp", return_value=[1, 2, 4])
-@patch(f"{MOCK_PATH}.get_model_config_from_hf")
-def test_model_info_success(mock_config, mock_tp, mock_params, mock_total, mock_mem):
-    mock_config.return_value = _mock_model_config()
+@patch("planner.capacity_planner.get_model_info_summary", return_value=_SAMPLE_MODEL_INFO)
+def test_model_info_success(mock_summary):
     resp = client.post(ROUTE, json={"model_id": "meta-llama/Llama-3-8B"})
     assert resp.status_code == 200
     data = resp.json()
     assert data["success"] is True
     assert data["model_memory_gb"] == 14.0
-    assert data["possible_tp_values"] == [1, 2, 4]
-    assert data["model_info"]["total_parameters"] == 7_000_000_000
-    assert data["model_info"]["parameters_by_dtype"] == {"BF16": 7_000_000_000}
-    assert data["architecture"]["architecture_name"] == "LlamaForCausalLM"
-    assert data["architecture"]["is_moe"] is False
     assert data["architecture"]["model_type"] == "Dense"
-    assert data["quantization"]["is_quantized"] is False
-    assert "activation_memory_gb" in data["activation_memory"]
-    assert "validated_profiles" in data["activation_memory"]
-    assert "base_constants" in data["activation_memory"]
-    assert isinstance(data["memory_breakdown"], list)
+    # Verify the service function was called with the model_id (HF token comes from env)
+    assert mock_summary.call_count == 1
+    assert mock_summary.call_args[0][0] == "meta-llama/Llama-3-8B"
 
 
 @pytest.mark.unit
-@patch(f"{MOCK_PATH}.get_model_config_from_hf", side_effect=Exception("gated repo"))
-def test_model_info_gated_model(mock_config):
+@patch(
+    "planner.capacity_planner.get_model_info_summary",
+    side_effect=Exception("gated repo"),
+)
+def test_model_info_gated_model(mock_summary):
     resp = client.post(ROUTE, json={"model_id": "meta-llama/Llama-3-70B"})
     assert resp.status_code == 403
 
 
 @pytest.mark.unit
-@patch(f"{MOCK_PATH}.get_model_config_from_hf", side_effect=Exception("repo not found"))
-def test_model_info_not_found(mock_config):
+@patch(
+    "planner.capacity_planner.get_model_info_summary",
+    side_effect=Exception("repo not found"),
+)
+def test_model_info_not_found(mock_summary):
     resp = client.post(ROUTE, json={"model_id": "nonexistent/model"})
     assert resp.status_code == 400
 
@@ -98,7 +122,7 @@ def test_model_info_not_found(mock_config):
 @pytest.mark.unit
 def test_model_info_missing_model_id():
     resp = client.post(ROUTE, json={})
-    assert resp.status_code == 422  # Pydantic validation error
+    assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------

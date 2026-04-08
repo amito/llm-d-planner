@@ -1059,3 +1059,136 @@ def gib_to_bytes(gib: float) -> float:
     Convert gibibytes (GiB) to bytes
     """
     return gib * BYTES_PER_GIB
+
+
+def get_model_info_summary(
+    model_id: str, hf_token: str | None = None
+) -> dict[str, Any]:
+    """Assemble full model metadata for the /model-info API endpoint.
+
+    Fetches model config from HuggingFace and computes memory breakdown,
+    architecture info, quantization info, and activation memory estimate.
+
+    Args:
+        model_id: HuggingFace model ID (e.g. "meta-llama/Llama-3-8B")
+        hf_token: Optional HF token for gated models
+
+    Returns:
+        Nested dict matching the ModelInfoResponse schema.
+
+    Raises:
+        Any exception raised by get_model_config_from_hf (HF fetch errors,
+        auth errors, etc.) — callers are responsible for HTTP error mapping.
+    """
+    model_config = get_model_config_from_hf(model_id, hf_token)
+    text_config = get_text_config(model_config)
+
+    # --- model_info (parameter counts) ---
+    try:
+        params_by_dtype = model_params_by_dtype(model_id, hf_token)
+    except Exception:
+        params_by_dtype = {}
+    total_params = (
+        sum(params_by_dtype.values())
+        if params_by_dtype
+        else model_total_params(model_id, hf_token)
+    )
+
+    memory_gb = model_memory_req(model_id, model_config, hf_token)
+
+    # --- architecture ---
+    archs = getattr(model_config, "architectures", None) or []
+    arch_name: str | None = archs[0] if archs else None
+    is_moe_model = is_moe(text_config)
+    is_multimodal_model = is_multimodal(model_config)
+    if is_moe_model:
+        model_type = "MoE"
+    elif is_multimodal_model:
+        model_type = "Multimodal"
+    else:
+        model_type = "Dense"
+
+    # --- quantization ---
+    is_quantized_model = is_quantized(model_config)
+    quant_method_val = get_quant_method(model_config) if is_quantized_model else None
+    quant_bytes_val = get_quant_bytes(model_config) if is_quantized_model else None
+
+    # --- activation memory ---
+    if arch_name and arch_name in VALIDATED_ACTIVATION_PROFILES:
+        act_gb = VALIDATED_ACTIVATION_PROFILES[arch_name]
+        act_source = f"Validated profile for {arch_name}"
+    elif is_moe_model:
+        act_gb = ACTIVATION_MEMORY_BASE_MOE_GIB
+        act_source = "MoE default"
+    elif is_multimodal_model:
+        act_gb = ACTIVATION_MEMORY_BASE_MULTIMODAL_GIB
+        act_source = "Multimodal default"
+    else:
+        act_gb = ACTIVATION_MEMORY_BASE_DENSE_GIB
+        act_source = "Dense default"
+
+    # --- memory breakdown (one row per dtype) ---
+    breakdown: list[dict[str, Any]] = []
+    quant_method_str = quant_method_val or ""
+    quant_bytes_float = quant_bytes_val or 0.0
+    for dtype, param_count in params_by_dtype.items():
+        try:
+            param_bytes = precision_to_byte(dtype)
+        except ValueError:
+            param_bytes = 0.0
+        if param_bytes >= HIGH_PRECISION_THRESHOLD_BYTES or not quant_method_str:
+            q_dtype = dtype
+            q_bytes = param_bytes
+            mem_gb = parameter_memory_req(param_count, dtype) if param_bytes > 0 else 0.0
+        else:
+            q_dtype = quant_method_str
+            q_bytes = quant_bytes_float
+            mem_gb = parameter_precision_memory_req(param_count, quant_bytes_float)
+        breakdown.append(
+            {
+                "dtype": dtype,
+                "quantized_dtype": q_dtype,
+                "bytes_per_param": q_bytes,
+                "num_parameters": param_count,
+                "memory_gb": round(mem_gb, 2),
+            }
+        )
+
+    return {
+        "success": True,
+        "model_id": model_id,
+        "model_memory_gb": round(memory_gb, 2),
+        "possible_tp_values": find_possible_tp(model_config),
+        "model_info": {
+            "total_parameters": total_params,
+            "parameters_by_dtype": params_by_dtype,
+        },
+        "architecture": {
+            "architecture_name": arch_name,
+            "model_type": model_type,
+            "num_hidden_layers": text_config.num_hidden_layers,
+            "num_attention_heads": text_config.num_attention_heads,
+            "inference_dtype": inference_dtype(model_config),
+            "max_context_len": max_context_len(text_config),
+            "is_moe": is_moe_model,
+            "is_multimodal": is_multimodal_model,
+            "num_experts": get_num_experts(model_config) if is_moe_model else None,
+        },
+        "quantization": {
+            "is_quantized": is_quantized_model,
+            "quant_method": quant_method_val,
+            "quant_bytes": quant_bytes_val,
+        },
+        "activation_memory": {
+            "activation_memory_gb": act_gb,
+            "source": act_source,
+            "model_type": model_type,
+            "validated_profiles": dict(VALIDATED_ACTIVATION_PROFILES),
+            "base_constants": {
+                "dense_gib": ACTIVATION_MEMORY_BASE_DENSE_GIB,
+                "moe_gib": ACTIVATION_MEMORY_BASE_MOE_GIB,
+                "multimodal_gib": ACTIVATION_MEMORY_BASE_MULTIMODAL_GIB,
+            },
+        },
+        "memory_breakdown": breakdown,
+    }
