@@ -26,7 +26,7 @@ def _cached_calculate(
     tp: int = 1,
     pp: int = 1,
     dp: int = 1,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Call fetch_capacity_planner_calculate with session-state caching.
 
     Each unique combination of parameters is fetched at most once per Streamlit
