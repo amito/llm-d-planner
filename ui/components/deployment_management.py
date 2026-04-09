@@ -56,7 +56,7 @@ def render_deployment_management_tab():
         )
 
     df = pd.DataFrame(table_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
     st.markdown("---")
     st.markdown("### Select Deployment to Manage")
@@ -85,7 +85,7 @@ def render_deployment_management_tab():
 
     with col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Refresh", use_container_width=True, key="refresh_mgmt"):
+        if st.button("Refresh", width="stretch", key="refresh_mgmt"):
             st.rerun()
 
     if not st.session_state.selected_deployment:
@@ -122,7 +122,7 @@ def _render_deployment_controls(deployment_info: dict):
         confirm_key = f"confirm_delete_{deployment_id}"
         if st.button(
             "Delete Deployment",
-            use_container_width=True,
+            width="stretch",
             type="secondary",
             key=f"delete_btn_{deployment_id}",
         ):
@@ -217,7 +217,7 @@ def _render_inference_testing(deployment_info: dict):
 
     if st.button(
         "Send Test Request",
-        use_container_width=True,
+        width="stretch",
         key=f"test_button_{deployment_id}",
     ):
         _run_inference_test(deployment_id, test_prompt, max_tokens, temperature)

@@ -461,7 +461,7 @@ def render_slo_with_approval(extraction: dict):
         if st.button(
             "Generate Recommendations",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="generate_recs",
             disabled=not is_valid,
         ):

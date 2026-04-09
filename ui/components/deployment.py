@@ -182,7 +182,7 @@ def _render_deploy_to_cluster_button(selected_config: dict):
 
     if st.button(
         "Deployed to Cluster" if already_deployed else "Deploy to Kubernetes",
-        use_container_width=True,
+        width="stretch",
         type="primary",
         disabled=already_deployed,
         help="Already deployed to cluster"

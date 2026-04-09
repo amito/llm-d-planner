@@ -183,7 +183,7 @@ else:
     st.sidebar.caption("💡 Default costs are reference values for comparison purposes.")
 
 # Run button
-run_analysis = st.sidebar.button("🚀 Run Analysis", type="primary", use_container_width=True)
+run_analysis = st.sidebar.button("🚀 Run Analysis", type="primary", width="stretch")
 
 # Main content area
 if run_analysis:
@@ -536,9 +536,7 @@ if st.session_state.recommendation_results is not None:
                         showlegend=False,
                         height=500,
                     )
-                    st.plotly_chart(
-                        fig_throughput, use_container_width=True, key="overall_throughput_chart"
-                    )
+                    st.plotly_chart(fig_throughput, width="stretch", key="overall_throughput_chart")
                 else:
                     st.info("Throughput data not available in results")
 
@@ -573,9 +571,7 @@ if st.session_state.recommendation_results is not None:
                         showlegend=False,
                         height=500,
                     )
-                    st.plotly_chart(
-                        fig_latency, use_container_width=True, key="overall_latency_chart"
-                    )
+                    st.plotly_chart(fig_latency, width="stretch", key="overall_latency_chart")
                 else:
                     st.info("Latency metrics not available in results")
 
@@ -612,7 +608,7 @@ if st.session_state.recommendation_results is not None:
                         )
                         st.plotly_chart(
                             fig_concurrency,
-                            use_container_width=True,
+                            width="stretch",
                             key="overall_concurrency_chart",
                         )
 
@@ -655,7 +651,7 @@ if st.session_state.recommendation_results is not None:
                     fig_cost.update_layout(
                         xaxis_title="GPU Type", yaxis_title="Cost", showlegend=False, height=500
                     )
-                    st.plotly_chart(fig_cost, use_container_width=True, key="cost_comparison_chart")
+                    st.plotly_chart(fig_cost, width="stretch", key="cost_comparison_chart")
 
                     st.markdown("---")
 
@@ -696,7 +692,7 @@ if st.session_state.recommendation_results is not None:
                             )
                             st.plotly_chart(
                                 fig_cost_perf,
-                                use_container_width=True,
+                                width="stretch",
                                 key="cost_performance_scatter",
                             )
 
@@ -829,9 +825,7 @@ if st.session_state.recommendation_results is not None:
                                     df_configs = pd.DataFrame(config_data)
 
                                     # Display as styled table
-                                    st.dataframe(
-                                        df_configs, use_container_width=True, hide_index=True
-                                    )
+                                    st.dataframe(df_configs, width="stretch", hide_index=True)
 
                                     # Resource details (inline — expanders cannot be nested)
                                     for config_type, perf_result in configs.items():
@@ -973,11 +967,14 @@ if st.session_state.recommendation_results is not None:
                     ]
 
                     if metric_columns:
-                        sort_by = st.selectbox(
-                            "Sort by:",
-                            options=["GPU (Name)"] + metric_columns,
-                            index=1 if len(metric_columns) > 0 else 0,
-                            help="Select a metric to sort the GPU comparison table",
+                        sort_by = (
+                            st.selectbox(
+                                "Sort by:",
+                                options=["GPU (Name)"] + metric_columns,
+                                index=1 if len(metric_columns) > 0 else 0,
+                                help="Select a metric to sort the GPU comparison table",
+                            )
+                            or "GPU (Name)"
                         )
                     else:
                         sort_by = "GPU (Name)"
@@ -1014,7 +1011,7 @@ if st.session_state.recommendation_results is not None:
                     df_sorted = df.sort_values(sort_by, ascending=ascending)
 
                 # Display the sorted table
-                st.dataframe(df_sorted, use_container_width=True, hide_index=True)
+                st.dataframe(df_sorted, width="stretch", hide_index=True)
 
         # Export functionality
         st.divider()
@@ -1041,7 +1038,7 @@ if st.session_state.recommendation_results is not None:
                 data=json_str,
                 file_name=f"gpu_recommendation_{params['model_id'].replace('/', '_')}.json",
                 mime="application/json",
-                use_container_width=True,
+                width="stretch",
             )
 
         with col2:
@@ -1053,7 +1050,7 @@ if st.session_state.recommendation_results is not None:
                     data=csv,
                     file_name=f"gpu_comparison_{params['model_id'].replace('/', '_')}.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     else:

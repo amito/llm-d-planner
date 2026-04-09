@@ -6,7 +6,6 @@ Category cards, top-5 table, options list, and recommendation results.
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
 from api_client import deploy_and_generate_yaml
 from helpers import format_display_name, format_gpu_config, get_scores
 
@@ -140,7 +139,7 @@ def _render_category_card(title, recs_list, highlight_field, category_key, col):
 
         if is_selected:
             if st.button(
-                "Selected", key=f"selected_{category_key}", use_container_width=True, type="primary"
+                "Selected", key=f"selected_{category_key}", width="stretch", type="primary"
             ):
                 st.session_state.deployment_selected_config = None
                 st.session_state.deployment_selected_category = None
@@ -151,7 +150,7 @@ def _render_category_card(title, recs_list, highlight_field, category_key, col):
                 st.session_state.deployed_to_cluster = False
                 st.rerun()
         else:
-            if st.button("Select", key=f"select_{category_key}", use_container_width=True):
+            if st.button("Select", key=f"select_{category_key}", width="stretch"):
                 st.session_state.deployment_selected_config = rec
                 st.session_state.deployment_selected_category = category_key
                 st.session_state.deployment_yaml_generated = False
@@ -387,7 +386,7 @@ def render_options_list_inline():
         </html>
         """
 
-        components.html(table_html, height=450, scrolling=True)
+        st.iframe(table_html, height=450)
         st.markdown(
             '<p style="font-size: 0.85rem; margin-top: 0.5rem;">Click on column headers to sort the table</p>',
             unsafe_allow_html=True,
@@ -468,7 +467,7 @@ def render_recommendation_result(result: dict, priority: str, extraction: dict):
     with col_center:
         is_expanded = st.session_state.get("show_options_list_expanded", False)
         button_text = "Hide Option List" if is_expanded else "List Options"
-        if st.button(button_text, key="list_options_btn", use_container_width=True):
+        if st.button(button_text, key="list_options_btn", width="stretch"):
             st.session_state.show_options_list_expanded = not is_expanded
             st.rerun()
 

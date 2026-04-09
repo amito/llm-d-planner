@@ -63,18 +63,18 @@ def render_extraction_with_approval(extraction: dict, models_df):
         if st.button(
             "Generate Specification",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="approve_extraction",
         ):
             st.session_state.extraction_approved = True
             st.session_state._pending_tab = 1
             st.rerun()
     with col2:
-        if st.button("Modify Extracted Context", use_container_width=True, key="edit_extraction"):
+        if st.button("Modify Extracted Context", width="stretch", key="edit_extraction"):
             st.session_state.extraction_approved = False
             st.rerun()
     with col3:
-        if st.button("Start Over", use_container_width=True, key="restart"):
+        if st.button("Start Over", width="stretch", key="restart"):
             st.session_state.extraction_result = None
             st.session_state.extraction_approved = None
             st.session_state.recommendation_result = None
@@ -179,7 +179,7 @@ def render_extraction_edit_form(extraction: dict, models_df):
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Apply Changes", type="primary", use_container_width=True, key="apply_edit"):
+        if st.button("Apply Changes", type="primary", width="stretch", key="apply_edit"):
             edited = {
                 "use_case": new_use_case,
                 "user_count": new_user_count,
@@ -194,6 +194,6 @@ def render_extraction_edit_form(extraction: dict, models_df):
             st.session_state.extraction_approved = None
             st.rerun()
     with col2:
-        if st.button("🔙 Cancel", use_container_width=True, key="cancel_edit"):
+        if st.button("🔙 Cancel", width="stretch", key="cancel_edit"):
             st.session_state.extraction_approved = None
             st.rerun()

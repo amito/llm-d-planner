@@ -398,7 +398,7 @@ def show_winner_details_dialog():
 
     _render_winner_details(winner, priority, extraction)
 
-    if st.button("Close", key="close_dialog_btn", use_container_width=True):
+    if st.button("Close", key="close_dialog_btn", width="stretch"):
         st.session_state.show_winner_dialog = False
         st.rerun()
 
@@ -514,7 +514,7 @@ def show_category_dialog():
         )
 
     st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
-    if st.button("Close", key="close_cat_dialog", use_container_width=True):
+    if st.button("Close", key="close_cat_dialog", width="stretch"):
         st.session_state.show_category_dialog = False
         st.rerun()
 
@@ -584,6 +584,6 @@ def show_full_table_dialog():
     st.markdown(table_html, unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
-    if st.button("Close", key="close_full_table_dialog", use_container_width=True):
+    if st.button("Close", key="close_full_table_dialog", width="stretch"):
         st.session_state.show_full_table_dialog = False
         st.rerun()

@@ -78,7 +78,7 @@ def register_new_accelerator():
     acc_name = st.text_input("Name", placeholder="NVIDIA-A100-40GB")
     acc_mem = st.number_input("Memory (GB)", min_value=1, step=1)
 
-    if st.button("Register", use_container_width=True) and acc_name:
+    if st.button("Register", width="stretch") and acc_name:
         gpu_specs[acc_name] = {"name": acc_name, "memory": acc_mem}
         st.rerun()
 

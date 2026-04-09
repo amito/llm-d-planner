@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from api_client import (
     extract_business_context,
     fetch_priority_weights,
@@ -122,19 +121,19 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
-        if st.button("Chat Completion", use_container_width=True, key="task_chat"):
+        if st.button("Chat Completion", width="stretch", key="task_chat"):
             clear_dialog_states()
             st.session_state.pending_user_input = "Customer service chatbot for 30 users."
             st.rerun()
 
     with col2:
-        if st.button("Code Completion", use_container_width=True, key="task_code"):
+        if st.button("Code Completion", width="stretch", key="task_code"):
             clear_dialog_states()
             st.session_state.pending_user_input = "IDE code completion tool for 300 developers."
             st.rerun()
 
     with col3:
-        if st.button("Document Q&A", use_container_width=True, key="task_rag"):
+        if st.button("Document Q&A", width="stretch", key="task_rag"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "Document Q&A system for enterprise knowledge base, 300 users."
@@ -142,7 +141,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
             st.rerun()
 
     with col4:
-        if st.button("Summarization", use_container_width=True, key="task_summ"):
+        if st.button("Summarization", width="stretch", key="task_summ"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "News article summarization for 300 users, cost-effective solution preferred."
@@ -150,7 +149,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
             st.rerun()
 
     with col5:
-        if st.button("Legal Analysis", use_container_width=True, key="task_legal"):
+        if st.button("Legal Analysis", width="stretch", key="task_legal"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "Legal document analysis for 300 lawyers, accuracy is critical."
@@ -161,7 +160,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
     col6, col7, col8, col9 = st.columns(4)
 
     with col6:
-        if st.button("Translation", use_container_width=True, key="task_trans"):
+        if st.button("Translation", width="stretch", key="task_trans"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "Multi-language translation service for 300 users."
@@ -169,7 +168,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
             st.rerun()
 
     with col7:
-        if st.button("Content Generation", use_container_width=True, key="task_content"):
+        if st.button("Content Generation", width="stretch", key="task_content"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "Content generation tool for marketing team, 300 users."
@@ -177,7 +176,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
             st.rerun()
 
     with col8:
-        if st.button("Long Doc Summary", use_container_width=True, key="task_longdoc"):
+        if st.button("Long Doc Summary", width="stretch", key="task_longdoc"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "Long document summarization for research papers, 30 researchers, accuracy matters."
@@ -185,7 +184,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
             st.rerun()
 
     with col9:
-        if st.button("Code Generation", use_container_width=True, key="task_codegen"):
+        if st.button("Code Generation", width="stretch", key="task_codegen"):
             clear_dialog_states()
             st.session_state.pending_user_input = (
                 "Full code generation tool for implementing features, 30 developers."
@@ -205,7 +204,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
             len(st.session_state.user_input.strip()) < 10 if st.session_state.user_input else True
         )
         analyze_clicked = st.button(
-            "Analyze Use Case", type="primary", use_container_width=True, disabled=analyze_disabled
+            "Analyze Use Case", type="primary", width="stretch", disabled=analyze_disabled
         )
         if (
             analyze_disabled
@@ -214,7 +213,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
         ):
             st.caption("Please enter at least 10 characters")
     with col2:
-        if st.button("Clear", use_container_width=True):
+        if st.button("Clear", width="stretch"):
             for key in [
                 "user_input",
                 "extraction_result",
@@ -533,12 +532,12 @@ def main():
     # Auto-switch to pending tab after rerun
     pending_tab = st.session_state.pop("_pending_tab", None)
     if pending_tab is not None:
-        components.html(
+        st.iframe(
             f"""<script>
             var tabs = window.parent.document.querySelectorAll('[role="tab"]');
             if (tabs.length > {pending_tab}) {{ tabs[{pending_tab}].click(); }}
             </script>""",
-            height=0,
+            height=1,
         )
 
 
