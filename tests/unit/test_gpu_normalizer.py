@@ -104,8 +104,8 @@ class TestFuzzyResolution:
     def test_tesla_t4(self):
         from planner.shared.utils.gpu_normalizer import normalize_gpu_types
 
-        # T4 is not in the model catalog, so it should be skipped
-        assert normalize_gpu_types(["Tesla-T4"]) == []
+        # T4 is now in the model catalog
+        assert normalize_gpu_types(["Tesla-T4"]) == ["T4"]
 
     def test_nvidia_l40_48gb(self):
         from planner.shared.utils.gpu_normalizer import normalize_gpu_types

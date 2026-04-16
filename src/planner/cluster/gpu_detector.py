@@ -55,6 +55,9 @@ except ImportError:
 # nvidia.com/gpu.product. AMD detection would require a separate label
 # lookup and is not covered by this map.
 GPU_PRODUCT_MAP: dict[str, str] = {
+    "tesla-t4": "T4",
+    "nvidia-tesla-t4": "T4",
+    "nvidia-t4": "T4",
     "nvidia-l4": "L4",
     "nvidia-a100-sxm4-40gb": "A100-40",
     "nvidia-a100-40gb-pcie": "A100-40",

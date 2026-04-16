@@ -141,6 +141,12 @@ class DeploymentGenerator:
             cpu_limit = "48"
             memory_request = "128Gi"
             memory_limit = "256Gi"
+        elif gpu_type == "T4":
+            # T4: lightweight resource profile for small models
+            cpu_request = "2"
+            cpu_limit = "2"
+            memory_request = "16Gi"
+            memory_limit = "16Gi"
         else:
             # Entry-level GPUs: L4, etc.
             cpu_request = "8"

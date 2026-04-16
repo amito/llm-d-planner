@@ -1,6 +1,20 @@
 {
   "gpu_types": [
     {
+      "gpu_type": "T4",
+      "aliases": ["NVIDIA-T4", "T4", "Tesla-T4", "NVIDIA-Tesla-T4"],
+      "node_selector_label": "Tesla-T4",
+      "memory_gb": 16,
+      "compute_capability": "7.5",
+      "typical_use_cases": ["inference"],
+      "cost_per_hour_usd": 0.50,
+      "cost_per_hour_aws": 0.53,
+      "cost_per_hour_gcp": 0.35,
+      "cost_per_hour_azure": 0.45,
+      "availability": "high",
+      "notes": "Budget inference GPU, widely available, good for small models (7B)"
+    },
+    {
       "gpu_type": "L4",
       "aliases": ["NVIDIA-L4", "L4"],
       "node_selector_label": "NVIDIA-L4",
