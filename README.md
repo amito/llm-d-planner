@@ -15,14 +15,14 @@ Deploying LLMs in production means navigating a fragmented landscape of model se
 llm-d Planner unifies these concerns into a single platform with three capabilities:
 
 - **Planner** — The main workflow. Guides users from business requirements to a running LLM deployment through conversational requirements gathering, SLO-driven recommendations, and one-click Kubernetes deployment.
-- **Capacity Analyzer** — Estimate GPU memory requirements for any HuggingFace model: model weights, KV cache, activation memory, and CUDA overhead. Determine minimum GPU count, maximum context length, and concurrent request capacity for a given hardware configuration.
-- **Performance Analyzer** — Estimate inference performance (TTFT, ITL, throughput) across GPU types without running actual benchmarks. Compare latency and performance tradeoffs to find the optimal GPU for your workload.
+- **LLM Memory Analyzer** — Estimate GPU memory requirements for any HuggingFace model: model weights, KV cache, activation memory, and system overhead. Determine minimum GPU count, maximum context length, and concurrent request capacity for a given hardware configuration.
+- **Inference Performance Analyzer** — Estimate inference performance (TTFT, ITL, throughput) across GPU types without running actual benchmarks. Compare latency and performance tradeoffs to find the optimal GPU for your workload.
 
-Planner is the main workflow — it makes recommendations based on available benchmarks, and leverages the Capacity Analyzer and Performance Analyzer to fill gaps and expand the search surface beyond what benchmarks alone can cover. The Capacity Analyzer and Performance Analyzer are also useful on their own for deeper analysis in their respective areas, each with its own UI page, CLI command, and API endpoint.
+Planner is the main workflow — it makes recommendations based on available benchmarks, and leverages the LLM Memory Analyzer and Inference Performance Analyzer to fill gaps and expand the search surface beyond what benchmarks alone can cover. The LLM Memory Analyzer and Inference Performance Analyzer are also useful on their own for deeper analysis in their respective areas, each with its own UI page, CLI command, and API endpoint.
 
 ### Key Features
 
-- **Conversational Requirements Gathering** - Describe your use case in natural language
+- **Conversational Requirements Gathering** - Describe your AI-powered use case in natural language
 - **SLO-Driven Capacity Planning** - Translate business needs into technical specifications (traffic profiles, latency targets, cost constraints)
 - **GPU Memory Estimation** - Calculate model weight memory, KV cache, activation overhead, and minimum GPU requirements for any HuggingFace model
 - **Performance Estimation** - Estimate TTFT, ITL, and throughput across GPU types without running benchmarks
@@ -39,26 +39,27 @@ Planner is the main workflow — it makes recommendations based on available ben
 **Planner flow:**
 
 1. **Extract Intent** - LLM-powered analysis converts your description into structured requirements
-2. **Map to Traffic Profile** - Match use case to one of 4 GuideLLM benchmark configurations
-3. **Set SLO Targets** - Auto-generate TTFT (p95), ITL (p95), and E2E (p95) targets based on experience class
-4. **Query Benchmarks** - Exact match on (model, GPU, traffic profile) from PostgreSQL database
-5. **Estimate if Missing** - For models/GPUs without benchmarks, generate estimated performance via Performance Analyzer
-6. **Filter by SLOs** - Find configurations meeting all p95 latency targets
+2. **Map to Traffic Profile** - Map use case to appropriate [GuideLLM](https://github.com/vllm-project/guidellm) benchmark configurations
+3. **Set SLO Targets** - Auto-generate TTFT, ITL, and E2E targets based on experience class
+4. **Query Benchmarks** - Exact match on (model, GPU, traffic profile) from benchmark database
+5. **Estimate if Missing** - For models/GPUs without benchmarks, generate estimated performance via Inference Performance Analyzer
+6. **Filter by Latency** - Find configurations meeting all latency targets
 7. **Plan Capacity** - Calculate required replicas based on throughput requirements
-8. **Generate & Deploy** - Create validated Kubernetes YAML and deploy to local or production clusters
-9. **Monitor & Validate** - Track deployment status and test inference endpoints
+8. **Score and Rank Solutions** - Score and rank solutions for quality, cost, and latency.
+9. **Present to User** - Present top options to user in each category.
+10. **Generate & Deploy** - Create validated Kubernetes YAML and deploy to local or production clusters
 
 **Capacity analysis flow:**
 
 1. **Fetch Model Config** - Retrieve architecture details from HuggingFace (layers, heads, quantization)
-2. **Calculate Memory** - Model weights, KV cache per token, activation memory, CUDA/system overhead
+2. **Calculate Memory** - Model weights, KV cache per token, activation memory, system overhead
 3. **Evaluate Hardware Fit** - Determine valid tensor parallelism values and whether the model fits on a given GPU
 4. **Report Capacity** - Maximum context length, concurrent requests, KV cache blocks for the configuration
 
 **Performance analysis flow:**
 
 1. **Select GPUs** - Choose from a catalog of GPU types (H100, A100, L40, etc.) or evaluate all
-2. **Estimate Performance** - Estimate TTFT, ITL, and throughput per GPU (currently via BentoML roofline model, with additional backends planned)
+2. **Estimate Performance** - Estimate TTFT, ITL, and throughput per GPU (currently via [BentoML LLM Optimizer](https://github.com/bentoml/llm-optimizer) roofline model, with additional backends planned)
 3. **Apply Constraints** - Filter by max TTFT, max ITL, max latency, and GPU count limits
 4. **Rank Results** - Compare qualifying GPUs sorted by performance with cost details
 
@@ -67,7 +68,7 @@ Planner is the main workflow — it makes recommendations based on available ben
 **Required before running `make setup`:**
 
 - **macOS or Linux** (Windows via WSL2)
-- **Docker Desktop** (must be running)
+- **Docker or Podman** (must be running)
 - **Python 3.13** - `brew install python@3.13` (Linux: use your package manager or [pyenv](https://github.com/pyenv/pyenv))
 - **uv** - `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - **Ollama** - `brew install ollama` (Linux: [ollama.com/download](https://ollama.com/download))
@@ -109,9 +110,9 @@ make cluster-stop   # Delete cluster (optional)
 6. **Select a recommendation** - Review ranked options and click "Select"
 7. **Deploy** - Go to the "Deployment" tab to review, copy, or download generated deployment files
 
-**Capacity Analyzer** (sidebar page): Enter a HuggingFace model ID and GPU configuration to see memory breakdown (model weights, KV cache, activation, overhead), maximum context length, and concurrent request capacity.
+**LLM Memory Analyzer** (sidebar page): Enter a HuggingFace model ID and GPU configuration to see memory breakdown (model weights, KV cache, activation, overhead), maximum context length, and concurrent request capacity.
 
-**Performance Analyzer** (sidebar page): Enter a model ID and workload parameters (input/output token lengths) to get estimated inference performance across GPU types, ranked by cost.
+**Inference Performance Analyzer** (sidebar page): Enter a model ID and workload parameters (input/output token lengths) to get estimated inference performance across GPU types, ranked by cost.
 
 ## Architecture
 
@@ -120,12 +121,12 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
 ## Implemented Features
 
 - ✅ **Planner**: Intent extraction, traffic profiling, multi-criteria model + GPU recommendation, SLO-driven capacity planning
-- ✅ **Capacity Analyzer**: GPU memory estimation (model weights, KV cache for MHA/GQA/MQA/MLA, activation, overhead), model-fits-GPU analysis, maximum context length and concurrent request calculations
-- ✅ **Performance Analyzer**: Performance estimation (TTFT, ITL, throughput) across GPU types, cost comparison, latency constraint filtering
+- ✅ **LLM Memory Analyzer**: GPU memory estimation (model weights, KV cache for MHA/GQA/MQA/MLA, activation, overhead), model-fits-GPU analysis, maximum context length and concurrent request calculations
+- ✅ **Inference Performance Analyzer**: Performance estimation (TTFT, ITL, throughput) across GPU types, cost comparison, latency constraint filtering
 - ✅ **Estimated Performance Fallback**: When benchmarks are unavailable, roofline estimates fill the gap in the recommendation pipeline (visually differentiated as "Estimated" vs "Benchmarked")
 - ✅ **Traffic Profile Framework**: 4 GuideLLM standard configurations with experience-driven SLOs (9 use cases, 5 experience classes, p95 targets)
 - ✅ **FastAPI Backend**: REST endpoints for recommendations, capacity planning, GPU estimation, and database management (`/api/v1/model-info`, `/api/v1/calculate`, `/api/v1/estimate`)
-- ✅ **Streamlit UI**: Chat interface, recommendation display, specification editor, Capacity Analyzer page, Performance Analyzer page
+- ✅ **Streamlit UI**: Chat interface, recommendation display, specification editor, LLM Memory Analyzer page, Inference Performance Analyzer page
 - ✅ **CLI**: `planner plan` for capacity planning, `planner estimate` for GPU performance estimation
 - ✅ **Deployment Automation**: YAML generation (KServe/vLLM/HPA/ServiceMonitor), Kubernetes deployment
 - ✅ **Local Kubernetes**: KIND cluster support, KServe installation, cluster management
@@ -150,7 +151,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
 
 ## CLI
 
-The `planner` CLI provides direct access to the Capacity Analyzer and Performance Analyzer without running the web services.
+The `planner` CLI provides direct access to the LLM Memory Analyzer and Inference Performance Analyzer without running the web services.
 
 ```bash
 # Capacity planning — memory breakdown for a model
@@ -236,14 +237,12 @@ See [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md#vllm-simulator-details) fo
 
 ## Future Enhancements
 
-1. **Prefill/Decode Disaggregation** - Support P/D disaggregation as a first-class deployment topology
-2. **vLLM Parameter Search** - Expand configuration search to include serving-stack knobs (batch size, scheduling policy, memory utilization)
-3. **Feedback Loops** - Connect deployment metrics back to estimation models to improve accuracy over time
-4. **Dynamic Workload Adaptation** - Detect traffic shifts and trigger configuration re-evaluation
-5. **Production GPU Validation** - End-to-end testing with real GPU clusters
-6. **Statistical Traffic Models** - Full distributions (not just point estimates)
-7. **Multi-Dimensional Benchmarks** - Concurrency, batching, KV cache effects
-8. **Security Hardening** - YAML validation, RBAC, network policies
+1. **Prefill/Decode Disaggregation** - Support P/D disaggregation as a deployment topology option
+2. **llm-d Stack Configuration** - Expose stack-level configuration including routing, P/D disaggregation, and fine-grained vLLM parameters
+3. **vLLM Parameter Search** - Expand configuration search to include serving-stack knobs (batch size, scheduling policy, memory utilization)
+4. **Security Hardening** - YAML validation, RBAC, network policies
+
+Some of these enhancements may involve collaboration with other llm-d SIGs.
 
 ## Contributing
 
