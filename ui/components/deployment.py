@@ -84,7 +84,7 @@ def render_deployment_tab():
 
                     if result.get("success"):
                         st.session_state.deployment_id = result.get("deployment_id")
-                        st.session_state.deployment_yaml_files = result.get("files", {})
+                        st.session_state.deployment_yaml_files = result.get("yaml_contents", {})
                         st.session_state.deployment_yaml_generated = True
                         st.rerun()
                     else:
@@ -198,10 +198,10 @@ def _render_deploy_to_cluster_button(selected_config: dict):
             st.session_state.deployed_to_cluster = True
             st.session_state.deployment_id = result.get("deployment_id")
 
-            # Store YAML files if returned
-            files = result.get("files", {})
-            if files:
-                st.session_state.deployment_yaml_files = files
+            # Store YAML contents if returned
+            yaml_contents = result.get("yaml_contents", {})
+            if yaml_contents:
+                st.session_state.deployment_yaml_files = yaml_contents
                 st.session_state.deployment_yaml_generated = True
 
             st.success(

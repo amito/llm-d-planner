@@ -433,7 +433,7 @@ def extract_business_context(user_input: str) -> dict | None:
 def deploy_and_generate_yaml(recommendation: dict) -> dict | None:
     """Deploy a recommendation and return generated YAML contents.
 
-    Returns dict with deployment_id, files (YAML contents), and success status, or None on error.
+    Returns dict with deployment_id, yaml_contents, and success status, or None on error.
     """
     try:
         response = requests.post(
@@ -447,7 +447,7 @@ def deploy_and_generate_yaml(recommendation: dict) -> dict | None:
             return {
                 "success": True,
                 "deployment_id": result.get("deployment_id"),
-                "files": result.get("files", {}),
+                "yaml_contents": result.get("yaml_contents", {}),
             }
         else:
             return {"success": False, "message": result.get("message", "Unknown error")}
@@ -505,7 +505,7 @@ def load_all_deployments() -> list | None:
 def deploy_to_cluster(recommendation: dict, namespace: str = "default") -> dict:
     """Deploy a recommendation to the Kubernetes cluster.
 
-    Returns dict with deployment_id, files, deployment_result, and success status.
+    Returns dict with deployment_id, yaml_contents, deployment_result, and success status.
     """
     try:
         response = requests.post(

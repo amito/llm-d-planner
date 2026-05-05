@@ -34,7 +34,7 @@ class DeploymentResponse(BaseModel):
 
     deployment_id: str
     namespace: str
-    files: dict[str, Any]
+    yaml_contents: dict[str, Any]
     success: bool = True
     message: str | None = None
 
@@ -101,7 +101,7 @@ async def deploy_model(
         return DeploymentResponse(
             deployment_id=result["deployment_id"],
             namespace=result["namespace"],
-            files=result["contents"],
+            yaml_contents=result["contents"],
             success=True,
             message=f"Deployment files generated successfully for {result['deployment_id']}",
         )
@@ -235,11 +235,11 @@ async def deploy_to_cluster(
         )
 
         deployment_id = result["deployment_id"]
-        files = result["files"]
+        file_paths = result["files"]
 
         # Step 2: Validate generated files
         try:
-            yaml_validator.validate_all(files)
+            yaml_validator.validate_all(file_paths)
             logger.info(f"YAML validation passed for: {deployment_id}")
         except Exception as e:
             logger.error(f"YAML validation failed: {e}")
@@ -249,7 +249,7 @@ async def deploy_to_cluster(
             ) from e
 
         # Step 3: Deploy to cluster
-        yaml_file_paths = [files["inferenceservice"], files["autoscaling"]]
+        yaml_file_paths = [file_paths["inferenceservice"], file_paths["autoscaling"]]
 
         deployment_result = await run_in_threadpool(manager.deploy_all, yaml_file_paths)
 
@@ -266,7 +266,7 @@ async def deploy_to_cluster(
             "success": True,
             "deployment_id": deployment_id,
             "namespace": request.namespace,
-            "files": result["contents"],
+            "yaml_contents": result["contents"],
             "deployment_result": deployment_result,
             "message": f"Successfully deployed {deployment_id} to Kubernetes cluster",
         }
