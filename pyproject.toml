@@ -11,7 +11,7 @@ dependencies = [
     "pydantic==2.13.3",
     "pydantic-settings==2.14.0",
     # LLM integration
-    "ollama==0.6.1",
+    "ollama==0.6.2",
     # Data handling
     "pandas==3.0.2",
     # PostgreSQL
@@ -29,7 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ui = [
-    "streamlit==1.56.0",
+    "streamlit==1.57.0",
     "plotly>=6.3.0",
     "matplotlib>=3.10.9",
 ]
