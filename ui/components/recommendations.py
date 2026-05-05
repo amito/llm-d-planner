@@ -244,7 +244,7 @@ def _render_category_card(title, recs_list, highlight_field, category_key, col):
                 result = deploy_and_generate_yaml(rec)
                 if result and result.get("success"):
                     st.session_state.deployment_id = result["deployment_id"]
-                    st.session_state.deployment_yaml_files = result["files"]
+                    st.session_state.deployment_yaml_files = result["yaml_contents"]
                     st.session_state.deployment_yaml_generated = True
                 else:
                     st.session_state.deployment_yaml_generated = False

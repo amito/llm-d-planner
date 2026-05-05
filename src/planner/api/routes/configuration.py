@@ -1,6 +1,5 @@
 """Configuration and deployment endpoints."""
 
-import glob as glob_module
 import logging
 import random
 from datetime import datetime
@@ -35,7 +34,7 @@ class DeploymentResponse(BaseModel):
 
     deployment_id: str
     namespace: str
-    files: dict[str, Any]
+    yaml_contents: dict[str, Any]
     success: bool = True
     message: str | None = None
 
@@ -81,27 +80,14 @@ async def deploy_model(
     deployment_generator: DeploymentGenerator = Depends(get_deployment_generator),
     yaml_validator: YAMLValidator = Depends(get_yaml_validator),
 ):
-    """
-    Generate deployment YAML files from recommendation.
-
-    Args:
-        request: Deployment request with recommendation
-
-    Returns:
-        Deployment response with file paths
-
-    Raises:
-        HTTPException: If deployment generation fails
-    """
+    """Generate deployment YAML and return contents inline."""
     try:
         logger.info(f"Generating deployment for model: {request.recommendation.model_name}")
 
-        # Generate all YAML files
         result = deployment_generator.generate_all(
             recommendation=request.recommendation, namespace=request.namespace
         )
 
-        # Validate generated files
         try:
             yaml_validator.validate_all(result["files"])
             logger.info(f"All YAML files validated for deployment: {result['deployment_id']}")
@@ -115,11 +101,13 @@ async def deploy_model(
         return DeploymentResponse(
             deployment_id=result["deployment_id"],
             namespace=result["namespace"],
-            files=result["files"],
+            yaml_contents=result["contents"],
             success=True,
             message=f"Deployment files generated successfully for {result['deployment_id']}",
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to generate deployment: {e}", exc_info=True)
         raise HTTPException(
@@ -247,11 +235,11 @@ async def deploy_to_cluster(
         )
 
         deployment_id = result["deployment_id"]
-        files = result["files"]
+        file_paths = result["files"]
 
         # Step 2: Validate generated files
         try:
-            yaml_validator.validate_all(files)
+            yaml_validator.validate_all(file_paths)
             logger.info(f"YAML validation passed for: {deployment_id}")
         except Exception as e:
             logger.error(f"YAML validation failed: {e}")
@@ -261,7 +249,7 @@ async def deploy_to_cluster(
             ) from e
 
         # Step 3: Deploy to cluster
-        yaml_file_paths = [files["inferenceservice"], files["autoscaling"]]
+        yaml_file_paths = [file_paths["inferenceservice"], file_paths["autoscaling"]]
 
         deployment_result = await run_in_threadpool(manager.deploy_all, yaml_file_paths)
 
@@ -278,7 +266,7 @@ async def deploy_to_cluster(
             "success": True,
             "deployment_id": deployment_id,
             "namespace": request.namespace,
-            "files": files,
+            "yaml_contents": result["contents"],
             "deployment_result": deployment_result,
             "message": f"Successfully deployed {deployment_id} to Kubernetes cluster",
         }
@@ -355,50 +343,6 @@ async def get_k8s_deployment_status(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get deployment status: {str(e)}",
-        ) from e
-
-
-@router.get("/deployments/{deployment_id}/yaml")
-async def get_deployment_yaml(
-    deployment_id: str,
-    deployment_generator: DeploymentGenerator = Depends(get_deployment_generator),
-):
-    """
-    Retrieve generated YAML files for a deployment.
-
-    Args:
-        deployment_id: Deployment identifier
-
-    Returns:
-        Dictionary with YAML file contents
-
-    Raises:
-        HTTPException: If YAML files not found
-    """
-    try:
-        output_dir = deployment_generator.output_dir
-
-        yaml_files = {}
-        safe_id = glob_module.escape(deployment_id)
-        for file_path in output_dir.glob(f"{safe_id}*.yaml"):
-            with open(file_path) as f:
-                yaml_files[file_path.name] = f.read()
-
-        if not yaml_files:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No YAML files found for deployment {deployment_id}",
-            )
-
-        return {"deployment_id": deployment_id, "files": yaml_files, "count": len(yaml_files)}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to retrieve YAML files: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to retrieve YAML files: {str(e)}",
         ) from e
 
 
