@@ -620,20 +620,55 @@ def fetch_db_status() -> dict | None:
         return None
 
 
-def upload_benchmarks(file_bytes: bytes, filename: str) -> dict | None:
+def is_db_admin_required() -> bool:
+    """Check whether the backend requires a password for DB admin operations."""
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/api/v1/db/admin-required",
+            timeout=5,
+        )
+        response.raise_for_status()
+        return bool(response.json().get("required", False))
+    except Exception:
+        return False
+
+
+def verify_db_admin_password(password: str) -> bool:
+    """Verify the admin password against the backend."""
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/api/v1/db/verify-admin",
+            headers={"X-Admin-Password": password},
+            timeout=5,
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def upload_benchmarks(
+    file_bytes: bytes,
+    filename: str,
+    password: str | None = None,
+) -> dict | None:
     """Upload a benchmark JSON file to the backend.
 
     Args:
         file_bytes: Raw bytes of the JSON file
         filename: Original filename
+        password: Optional admin password
 
     Returns:
         Response dict with success status and stats, or None on error.
     """
+    headers: dict[str, str] = {}
+    if password:
+        headers["X-Admin-Password"] = password
     try:
         response = requests.post(
             f"{API_BASE_URL}/api/v1/db/upload-benchmarks",
             files={"file": (filename, file_bytes, "application/json")},
+            headers=headers,
             timeout=60,
         )
         response.raise_for_status()
@@ -649,15 +684,22 @@ def upload_benchmarks(file_bytes: bytes, filename: str) -> dict | None:
         return {"success": False, "message": str(e)}
 
 
-def reset_database() -> dict | None:
+def reset_database(password: str | None = None) -> dict | None:
     """Reset the benchmark database (removes all benchmark data).
+
+    Args:
+        password: Optional admin password
 
     Returns:
         Response dict with success status, or None on error.
     """
+    headers: dict[str, str] = {}
+    if password:
+        headers["X-Admin-Password"] = password
     try:
         response = requests.post(
             f"{API_BASE_URL}/api/v1/db/reset",
+            headers=headers,
             timeout=30,
         )
         response.raise_for_status()

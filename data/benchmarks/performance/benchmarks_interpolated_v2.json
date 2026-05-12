@@ -1,5 +1,7 @@
 {
   "metadata": {
+    "source": "manual",
+    "confidence_level": "estimated",
     "description": "Interpolated performance data for high-accuracy models",
     "total_configs": 500,
     "models_interpolated": 15,

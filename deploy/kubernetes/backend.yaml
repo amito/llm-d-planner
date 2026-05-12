@@ -49,10 +49,51 @@ spec:
                   name: planner-secrets
                   key: model-catalog-token
                   optional: true
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: hf-token
+                  optional: true
             - name: OLLAMA_HOST
               value: http://ollama:11434
             - name: OLLAMA_MODEL
               value: granite3.3:2b
+            - name: LLM_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: planner-config
+                  key: LLM_PROVIDER
+            - name: VERTEX_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: vertex-project-id
+                  optional: true
+            - name: VERTEX_REGION
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: vertex-region
+                  optional: true
+            - name: GCP_CREDENTIALS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: gcp-credentials-json
+                  optional: true
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: vertex-project-id
+                  optional: true
+            - name: DB_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: db-admin-password
+                  optional: true
             - name: API_HOST
               value: "0.0.0.0"
             - name: API_PORT
@@ -79,8 +120,8 @@ spec:
             failureThreshold: 10
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: "1"
+              memory: 1Gi
             limits:
               cpu: "2"
               memory: 2Gi

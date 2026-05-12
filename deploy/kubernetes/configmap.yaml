@@ -6,6 +6,10 @@ metadata:
   labels:
     app.kubernetes.io/part-of: planner
 data:
+  # LLM provider: "ollama" (default, uses local Ollama) or "vertex" (Claude on Vertex AI)
+  LLM_PROVIDER: ollama
+  VERTEX_MODEL: claude-sonnet-4-6
+
   # Benchmark data source: "postgresql" (default) or "model_catalog" (RHOAI)
   PLANNER_BENCHMARK_SOURCE: postgresql
 

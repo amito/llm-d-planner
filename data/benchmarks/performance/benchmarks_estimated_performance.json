@@ -1,12 +1,12 @@
 {
   "metadata": {
-    "source": "estimated_performance_interpolation",
+    "source": "manual",
+    "confidence_level": "estimated",
     "description": "Estimated performance data for high-accuracy models without real benchmarks",
     "generated_at": "2025-12-31T11:08:02.902423",
     "total_configs": 70,
     "unique_models": 30,
     "estimation_method": "family_size_interpolation with hardware scaling",
-    "confidence_level": 0.75,
     "disclaimer": "These are ESTIMATED values based on similar models. Real benchmarks may differ.",
     "models": [
       "DeepSeek V3.2 Exp (Reasoning)",

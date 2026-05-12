@@ -10,6 +10,7 @@ import hashlib
 import logging
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from psycopg2.extras import RealDictCursor, execute_batch
 
@@ -159,6 +160,41 @@ _INSERT_QUERY = """
 """
 
 
+_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent.parent / "scripts" / "schema.sql"
+
+
+def ensure_schema(conn) -> None:
+    """Create the database schema if it doesn't already exist.
+
+    Reads and executes scripts/schema.sql, which uses CREATE TABLE IF NOT EXISTS
+    and idempotent migrations throughout, so it's safe to call on every insert.
+    """
+    if not _SCHEMA_PATH.exists():
+        logger.warning("schema.sql not found at %s, skipping schema init", _SCHEMA_PATH)
+        return
+    cursor = conn.cursor()
+    cursor.execute(_SCHEMA_PATH.read_text())
+    conn.commit()
+    cursor.close()
+    logger.info("Database schema ensured")
+
+
+def extract_metadata(data: dict) -> dict:
+    """Extract source and confidence_level from JSON file metadata.
+
+    Looks for a top-level '_metadata' or 'metadata' dict and returns
+    standardized source/confidence_level values.
+
+    Returns:
+        Dict with 'source' and 'confidence_level' keys (may be None).
+    """
+    meta = data.get("_metadata") or data.get("metadata") or {}
+    return {
+        "source": meta.get("source"),
+        "confidence_level": meta.get("confidence_level"),
+    }
+
+
 def insert_benchmarks(
     conn,
     benchmarks: list[dict],
@@ -178,14 +214,9 @@ def insert_benchmarks(
     Returns:
         Dict with insertion stats: {inserted, total_in_db, stats}
     """
-    cursor = conn.cursor()
+    ensure_schema(conn)
 
-    # Ensure unique constraint on config_id for duplicate detection
-    cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_config_id_unique
-        ON exported_summaries(config_id);
-    """)
-    conn.commit()
+    cursor = conn.cursor()
 
     # Prepare benchmarks with required fields
     prepared_benchmarks = [
