@@ -33,7 +33,6 @@ from planner.shared.schemas import (
 )
 from planner.shared.utils import normalize_gpu_types
 
-from .analyzer import get_task_bonus
 from .estimator import generate_estimated_configs
 from .scorer import Scorer
 
@@ -384,21 +383,17 @@ class ConfigFinder:
             # Calculate accuracy score - USE RAW BENCHMARK SCORE
             # This is the actual model accuracy from benchmarks (AA or Model Catalog)
             # NOT a composite score with latency/budget bonuses
-            model_name_for_scoring = model.name if model else bench.model_hf_repo
+            # Use bench.model_hf_repo (e.g. "RedHatAI/Qwen2.5-7B-Instruct-quantized.w4a16")
+            # so quantization discounts are applied correctly.
+            model_name_for_scoring = bench.model_hf_repo
             if self._quality_scorer is not None:
                 raw_accuracy = self._quality_scorer.get_quality_score(
                     model_name_for_scoring, intent.use_case
                 )
-                if raw_accuracy == 0 and bench.model_hf_repo:
-                    raw_accuracy = self._quality_scorer.get_quality_score(
-                        bench.model_hf_repo, intent.use_case
-                    )
             else:
                 from .quality import score_model_quality
 
                 raw_accuracy = score_model_quality(model_name_for_scoring, intent.use_case)
-                if raw_accuracy == 0 and bench.model_hf_repo:
-                    raw_accuracy = score_model_quality(bench.model_hf_repo, intent.use_case)
 
             accuracy_score = int(raw_accuracy)
 
@@ -407,11 +402,6 @@ class ConfigFinder:
             if accuracy_score == 0 and getattr(bench, "confidence_level", None) == "estimated":
                 model_size = model.size_parameters if model else bench.model_hf_repo
                 accuracy_score = scorer.score_accuracy_by_size(model_size)
-
-            # Apply task-specific bonus to accuracy score
-            # This boosts models that are well-suited for the specific use case
-            task_bonus = get_task_bonus(model_name_for_scoring, intent.use_case)
-            accuracy_score = min(accuracy_score + task_bonus, 100)  # Cap at 100
 
             complexity_score = scorer.score_complexity(total_gpus)  # Use total GPUs for complexity
 

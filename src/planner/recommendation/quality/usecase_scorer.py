@@ -111,67 +111,48 @@ class UseCaseQualityScorer:
         self._catalog_fallback = normalized
         logger.info("Set catalog fallback scores for %d models", len(self._catalog_fallback))
 
-    # Benchmark model variant to AA model mapping (for ALL 40 Red Hat DB models)
+    # Map from normalized model name -> AA weighted score CSV name.
+    # Keys must match output of _normalize_model_name() (org prefix stripped,
+    # quantization/date suffixes removed). One entry per base model; all
+    # quantized/FP8 variants collapse to the same normalized key.
     BENCHMARK_TO_AA_MAP = {
-        # === GPT-OSS (61.62%, 55.23%) ===
         "gpt-oss-120b": "gpt-oss-120b (high)",
         "gpt-oss-20b": "gpt-oss-20b (high)",
-        # === DeepSeek R1 (52.20%) ===
-        "deepseek-r1-0528-quantized.w4a16": "deepseek r1 0528 (may '25)",
-        # === Kimi K2 (49.61%) ===
-        "kimi-k2-instruct-quantized.w4a16": "kimi k2",
-        # === Llama 4 Maverick (46.86%) ===
-        "llama-4-maverick-17b-128e-instruct": "llama 4 maverick",
-        "llama-4-maverick-17b-128e-instruct-fp8": "llama 4 maverick",
-        # === Qwen 2.5 7B (44.71%) ===
-        "qwen2.5-7b-instruct": "qwen2.5 max",
-        "qwen2.5-7b-instruct-fp8-dynamic": "qwen2.5 max",
-        "qwen2.5-7b-instruct-quantized.w4a16": "qwen2.5 max",
-        "qwen2.5-7b-instruct-quantized.w8a8": "qwen2.5 max",
-        # === Llama 3.3 70B (42.99%) ===
-        "llama-3.3-70b-instruct": "llama 3.3 instruct 70b",
-        "llama-3.3-70b-instruct-fp8-dynamic": "llama 3.3 instruct 70b",
-        "llama-3.3-70b-instruct-quantized.w4a16": "llama 3.3 instruct 70b",
-        "llama-3.3-70b-instruct-quantized.w8a8": "llama 3.3 instruct 70b",
-        # === Llama 4 Scout (42.42%) ===
-        "llama-4-scout-17b-16e-instruct": "llama 4 scout",
-        "llama-4-scout-17b-16e-instruct-fp8-dynamic": "llama 4 scout",
-        "llama-4-scout-17b-16e-instruct-quantized.w4a16": "llama 4 scout",
-        # === Qwen3 8B (40.37%) ===
-        "qwen3-8b-fp8": "qwen3 8b (reasoning)",
-        "qwen3-8b-fp8-dynamic": "qwen3 8b (reasoning)",
-        # === NVIDIA Nemotron Nano 9B (39.89%) ===
-        "nvidia-nemotron-nano-9b-v2-fp8-dynamic": "nvidia nemotron nano 9b v2 (reasoning)",
-        # === Qwen3 Coder 480B (38.75% - using Jamba Reasoning) ===
-        "qwen3-coder-480b-a35b-instruct-fp8": "qwen3 coder 480b a35b instruct",
-        # === Llama 3.1 Nemotron 70B (36.69%) ===
-        "llama-3.1-nemotron-70b-instruct-hf": "llama 3.1 nemotron instruct 70b",
-        "llama-3.1-nemotron-70b-instruct-hf-fp8-dynamic": "llama 3.1 nemotron instruct 70b",
-        # === Mistral Small 3.1 (35.70%) ===
-        "mistral-small-3.1-24b-instruct-2503": "mistral small 3.1",
-        "mistral-small-3.1-24b-instruct-2503-fp8-dynamic": "mistral small 3.1",
-        "mistral-small-3.1-24b-instruct-2503-quantized.w4a16": "mistral small 3.1",
-        "mistral-small-3.1-24b-instruct-2503-quantized.w8a8": "mistral small 3.1",
-        # === Phi-4 (35.57%) ===
+        "deepseek-r1-0528": "deepseek r1 0528 (may '25)",
+        "kimi-k2": "kimi k2",
+        "llama-4-maverick-17b-128e": "llama 4 maverick",
+        "qwen2.5-7b": "qwen2.5 max",
+        "llama-3.3-70b": "llama 3.3 instruct 70b",
+        "llama-4-scout-17b-16e": "llama 4 scout",
+        "qwen3-8b": "qwen3 8b (reasoning)",
+        "nvidia-nemotron-nano-9b-v2": "nvidia nemotron nano 9b v2 (reasoning)",
+        "qwen3-coder-480b-a35b": "qwen3 coder 480b a35b instruct",
+        "llama-3.1-nemotron-70b": "llama 3.1 nemotron instruct 70b",
+        "mistral-small-3.1-24b": "mistral small 3.1",
         "phi-4": "phi-4",
-        "phi-4-fp8-dynamic": "phi-4",
-        "phi-4-quantized.w4a16": "phi-4",
-        "phi-4-quantized.w8a8": "phi-4",
-        # === Mistral Small 24B (33.79%) ===
-        "mistral-small-24b-instruct-2501": "mistral small 3",
-        # === Llama 3.1 8B (27.71%) ===
-        "llama-3.1-8b-instruct": "llama 3.1 instruct 8b",
-        "meta-llama-3.1-8b-instruct-fp8-dynamic": "llama 3.1 instruct 8b",
-        # === Gemma 3n (27.69%) ===
-        "gemma-3n-e4b-it-fp8-dynamic": "gemma 3n e4b instruct",
-        # === Granite 3.1 8B (25.57%) ===
-        "granite-3.1-8b-instruct": "granite 3.3 8b (non-reasoning)",
-        "granite-3.1-8b-instruct-fp8-dynamic": "granite 3.3 8b (non-reasoning)",
-        "granite-3.1-8b-instruct-quantized.w4a16": "granite 3.3 8b (non-reasoning)",
-        # === Mixtral 8x7B (20.51%) ===
-        "mixtral-8x7b-instruct-v0.1": "mixtral 8x7b instruct",
-        # === SmolLM3 3B (estimated ~20%) ===
-        "smollm3-3b-fp8-dynamic": "smollm3 3b",
+        "mistral-small-24b": "mistral small 3",
+        "llama-3.1-8b": "llama 3.1 instruct 8b",
+        "meta-llama-3.1-8b": "llama 3.1 instruct 8b",
+        "gemma-3n-e4b-it": "gemma 3n e4b instruct",
+        "granite-3.1-8b": "granite 3.3 8b (non-reasoning)",
+        "mixtral-8x7b": "mixtral 8x7b instruct",
+        "ministral-3-14b": "ministral 8b",
+        "qwen3-next-80b-a3b": "qwen3 next 80b a3b (reasoning)",
+        "qwen3-vl-235b-a22b": "qwen3 vl 235b a22b (reasoning)",
+        "granite-4.0-h-small": "granite 4.0 h small",
+        "granite-4.0-h-tiny": "granite 4.0 micro",
+        "mistral-large-3-675b": "mistral large 2 (nov '24)",
+        "nvidia-nemotron-3-nano-30b-a3b": "nvidia nemotron nano 9b v2 (non-reasoning)",
+    }
+
+    # Quantization discount factors applied to base model quality scores.
+    # FP8 has negligible quality loss; W8A8 is minor; W4A16/NVFP4 lose more.
+    QUANTIZATION_DISCOUNTS: dict[str, float] = {
+        "-fp8-dynamic": 1.0,
+        "-fp8": 1.0,
+        "-quantized.w8a8": 0.97,
+        "-quantized.w4a16": 0.92,
+        "-nvfp4": 0.92,
     }
 
     def _normalize_model_name(self, model_name: str) -> str:
@@ -184,20 +165,34 @@ class UseCaseQualityScorer:
 
         # Remove quantization suffixes
         suffixes_to_remove = [
+            "-nvfp4",
             "-fp8-dynamic",
             "-fp8",
             "-quantized.w4a16",
             "-quantized.w8a8",
             "-instruct-2501",
             "-instruct-2503",
+            "-instruct-2509",
+            "-instruct-2512",
             "-instruct-hf",
             "-instruct-v0.1",
             "-instruct",
+            "-reasoning",
         ]
         for suffix in suffixes_to_remove:
             name = name.replace(suffix, "")
 
         return name.strip("-").strip()
+
+    def _get_quantization_discount(self, model_name: str) -> float:
+        """Return a discount factor (0-1) based on the quantization level."""
+        name = model_name.lower()
+        if "/" in name:
+            name = name.split("/")[-1]
+        for suffix, factor in self.QUANTIZATION_DISCOUNTS.items():
+            if suffix in name:
+                return factor
+        return 1.0
 
     def get_quality_score(self, model_name: str, use_case: str) -> float:
         """Get quality score for a model on a specific use case.
@@ -221,6 +216,7 @@ class UseCaseQualityScorer:
         # Normalize the model name
         model_lower = model_name.lower()
         base_model = self._normalize_model_name(model_name)
+        discount = self._get_quantization_discount(model_name)
 
         # Try exact match first
         if model_lower in scores:
@@ -230,7 +226,7 @@ class UseCaseQualityScorer:
         for benchmark_pattern, aa_name in self.BENCHMARK_TO_AA_MAP.items():
             if benchmark_pattern in base_model and aa_name in scores:
                 logger.debug(f"Matched {model_name} -> {aa_name} via benchmark mapping")
-                return scores[aa_name]
+                return round(scores[aa_name] * discount, 2)
 
         # Try partial matching (for HuggingFace repo names)
         # Find BEST match - prioritize matches that include model size (7b, 20b, 120b, etc.)
@@ -277,7 +273,7 @@ class UseCaseQualityScorer:
             logger.debug(
                 f"Partial match {model_name} -> {best_match} (size_match={best_has_size_match})"
             )
-            return best_score
+            return round(best_score * discount, 2)
 
         # Check catalog fallback (try full name, then base model)
         if self._catalog_fallback:
