@@ -160,7 +160,15 @@ _INSERT_QUERY = """
 """
 
 
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent.parent / "scripts" / "schema.sql"
+def _find_project_root() -> Path:
+    path = Path(__file__).resolve()
+    for parent in path.parents:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    raise FileNotFoundError("Could not find project root (no pyproject.toml found)")
+
+
+_SCHEMA_PATH = _find_project_root() / "scripts" / "schema.sql"
 
 
 def ensure_schema(conn) -> None:

@@ -22,6 +22,8 @@ for f in "$RENDERED_DIR"/*.yaml; do
   rm -f "$f.bak"
 done
 
+# WARNING: sed-based injection breaks if values contain | & or newlines.
+# This will be replaced by Kustomize overlays (see GitHub issue backlog).
 # Inject HuggingFace token into secrets if provided via environment
 if [ -n "$HF_TOKEN" ]; then
   sed -i.bak "s|hf-token: .*|hf-token: ${HF_TOKEN}|" "$RENDERED_DIR/secrets.yaml"

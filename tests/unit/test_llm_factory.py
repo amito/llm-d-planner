@@ -12,12 +12,9 @@ def test_factory_defaults_to_ollama():
     """No LLM_PROVIDER env var returns OllamaClient."""
     from planner.llm.factory import create_llm_client
 
-    with patch.dict("os.environ", {}, clear=False):
-        os_env = dict(__import__("os").environ)
-        os_env.pop("LLM_PROVIDER", None)
-        with patch.dict("os.environ", os_env, clear=True):
-            client = create_llm_client()
-            assert isinstance(client, OllamaClient)
+    with patch.dict("os.environ", {}, clear=True):
+        client = create_llm_client()
+        assert isinstance(client, OllamaClient)
 
 
 @pytest.mark.unit

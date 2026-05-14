@@ -6,6 +6,7 @@ management of Planner deployments (e.g., on Kubernetes) without
 needing shell access.
 """
 
+import hmac
 import json
 import logging
 import os
@@ -37,7 +38,7 @@ def _check_admin_password(password: str | None) -> None:
     """Verify admin password if one is configured."""
     if not _DB_ADMIN_PASSWORD:
         return
-    if password != _DB_ADMIN_PASSWORD:
+    if not password or not hmac.compare_digest(password, _DB_ADMIN_PASSWORD):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing admin password",

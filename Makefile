@@ -130,8 +130,13 @@ check-prereqs: ## Check if required tools are installed
 
 setup-backend: ## Set up Python environment (includes backend and UI dependencies)
 	@printf "$(BLUE)Setting up Python environment...$(NC)\n"
-	uv sync --extra ui --extra dev --extra vertex
+	uv sync --extra ui --extra dev
 	@printf "$(GREEN)✓ Python environment ready (includes backend and UI dependencies)$(NC)\n"
+
+setup-vertex: ## Install Vertex AI dependencies (only needed for LLM_PROVIDER=vertex)
+	@printf "$(BLUE)Installing Vertex AI dependencies...$(NC)\n"
+	uv sync --extra vertex
+	@printf "$(GREEN)✓ Vertex AI dependencies installed$(NC)\n"
 
 setup-ui: setup-backend ## Set up UI (uses shared venv)
 	@printf "$(GREEN)✓ UI ready (shares project venv)$(NC)\n"
