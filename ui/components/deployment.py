@@ -30,7 +30,7 @@ def render_deployment_tab():
         return
 
     # Display selected configuration summary
-    model_name = selected_config.get("model_name", "Unknown Model")
+    model_name = selected_config.get("model_id") or selected_config.get("model_name") or "unknown"
     gpu_config = selected_config.get("gpu_config", {})
     gpu_type = gpu_config.get("gpu_type", "Unknown")
     gpu_count = gpu_config.get("gpu_count", 1)

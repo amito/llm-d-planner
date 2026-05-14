@@ -6,7 +6,7 @@ Winner details, category exploration, and full table dialogs.
 import math
 
 import streamlit as st
-from helpers import format_display_name, format_gpu_config, format_use_case_name, get_scores
+from helpers import format_gpu_config, format_use_case_name, get_scores
 
 
 def render_score_bar(label: str, icon: str, score: float, bar_class: str, contribution: float):
@@ -43,7 +43,7 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
     # === FINAL RECOMMENDATION BOX ===
     st.subheader("Final Recommendation")
 
-    model_name = winner.get("model_name", "Unknown Model")
+    model_name = winner.get("model_id") or winner.get("model_name") or "unknown"
     gpu_config = winner.get("gpu_config", {}) or {}
     hardware = gpu_config.get("gpu_type", winner.get("hardware", "H100"))
     hw_count = gpu_config.get("gpu_count", winner.get("hardware_count", 1))
@@ -154,7 +154,7 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
 
     with col1:
         st.markdown(
-            f'<h3 style="font-size: 1.8rem; font-weight: 700; margin-bottom: 1rem; ">{winner.get("model_name", "Unknown")}</h3>',
+            f'<h3 style="font-size: 1.8rem; font-weight: 700; margin-bottom: 1rem; ">{winner.get("model_id") or winner.get("model_name") or "unknown"}</h3>',
             unsafe_allow_html=True,
         )
 
@@ -186,7 +186,7 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
     with col2:
         st.subheader("Why This Model?")
 
-        model_name = winner.get("model_name", "Unknown")
+        model_name = winner.get("model_id") or winner.get("model_name") or "unknown"
         use_case = extraction.get("use_case", "chatbot_conversational")
         use_case_display = format_use_case_name(use_case)
 
@@ -375,7 +375,7 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
         <div style="margin-top: 1rem; padding: 0.75rem; border-radius: 0.5rem; ">
             <p style="margin: 0; font-size: 0.8rem; text-align: center;">
                 <strong >Data Source:</strong> vLLM Simulation Benchmarks |
-                <strong >Model:</strong> {winner.get("model_name", "Unknown")}
+                <strong >Model:</strong> {winner.get("model_id") or winner.get("model_name") or "unknown"}
             </p>
         </div>
         """,
@@ -439,7 +439,7 @@ def show_category_dialog():
 
     for i, rec in enumerate(top5_list):
         scores = get_scores(rec)
-        model_name = format_display_name(rec.get("model_name", "Unknown"))
+        model_name = rec.get("model_id") or rec.get("model_name") or "unknown"
         gpu_cfg = rec.get("gpu_config", {}) or {}
         hw_type = gpu_cfg.get("gpu_type", rec.get("hardware", "H100"))
         hw_count = gpu_cfg.get("gpu_count", rec.get("hardware_count", 1))
@@ -558,7 +558,7 @@ def show_full_table_dialog():
             )
         else:
             for i, rec in enumerate(recs[:5]):
-                model_name = format_display_name(rec.get("model_name", "Unknown"))
+                model_name = rec.get("model_id") or rec.get("model_name") or "unknown"
                 gpu_str = format_gpu_config(rec.get("gpu_config", {}))
                 ttft = rec.get("predicted_ttft_p95_ms", 0)
                 cost = rec.get("cost_per_month_usd", 0)

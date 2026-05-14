@@ -12,8 +12,13 @@ Integration with Planner:
 import csv
 import logging
 import os
+import re
 
 logger = logging.getLogger(__name__)
+
+_SIZE_PATTERN = re.compile(r"\b(\d+(?:\.\d+)?[bB])\b")
+_QUANT_TOKENS = frozenset({"fp8", "dynamic", "nvfp4", "hf"})
+_DATE_SUFFIX_RE = re.compile(r"^2[0-9]{3}$")
 
 # Base path for weighted scores CSVs
 # Path: quality/usecase_scorer.py -> recommendation -> src -> backend -> project root -> data
@@ -47,6 +52,7 @@ class UseCaseQualityScorer:
     def __init__(self):
         """Initialize the scorer with cached data."""
         self._cache: dict[str, dict[str, float]] = {}
+        self._token_index: dict[str, dict[frozenset[str], str]] = {}
         self._catalog_fallback: dict[str, float] = {}
         self._load_all_scores()
 
@@ -56,6 +62,12 @@ class UseCaseQualityScorer:
             filepath = os.path.join(WEIGHTED_SCORES_DIR, filename)
             if os.path.exists(filepath):
                 self._cache[use_case] = self._load_csv_scores(filepath)
+                token_map: dict[frozenset[str], str] = {}
+                for model_name in self._cache[use_case]:
+                    tokens = self._tokenize_for_matching(model_name)
+                    if tokens not in token_map:
+                        token_map[tokens] = model_name
+                self._token_index[use_case] = token_map
                 logger.info(f"Loaded {len(self._cache[use_case])} model scores for {use_case}")
             else:
                 logger.warning(f"Weighted scores file not found: {filepath}")
@@ -136,13 +148,13 @@ class UseCaseQualityScorer:
         "gemma-3n-e4b-it": "gemma 3n e4b instruct",
         "granite-3.1-8b": "granite 3.3 8b (non-reasoning)",
         "mixtral-8x7b": "mixtral 8x7b instruct",
-        "ministral-3-14b": "ministral 8b",
+        "ministral-3-14b": "ministral 8b",  # no 14B in AA; 8B is only Ministral variant
         "qwen3-next-80b-a3b": "qwen3 next 80b a3b (reasoning)",
         "qwen3-vl-235b-a22b": "qwen3 vl 235b a22b (reasoning)",
         "granite-4.0-h-small": "granite 4.0 h small",
-        "granite-4.0-h-tiny": "granite 4.0 micro",
+        "granite-4.0-h-tiny": "granite 4.0 h 1b",  # catalog lists Tiny as 1B; H 1B is closest
         "mistral-large-3-675b": "mistral large 2 (nov '24)",
-        "nvidia-nemotron-3-nano-30b-a3b": "nvidia nemotron nano 9b v2 (non-reasoning)",
+        "nvidia-nemotron-3-nano-30b-a3b": "llama 3.1 nemotron nano 4b v1.1 (reasoning)",  # MoE with 3B active; 4B is closest
     }
 
     # Quantization discount factors applied to base model quality scores.
@@ -163,7 +175,7 @@ class UseCaseQualityScorer:
         if "/" in name:
             name = name.split("/")[-1]
 
-        # Remove quantization suffixes
+        # Longer suffixes must appear before shorter ones (e.g., -fp8-dynamic before -fp8)
         suffixes_to_remove = [
             "-nvfp4",
             "-fp8-dynamic",
@@ -180,9 +192,26 @@ class UseCaseQualityScorer:
             "-reasoning",
         ]
         for suffix in suffixes_to_remove:
-            name = name.replace(suffix, "")
+            if name.endswith(suffix):
+                name = name[: -len(suffix)]
 
         return name.strip("-").strip()
+
+    def _tokenize_for_matching(self, name: str) -> frozenset[str]:
+        """Tokenize model name into a word set for order-independent matching."""
+        name = name.lower()
+        if "/" in name:
+            name = name.split("/")[-1]
+        name = re.sub(r"[()'\",]", " ", name)
+        tokens = re.split(r"[-_\s]+", name)
+        return frozenset(
+            t
+            for t in tokens
+            if t
+            and t not in _QUANT_TOKENS
+            and not t.startswith("quantized.")
+            and not _DATE_SUFFIX_RE.match(t)
+        )
 
     def _get_quantization_discount(self, model_name: str) -> float:
         """Return a discount factor (0-1) based on the quantization level."""
@@ -222,18 +251,23 @@ class UseCaseQualityScorer:
         if model_lower in scores:
             return scores[model_lower]
 
+        # Try order-independent word-set match (same words, different order)
+        input_tokens = self._tokenize_for_matching(model_name)
+        token_map = self._token_index.get(use_case_normalized, {})
+        token_match = token_map.get(input_tokens)
+        if token_match is not None and token_match in scores:
+            logger.debug(f"Token-set match {model_name} -> {token_match}")
+            return round(scores[token_match] * discount, 2)
+
         # Try benchmark to AA mapping (for known valid models)
-        for benchmark_pattern, aa_name in self.BENCHMARK_TO_AA_MAP.items():
-            if benchmark_pattern in base_model and aa_name in scores:
-                logger.debug(f"Matched {model_name} -> {aa_name} via benchmark mapping")
-                return round(scores[aa_name] * discount, 2)
+        aa_name = self.BENCHMARK_TO_AA_MAP.get(base_model)
+        if aa_name is not None and aa_name in scores:
+            logger.debug(f"Matched {model_name} -> {aa_name} via benchmark mapping")
+            return round(scores[aa_name] * discount, 2)
 
         # Try partial matching (for HuggingFace repo names)
         # Find BEST match - prioritize matches that include model size (7b, 20b, 120b, etc.)
-        import re
-
-        size_pattern = re.compile(r"\b(\d+(?:\.\d+)?[bB])\b")
-        model_sizes = {s.lower() for s in size_pattern.findall(base_model)}
+        model_sizes = {s.lower() for s in _SIZE_PATTERN.findall(base_model)}
 
         best_match = None
         best_score = 0.0
@@ -251,7 +285,7 @@ class UseCaseQualityScorer:
             common_words = model_words & cached_words
             if len(common_words) >= 2:
                 # Check if this match includes the model size
-                cached_sizes = {s.lower() for s in size_pattern.findall(cached_name)}
+                cached_sizes = {s.lower() for s in _SIZE_PATTERN.findall(cached_name)}
                 has_size_match = bool(model_sizes & cached_sizes)
 
                 # Prefer matches with size match, then by common word count

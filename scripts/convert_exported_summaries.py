@@ -83,7 +83,7 @@ def main():
     print(f"Converting {len(records)} records...")
     converted = [convert_record(r) for r in records]
 
-    unique_models = sorted(set(r["model_hf_repo"] for r in converted))
+    unique_models = sorted(set(r.get("model_hf_repo", "unknown") for r in converted))
 
     output = {
         "_metadata": {
@@ -103,7 +103,7 @@ def main():
 
     print(f"Done: {len(converted)} records, {len(unique_models)} unique models")
     for m in unique_models:
-        count = sum(1 for r in converted if r["model_hf_repo"] == m)
+        count = sum(1 for r in converted if r.get("model_hf_repo") == m)
         print(f"  {m}: {count} benchmarks")
 
 

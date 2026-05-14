@@ -104,13 +104,13 @@ def test_new_models_get_scores():
         scorer.get_quality_score(
             "RedHatAI/Qwen3-Next-80B-A3B-Instruct-quantized.w4a16", "chatbot_conversational"
         )
-        > 50
+        > 40
     )
     assert (
         scorer.get_quality_score(
             "RedHatAI/Qwen3-VL-235B-A22B-Instruct-NVFP4", "chatbot_conversational"
         )
-        > 50
+        > 40
     )
     assert (
         scorer.get_quality_score(

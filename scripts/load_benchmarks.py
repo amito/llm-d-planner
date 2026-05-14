@@ -116,7 +116,7 @@ def main():
         conn.close()
 
     print("\n" + "=" * 60)
-    print("Migration complete!")
+    print("Load complete!")
     print("=" * 60)
     print()
     print("Next steps:")
