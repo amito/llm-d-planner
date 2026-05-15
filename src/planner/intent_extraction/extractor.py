@@ -7,7 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import get_args
 
-from planner.llm.ollama_client import OllamaClient
+from planner.llm.client import LLMClient
+from planner.llm.factory import create_llm_client
 from planner.llm.prompts import build_intent_extraction_prompt
 from planner.shared.schemas import ConversationMessage, DeploymentIntent
 
@@ -47,14 +48,14 @@ _USE_CASE_ALIASES: dict[str, str] = {
 class IntentExtractor:
     """Extract structured deployment intent from natural language conversation."""
 
-    def __init__(self, llm_client: OllamaClient | None = None):
+    def __init__(self, llm_client: LLMClient | None = None):
         """
         Initialize intent extractor.
 
         Args:
             llm_client: Optional Ollama client (creates default if not provided)
         """
-        self.llm_client = llm_client or OllamaClient()
+        self.llm_client = llm_client or create_llm_client()
 
     def extract_intent(
         self, user_message: str, conversation_history: list[ConversationMessage] | None = None

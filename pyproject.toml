@@ -36,6 +36,9 @@ ui = [
 cluster = [
     "kubernetes>=35.0.0",
 ]
+vertex = [
+    "anthropic[vertex]>=0.52.0",
+]
 dev = [
     "pytest==9.0.3",
     "pytest-asyncio==1.3.0",

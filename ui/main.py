@@ -13,7 +13,7 @@ import streamlit as st
 
 st.set_page_config(
     page_title="Planner",
-    page_icon="docs/planner-logo-32.png",
+    page_icon="ui/static/planner-logo-32.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )

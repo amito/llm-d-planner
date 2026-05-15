@@ -8,7 +8,8 @@
             "E2E calculated as: TTFT + (ITL \u00d7 output_tokens)"
         ],
         "generation_method": "BLIS simulated data",
-        "source": "BLIS simulator",
+        "source": "BLIS",
+        "confidence_level": "estimated",
         "variation": "",
         "random_seed": 42
     },

@@ -133,20 +133,27 @@ setup-backend: ## Set up Python environment (includes backend and UI dependencie
 	uv sync --extra ui --extra dev
 	@printf "$(GREEN)✓ Python environment ready (includes backend and UI dependencies)$(NC)\n"
 
+setup-vertex: ## Install Vertex AI dependencies (only needed for LLM_PROVIDER=vertex)
+	@printf "$(BLUE)Installing Vertex AI dependencies...$(NC)\n"
+	uv sync --extra vertex
+	@printf "$(GREEN)✓ Vertex AI dependencies installed$(NC)\n"
+
 setup-ui: setup-backend ## Set up UI (uses shared venv)
 	@printf "$(GREEN)✓ UI ready (shares project venv)$(NC)\n"
 
-setup-ollama: ## Pull Ollama model
-	@printf "$(BLUE)Checking if Ollama model $(OLLAMA_MODEL) is available...$(NC)\n"
-	@# Start ollama if not running
-	@if ! pgrep -x "ollama" > /dev/null; then \
-		printf "$(YELLOW)Starting Ollama service...$(NC)\n"; \
-		ollama serve > /dev/null 2>&1 & \
-		sleep 2; \
+setup-ollama: ## Pull Ollama model (skipped when LLM_PROVIDER != ollama)
+	@if [ "$(LLM_PROVIDER)" != "" ] && [ "$(LLM_PROVIDER)" != "ollama" ]; then \
+		printf "$(YELLOW)Skipping Ollama setup (LLM_PROVIDER=$(LLM_PROVIDER))$(NC)\n"; \
+	else \
+		printf "$(BLUE)Checking if Ollama model $(OLLAMA_MODEL) is available...$(NC)\n"; \
+		if ! pgrep -x "ollama" > /dev/null; then \
+			printf "$(YELLOW)Starting Ollama service...$(NC)\n"; \
+			ollama serve > /dev/null 2>&1 & \
+			sleep 2; \
+		fi; \
+		ollama list | grep -q $(OLLAMA_MODEL) || (printf "$(YELLOW)Pulling model $(OLLAMA_MODEL)...$(NC)\n" && ollama pull $(OLLAMA_MODEL)); \
+		printf "$(GREEN)✓ Ollama model $(OLLAMA_MODEL) ready$(NC)\n"; \
 	fi
-	@# Check if model exists, pull if not
-	@ollama list | grep -q $(OLLAMA_MODEL) || (printf "$(YELLOW)Pulling model $(OLLAMA_MODEL)...$(NC)\n" && ollama pull $(OLLAMA_MODEL))
-	@printf "$(GREEN)✓ Ollama model $(OLLAMA_MODEL) ready$(NC)\n"
 
 setup: check-prereqs setup-backend setup-ui setup-ollama ## Run all setup tasks
 	@printf "$(GREEN)✓ Setup complete!$(NC)\n"
@@ -160,7 +167,11 @@ setup: check-prereqs setup-backend setup-ui setup-ollama ## Run all setup tasks
 start: db-start setup-ollama ## Start all services (DB + Ollama + Backend + UI)
 	@printf "$(BLUE)Starting all services...$(NC)\n"
 	@mkdir -p $(PID_DIR)
-	@$(MAKE) start-ollama
+	@if [ "$(LLM_PROVIDER)" = "" ] || [ "$(LLM_PROVIDER)" = "ollama" ]; then \
+		$(MAKE) start-ollama; \
+	else \
+		printf "$(YELLOW)Skipping Ollama (LLM_PROVIDER=$(LLM_PROVIDER))$(NC)\n"; \
+	fi
 	@sleep 3
 	@$(MAKE) start-backend
 	@sleep 3
@@ -171,7 +182,9 @@ start: db-start setup-ollama ## Start all services (DB + Ollama + Backend + UI)
 	@printf "$(BLUE)Service URLs:$(NC)\n"
 	@printf "  UI:      http://localhost:8501\n"
 	@printf "  Backend: http://localhost:8000\n"
-	@printf "  Ollama:  http://localhost:11434\n"
+	@if [ "$(LLM_PROVIDER)" = "" ] || [ "$(LLM_PROVIDER)" = "ollama" ]; then \
+		printf "  Ollama:  http://localhost:11434\n"; \
+	fi
 	@printf "  DB:      postgresql://postgres:planner@localhost:5432/planner\n"
 	@printf "\n"
 	@printf "$(BLUE)Logs:$(NC)\n"
@@ -469,17 +482,17 @@ db-remove: db-stop ## Stop and remove PostgreSQL container
 
 db-load-blis: db-start ## Load BLIS benchmark data (appends)
 	@printf "$(BLUE)Loading BLIS benchmark data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json --source blis --confidence-level benchmarked
+	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json
 	@printf "$(GREEN)✓ BLIS data loaded$(NC)\n"
 
 db-load-estimated: db-start ## Load estimated performance benchmarks (appends)
 	@printf "$(BLUE)Loading estimated performance data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_estimated_performance.json --source manual --confidence-level estimated
+	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_estimated_performance.json
 	@printf "$(GREEN)✓ Estimated data loaded$(NC)\n"
 
 db-load-interpolated: db-start ## Load interpolated benchmark data (appends)
 	@printf "$(BLUE)Loading interpolated benchmark data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_interpolated_v2.json --source manual --confidence-level estimated
+	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_interpolated_v2.json
 	@printf "$(GREEN)✓ Interpolated data loaded$(NC)\n"
 
 db-load-guidellm: db-start ## Load GuideLLM benchmark data (appends)
@@ -489,7 +502,7 @@ db-load-guidellm: db-start ## Load GuideLLM benchmark data (appends)
 		printf "$(YELLOW)Run 'make db-convert-pgdump' first to create it from a pg_dump file$(NC)\n"; \
 		exit 1; \
 	fi
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_GuideLLM.json --source guidellm --confidence-level benchmarked
+	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_GuideLLM.json
 	@printf "$(GREEN)✓ GuideLLM data loaded$(NC)\n"
 
 db-convert-pgdump: db-start ## Convert PostgreSQL dump to JSON format

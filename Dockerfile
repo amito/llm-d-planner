@@ -19,7 +19,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 
 # Install Python dependencies (frozen = use lockfile exactly, no-dev = skip dev deps)
-RUN uv sync --frozen --no-dev --extra cluster
+RUN uv sync --frozen --no-dev --extra cluster --extra vertex
 
 # Copy backend source code
 COPY src/planner ./src/planner
@@ -33,13 +33,14 @@ COPY scripts ./scripts
 # Create non-root user and directories for generated files
 RUN groupadd --gid 1001 appuser && \
     useradd --uid 1001 --gid 0 --no-create-home appuser && \
-    mkdir -p /app/generated_configs /app/logs/prompts && \
+    mkdir -p /app/generated_configs /app/logs/prompts /app/.cache && \
     chown -R appuser:0 /app && \
-    chmod -R g=u /app/generated_configs /app/logs
+    chmod -R g=u /app/generated_configs /app/logs /app/.cache
 
 # Set environment variables
 ENV PYTHONPATH=/app/src
 ENV PYTHONUNBUFFERED=1
+ENV HF_HOME=/app/.cache
 # Use the venv created by uv sync (avoids uv run writing to .venv at runtime)
 ENV PATH="/app/.venv/bin:$PATH"
 

@@ -6,14 +6,20 @@ management of Planner deployments (e.g., on Kubernetes) without
 needing shell access.
 """
 
+import hmac
 import json
 import logging
 import os
 
 import psycopg2
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Header, HTTPException, UploadFile, status
 
-from planner.knowledge_base.loader import get_db_stats, insert_benchmarks, reset_benchmarks
+from planner.knowledge_base.loader import (
+    extract_metadata,
+    get_db_stats,
+    insert_benchmarks,
+    reset_benchmarks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +31,36 @@ _DATABASE_URL = os.getenv(
 )
 
 
+_DB_ADMIN_PASSWORD = os.getenv("DB_ADMIN_PASSWORD")
+
+
+def _check_admin_password(password: str | None) -> None:
+    """Verify admin password if one is configured."""
+    if not _DB_ADMIN_PASSWORD:
+        return
+    if not password or not hmac.compare_digest(password, _DB_ADMIN_PASSWORD):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing admin password",
+        )
+
+
 def _get_connection():
     """Get a database connection for DB management operations."""
     return psycopg2.connect(_DATABASE_URL)
+
+
+@router.get("/db/admin-required")
+async def admin_required():
+    """Check whether DB admin operations require a password."""
+    return {"required": _DB_ADMIN_PASSWORD is not None}
+
+
+@router.post("/db/verify-admin")
+async def verify_admin(x_admin_password: str | None = Header(None)):
+    """Verify the admin password without performing any action."""
+    _check_admin_password(x_admin_password)
+    return {"verified": True}
 
 
 @router.get("/db/status")
@@ -48,7 +81,10 @@ async def db_status():
 
 
 @router.post("/db/upload-benchmarks")
-async def upload_benchmarks(file: UploadFile = File(...)):
+async def upload_benchmarks(
+    file: UploadFile = File(...),
+    x_admin_password: str | None = Header(None),
+):
     """Upload a benchmark JSON file and load it into the database.
 
     The JSON file should have a top-level "benchmarks" array containing
@@ -58,6 +94,8 @@ async def upload_benchmarks(file: UploadFile = File(...)):
     Usage:
         curl -X POST -F 'file=@benchmarks.json' http://host/api/v1/db/upload-benchmarks
     """
+    _check_admin_password(x_admin_password)
+
     if not file.filename or not file.filename.endswith(".json"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a .json file"
@@ -78,10 +116,19 @@ async def upload_benchmarks(file: UploadFile = File(...)):
             detail='No benchmarks found. JSON must have a top-level "benchmarks" array.',
         )
 
+    meta = extract_metadata(data)
+    source = meta["source"] or "local"
+    confidence_level = meta["confidence_level"] or "estimated"
+
     try:
         conn = _get_connection()
         try:
-            stats = insert_benchmarks(conn, benchmarks)
+            stats = insert_benchmarks(
+                conn,
+                benchmarks,
+                source=source,
+                confidence_level=confidence_level,
+            )
             logger.info(
                 f"Uploaded {len(benchmarks)} benchmarks from {file.filename}, "
                 f"DB now has {stats['total_benchmarks']} total"
@@ -103,7 +150,7 @@ async def upload_benchmarks(file: UploadFile = File(...)):
 
 
 @router.post("/db/reset")
-async def reset_database():
+async def reset_database(x_admin_password: str | None = Header(None)):
     """Reset the benchmark database by removing all benchmark data.
 
     This truncates the exported_summaries table (cascading to related tables).
@@ -112,6 +159,8 @@ async def reset_database():
     Usage:
         curl -X POST http://host/api/v1/db/reset
     """
+    _check_admin_password(x_admin_password)
+
     try:
         conn = _get_connection()
         try:

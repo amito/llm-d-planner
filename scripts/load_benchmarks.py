@@ -17,7 +17,7 @@ from pathlib import Path
 
 import psycopg2
 
-from planner.knowledge_base.loader import insert_benchmarks
+from planner.knowledge_base.loader import extract_metadata, insert_benchmarks
 
 
 def get_db_connection():
@@ -41,6 +41,9 @@ def load_benchmarks_json(json_file=None):
     Args:
         json_file: Optional path to JSON file relative to project root.
                   Defaults to "data/benchmarks/performance/benchmarks_BLIS.json" if not specified.
+
+    Returns:
+        Full parsed JSON dict (with metadata and benchmarks).
     """
     if json_file:
         json_path = Path(__file__).parent.parent / json_file
@@ -58,9 +61,7 @@ def load_benchmarks_json(json_file=None):
         sys.exit(1)
 
     with open(json_path) as f:
-        data = json.load(f)
-
-    return data.get("benchmarks", [])
+        return json.load(f)
 
 
 def main():
@@ -68,14 +69,6 @@ def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Load benchmark data into PostgreSQL")
     parser.add_argument("json_file", nargs="?", default=None, help="Path to benchmark JSON file")
-    parser.add_argument(
-        "--source", default="local", help="Data source identifier (default: local)"
-    )
-    parser.add_argument(
-        "--confidence-level",
-        default="estimated",
-        help="Confidence level for the data (default: estimated)",
-    )
     args = parser.parse_args()
 
     print("=" * 60)
@@ -84,8 +77,14 @@ def main():
     print()
 
     # Load benchmarks from JSON
-    benchmarks = load_benchmarks_json(args.json_file)
+    data = load_benchmarks_json(args.json_file)
+    benchmarks = data.get("benchmarks", [])
     print(f"Loaded {len(benchmarks)} benchmarks from JSON")
+
+    meta = extract_metadata(data)
+    source = meta["source"] or "local"
+    confidence_level = meta["confidence_level"] or "estimated"
+    print(f"  source: {source}, confidence_level: {confidence_level}")
 
     # Connect to database
     print("Connecting to PostgreSQL...")
@@ -96,7 +95,7 @@ def main():
     try:
         # Insert benchmarks using shared loader
         stats = insert_benchmarks(
-            conn, benchmarks, source=args.source, confidence_level=args.confidence_level
+            conn, benchmarks, source=source, confidence_level=confidence_level
         )
 
         print("\nDatabase Statistics:")

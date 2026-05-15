@@ -7,25 +7,25 @@ import logging
 import pytest
 
 from planner.intent_extraction.extractor import IntentExtractor
-from planner.llm.ollama_client import OllamaClient
+from planner.llm.factory import create_llm_client
 from planner.shared.schemas import DeploymentIntent
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
-def ollama_client():
-    """Create OllamaClient, skipping all tests if Ollama is not available."""
-    client = OllamaClient()
+def llm_client():
+    """Create LLM client via factory, skipping all tests if unavailable."""
+    client = create_llm_client()
     if not client.is_available():
-        pytest.skip("Ollama service is not available — skipping intent extraction tests")
+        pytest.skip("LLM service is not available — skipping intent extraction tests")
     return client
 
 
 @pytest.fixture(scope="session")
-def intent_extractor(ollama_client):
-    """Create IntentExtractor with a verified OllamaClient."""
-    return IntentExtractor(llm_client=ollama_client)
+def intent_extractor(llm_client):
+    """Create IntentExtractor with a verified LLM client."""
+    return IntentExtractor(llm_client=llm_client)
 
 
 def assert_intent_matches(intent: DeploymentIntent, expected: dict) -> None:

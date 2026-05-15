@@ -8,9 +8,11 @@ import streamlit as st
 from api_client import (
     fetch_db_status,
     fetch_deployment_mode,
+    is_db_admin_required,
     reset_database,
     update_deployment_mode,
     upload_benchmarks,
+    verify_db_admin_password,
 )
 
 _TAB_INDEX = 5  # Configuration is the 6th tab (0-indexed)
@@ -82,6 +84,59 @@ def render_configuration_tab():
     # --- Benchmark Database ---
     st.subheader("Benchmark Database")
 
+    # Admin lock: when DB_ADMIN_PASSWORD is set, show a lock button.
+    # Clicking it reveals a password field; correct password unlocks.
+    # When no password is configured, everything is unlocked by default.
+    admin_required = is_db_admin_required()
+    admin_password = None
+    locked = False
+
+    if admin_required:
+        unlocked = st.session_state.get("_db_unlocked", False)
+        showing_input = st.session_state.get("_db_show_password", False)
+
+        if not unlocked:
+            locked = True
+            lock_col, _ = st.columns([1, 11])
+            with lock_col:
+                if st.button(
+                    "\U0001f510",
+                    key="db_lock_btn",
+                    type="secondary",
+                    help="Click to enter admin password",
+                ):
+                    st.session_state["_db_show_password"] = not showing_input
+                    st.rerun()
+
+            if showing_input:
+                pw = st.text_input(
+                    "Admin password",
+                    type="password",
+                    key="db_admin_password_input",
+                )
+                if pw:
+                    if verify_db_admin_password(pw):
+                        st.session_state["_db_unlocked"] = True
+                        st.session_state["_db_admin_password"] = pw
+                        st.session_state["_db_show_password"] = False
+                        st.rerun()
+                    else:
+                        st.error("Incorrect password.")
+        else:
+            locked = False
+            admin_password = st.session_state.get("_db_admin_password")
+            lock_col, _ = st.columns([1, 11])
+            with lock_col:
+                if st.button(
+                    "\U0001f513",
+                    key="db_unlock_btn",
+                    type="secondary",
+                    help="Click to lock admin access",
+                ):
+                    st.session_state["_db_unlocked"] = False
+                    st.session_state.pop("_db_admin_password", None)
+                    st.rerun()
+
     # Reserve space for stats — populated after actions so data is always fresh
     status_area = st.container()
 
@@ -101,15 +156,21 @@ def render_configuration_tab():
         type=["json"],
         key=f"settings_file_upload_{upload_counter}",
         label_visibility="collapsed",
+        disabled=locked,
     )
 
     # Clear any stored message when the user selects a new file
     if uploaded is not None:
         st.session_state.pop("_load_msg", None)
 
-    if uploaded is not None and st.button("Load DB", key="settings_upload_btn", type="primary"):
+    if uploaded is not None and st.button(
+        "Load DB",
+        key="settings_upload_btn",
+        type="primary",
+        disabled=locked,
+    ):
         with st.spinner("Loading..."):
-            result = upload_benchmarks(uploaded.getvalue(), uploaded.name)
+            result = upload_benchmarks(uploaded.getvalue(), uploaded.name, password=admin_password)
         if result and result.get("success"):
             msg = (
                 f"Processed {result.get('records_in_file', '?')} records from "
@@ -138,10 +199,15 @@ def render_configuration_tab():
 
     # --- Reset ---
     st.markdown("**Reset Database**")
-    if st.button("Reset Database", key="settings_reset_btn", type="secondary"):
+    if st.button(
+        "Reset Database",
+        key="settings_reset_btn",
+        type="secondary",
+        disabled=locked,
+    ):
         st.session_state["_pending_tab"] = _TAB_INDEX
         with st.spinner("Resetting..."):
-            result = reset_database()
+            result = reset_database(password=admin_password)
         if result and result.get("success"):
             st.success("Database has been reset. All benchmark data removed.")
             action_status = result

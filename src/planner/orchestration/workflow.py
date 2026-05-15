@@ -4,7 +4,8 @@ import logging
 
 from planner.cluster.gpu_detector import detect_cluster_gpus
 from planner.intent_extraction import IntentExtractor
-from planner.llm.ollama_client import OllamaClient
+from planner.llm.client import LLMClient
+from planner.llm.factory import create_llm_client
 from planner.recommendation.analyzer import Analyzer
 from planner.recommendation.config_finder import ConfigFinder
 from planner.shared.schemas import (
@@ -22,7 +23,7 @@ class RecommendationWorkflow:
 
     def __init__(
         self,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMClient | None = None,
         intent_extractor: IntentExtractor | None = None,
         traffic_generator: TrafficProfileGenerator | None = None,
         config_finder: ConfigFinder | None = None,
@@ -36,7 +37,7 @@ class RecommendationWorkflow:
             traffic_generator: Traffic profile generator
             config_finder: Configuration finder
         """
-        self.llm_client = llm_client or OllamaClient()
+        self.llm_client = llm_client or create_llm_client()
         self.intent_extractor = intent_extractor or IntentExtractor(self.llm_client)
         self.traffic_generator = traffic_generator or TrafficProfileGenerator()
         self.config_finder = config_finder or ConfigFinder()
