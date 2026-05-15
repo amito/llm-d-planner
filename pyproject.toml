@@ -24,7 +24,7 @@ dependencies = [
     "huggingface_hub>=1.13.0",
     "transformers>=5.8.0",
     "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git",
-    "python-multipart>=0.0.27",
+    "python-multipart>=0.0.28",
 ]
 
 [project.optional-dependencies]
