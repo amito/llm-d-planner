@@ -144,7 +144,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
         key="user_input",
         height=120,
         max_chars=2000,
-        placeholder="Describe your LLM use case in natural language...\n\nExample: I need a chatbot for customer support with 30 users. Low latency is important, and we have H100 GPUs available.",
+        placeholder="Describe your LLM use case in natural language...\n\nExample: I need a chatbot for customer support with 300 users. Low latency is important, and we have H100 GPUs available.",
         label_visibility="collapsed",
     )
 
@@ -154,7 +154,7 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
     with col1:
         if st.button("Chat Completion", width="stretch", key="task_chat"):
             clear_dialog_states()
-            st.session_state.pending_user_input = "Customer service chatbot for 30 users."
+            st.session_state.pending_user_input = "Customer service chatbot for 3000 users."
             st.rerun()
 
     with col2:

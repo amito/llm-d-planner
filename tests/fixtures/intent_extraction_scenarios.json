@@ -412,7 +412,7 @@
     {
       "id": "ui-btn-chat-completion",
       "description": "UI task button: Chat Completion",
-      "user_message": "Customer service chatbot for 30 users.",
+      "user_message": "Customer service chatbot for 3000 users.",
       "conversation_history": null,
       "expected": {
         "use_case": "chatbot_conversational",

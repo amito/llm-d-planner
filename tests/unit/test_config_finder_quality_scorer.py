@@ -170,15 +170,14 @@ def test_default_scorer_used_when_none_injected():
 
 
 @pytest.mark.unit
-def test_injected_scorer_fallback_on_zero():
-    """When injected scorer returns 0 for model name, it retries with bench.model_hf_repo."""
+def test_injected_scorer_uses_hf_repo():
+    """Scorer is always called with bench.model_hf_repo to preserve quantization info."""
     mock_source = MagicMock()
-    bench = _make_bench(model="RedHatAI/some-model")
+    bench = _make_bench(model="RedHatAI/some-model-quantized.w4a16")
     mock_source.find_configurations_meeting_slo.return_value = [bench]
 
-    # Add a model to the catalog so model.name differs from bench.model_hf_repo
     mock_model = MagicMock()
-    mock_model.model_id = "redhatai/some-model"
+    mock_model.model_id = "redhatai/some-model-quantized.w4a16"
     mock_model.name = "Some Model Display Name"
     mock_model.size_parameters = "8B"
     mock_catalog = MagicMock()
@@ -186,8 +185,7 @@ def test_injected_scorer_fallback_on_zero():
     mock_catalog.calculate_gpu_cost.return_value = 2.70
 
     mock_scorer = MagicMock()
-    # Return 0 for display name, then 70 for model_hf_repo
-    mock_scorer.get_quality_score.side_effect = [0.0, 70.0]
+    mock_scorer.get_quality_score.return_value = 70.0
 
     finder = ConfigFinder(
         benchmark_repo=mock_source,
@@ -201,8 +199,10 @@ def test_injected_scorer_fallback_on_zero():
         intent=_make_intent(),
     )
 
-    # The scorer should have been called twice: once with display name, once with hf repo
-    assert mock_scorer.get_quality_score.call_count == 2
+    # Scorer called once with the HF repo name (not display name)
+    assert mock_scorer.get_quality_score.call_count == 1
+    call_args = mock_scorer.get_quality_score.call_args[0]
+    assert call_args[0] == "RedHatAI/some-model-quantized.w4a16"
     assert len(results) >= 1
     assert results[0].scores is not None
     assert results[0].scores.accuracy_score >= 70

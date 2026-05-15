@@ -7,7 +7,7 @@ from typing import Any
 
 import streamlit as st
 from api_client import deploy_and_generate_yaml
-from helpers import format_display_name, format_gpu_config, get_scores
+from helpers import format_gpu_config, get_scores
 
 
 def _render_filter_summary():
@@ -54,7 +54,7 @@ def _render_category_card(title, recs_list, highlight_field, category_key, col):
 
     rec = recs_list[idx]
     scores = get_scores(rec)
-    model_name = format_display_name(rec.get("model_name", "Unknown"))
+    model_name = rec.get("model_id") or rec.get("model_name") or "unknown"
     gpu_cfg = rec.get("gpu_config", {}) or {}
     hw_type = gpu_cfg.get("gpu_type", rec.get("hardware", "H100"))
     hw_count = gpu_cfg.get("gpu_count", rec.get("hardware_count", 1))
@@ -324,7 +324,7 @@ def render_options_list_inline():
     for cat_key, cat_name in categories:
         recs = ranked_response.get(cat_key, [])
         for rec in recs[:5]:
-            model_name = format_display_name(rec.get("model_name", "Unknown"))
+            model_name = rec.get("model_id") or rec.get("model_name") or "unknown"
             gpu_str = format_gpu_config(rec.get("gpu_config", {}))
             ttft = rec.get("predicted_ttft_p95_ms", 0)
             cost = rec.get("cost_per_month_usd", 0)
