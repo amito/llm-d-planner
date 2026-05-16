@@ -58,7 +58,7 @@ def render_extraction_result(extraction: dict, priority: str):
         st.rerun()
 
 
-def render_extraction_with_approval(extraction: dict, models_df):
+def render_extraction_with_approval(extraction: dict):
     """Render extraction results with YES/NO approval buttons."""
     st.subheader("Extracted Business Context")
 
@@ -111,7 +111,7 @@ def render_extraction_with_approval(extraction: dict, models_df):
             st.rerun()
 
 
-def render_extraction_edit_form(extraction: dict, models_df):
+def render_extraction_edit_form(extraction: dict):
     """Render editable form for extraction correction."""
     st.subheader("Edit Business Context")
     st.info('Review and adjust the extracted values below, then click "Apply Changes" to continue.')

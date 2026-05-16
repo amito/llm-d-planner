@@ -8,7 +8,6 @@ import logging
 import os
 from typing import Any, cast
 
-import pandas as pd
 import requests
 import streamlit as st
 
@@ -21,31 +20,6 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
-
-
-@st.cache_data
-def load_206_models() -> pd.DataFrame:
-    """Load all 206 models from backend API."""
-    try:
-        response = requests.get(
-            f"{API_BASE_URL}/api/v1/benchmarks",
-            timeout=DEFAULT_TIMEOUT,
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if data.get("success") and data.get("benchmarks"):
-            df = pd.DataFrame(data["benchmarks"])
-            if "Model Name" in df.columns:
-                df = df.dropna(subset=["Model Name"])
-                df = df[df["Model Name"].str.strip() != ""]
-            return df
-        else:
-            logger.warning("No benchmark data returned from API")
-            return pd.DataFrame()
-    except Exception as e:
-        logger.error(f"Failed to load benchmarks from API: {e}")
-        return pd.DataFrame()
 
 
 @st.cache_data(ttl=300)
