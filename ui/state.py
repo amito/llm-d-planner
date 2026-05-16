@@ -9,7 +9,6 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "extraction_result": None,
     "recommendation_result": None,
     "user_input": "",
-    "models_df": None,
     "selected_model": None,
     # Workflow approval (None = pending, True = approved, False = editing)
     "extraction_approved": None,

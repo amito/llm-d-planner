@@ -15,13 +15,11 @@ from pathlib import Path
 # Add ui/ to sys.path so modules can use flat imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-import pandas as pd
 import streamlit as st
 from api_client import (
     extract_business_context,
     fetch_priority_weights,
     fetch_ranked_recommendations,
-    load_206_models,
 )
 from components.deployment import render_deployment_tab
 from components.deployment_management import render_deployment_management_tab
@@ -121,7 +119,7 @@ def render_hero():
 # =============================================================================
 
 
-def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
+def render_use_case_input_tab(priority: str):
     """Tab 1: Use case input interface."""
 
     def clear_dialog_states():
@@ -368,12 +366,12 @@ def render_use_case_input_tab(priority: str, models_df: pd.DataFrame):
 
     # Show extraction with approval if extraction exists but not approved
     if st.session_state.extraction_result and st.session_state.extraction_approved is None:
-        render_extraction_with_approval(st.session_state.extraction_result, models_df)
+        render_extraction_with_approval(st.session_state.extraction_result)
         return
 
     # If editing, show edit form
     if st.session_state.extraction_approved is False:
-        render_extraction_edit_form(st.session_state.extraction_result, models_df)
+        render_extraction_edit_form(st.session_state.extraction_result)
         return
 
     # If approved, show message to proceed to Technical Specifications tab
@@ -425,7 +423,7 @@ def render_technical_specs_tab():
         )
 
 
-def render_results_tab(priority: str, models_df: pd.DataFrame):
+def render_results_tab(priority: str):
     """Tab 3: Results display - Best Model Recommendations."""
     used_priority = st.session_state.get("used_priority", priority)
 
@@ -509,7 +507,7 @@ def render_results_tab(priority: str, models_df: pd.DataFrame):
         st.session_state.recommendation_result is None
         or st.session_state.get("_last_spec_fingerprint") != spec_fingerprint
     ):
-        with st.spinner(f"Scoring {len(models_df)} models with MCDM..."):
+        with st.spinner("Scoring models with MCDM..."):
             recommendation = fetch_ranked_recommendations(
                 use_case=use_case,
                 user_count=user_count,
@@ -553,11 +551,6 @@ def main():
     elif st.session_state.show_full_table_dialog:
         show_full_table_dialog()
 
-    # Load models
-    if st.session_state.models_df is None:
-        st.session_state.models_df = load_206_models()
-    models_df = st.session_state.models_df
-
     priority = "balanced"
 
     # Main Content - Compact hero
@@ -576,13 +569,13 @@ def main():
     )
 
     with tab1:
-        render_use_case_input_tab(priority, models_df)
+        render_use_case_input_tab(priority)
 
     with tab2:
         render_technical_specs_tab()
 
     with tab3:
-        render_results_tab(priority, models_df)
+        render_results_tab(priority)
 
     with tab4:
         render_deployment_tab()

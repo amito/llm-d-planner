@@ -57,40 +57,6 @@ async def list_use_cases(slo_repo: SLOTemplateRepository = Depends(get_slo_repo)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
 
 
-@router.get("/benchmarks")
-async def get_benchmarks():
-    """Get all 206 models benchmark data from opensource_all_benchmarks.csv."""
-    try:
-        csv_path = _get_data_path() / "benchmarks" / "accuracy" / "opensource_all_benchmarks.csv"
-
-        if not csv_path.exists():
-            logger.error(f"Benchmark CSV not found at: {csv_path}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Benchmark data file not found"
-            )
-
-        # Read CSV using built-in csv module
-        records = []
-        with open(csv_path, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # Filter out rows with empty/missing Model Name
-                if row.get("Model Name") and row["Model Name"].strip():
-                    records.append(row)
-
-        logger.info(f"Loaded {len(records)} benchmark records from CSV")
-
-        return {"success": True, "count": len(records), "benchmarks": records}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to load benchmarks: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load benchmarks: {str(e)}",
-        ) from e
-
-
 @router.get("/priority-weights")
 async def get_priority_weights():
     """Get priority to weight mapping configuration.
