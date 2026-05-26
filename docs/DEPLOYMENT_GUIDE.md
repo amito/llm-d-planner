@@ -7,7 +7,7 @@ This guide covers deploying Planner to an OpenShift cluster using `deploy/kubern
 The following improvements are planned to broaden platform and provider support:
 
 - **Standard Kubernetes support** — Deploy on KIND, EKS, GKE, and other non-OpenShift clusters ([#96](https://github.com/llm-d-incubation/llm-d-planner/issues/96))
-- **OpenAI-compatible API support** — Use any LLM provider that exposes an OpenAI-compatible API, not just Ollama or Vertex AI ([#27](https://github.com/llm-d-incubation/llm-d-planner/issues/27))
+- ~~**OpenAI-compatible API support**~~ — Implemented. Set `LLM_PROVIDER=openai`. See LLM Provider section below.
 - **Helm chart or Operator** — Replace the deploy script with a standard Kubernetes packaging format ([#223](https://github.com/llm-d-incubation/llm-d-planner/issues/223))
 
 ## Platform Support
@@ -38,11 +38,13 @@ The following improvements are planned to broaden platform and provider support:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_PROVIDER` | `ollama` | LLM backend: `ollama` (local Ollama with GPU) or `vertex` (Claude on Vertex AI). When set to `vertex`, Ollama is not deployed. |
-| `VERTEX_MODEL` | `claude-sonnet-4-6` | Vertex AI model ID. Only used when `LLM_PROVIDER=vertex`. |
-| `VERTEX_PROJECT_ID` | _(none)_ | GCP project ID for Vertex AI. Injected into the `planner-secrets` Secret. |
-| `VERTEX_REGION` | `global` | GCP region for Vertex AI. Injected into the `planner-secrets` Secret. |
-| `GCP_CREDENTIALS_FILE` | `~/.config/gcloud/application_default_credentials.json` | Path to a GCP Application Default Credentials JSON file. When `LLM_PROVIDER=vertex`, the file contents are patched into the `planner-secrets` Secret. |
+| `LLM_PROVIDER` | `ollama` | LLM backend: `ollama` (local Ollama), `vertex` (Claude on Vertex AI), or `openai` (any OpenAI-compatible API). When not `ollama`, Ollama is not deployed. |
+| `LLM_MODEL` | _(provider default)_ | Model name. Defaults: `qwen2.5:7b` (ollama), `claude-sonnet-4-6` (vertex), `gpt-4o` (openai). |
+| `VERTEX_PROJECT_ID` | _(none)_ | GCP project ID. Only needed when `LLM_PROVIDER=vertex`. Injected into `planner-secrets`. |
+| `VERTEX_REGION` | `global` | GCP region. Only needed when `LLM_PROVIDER=vertex`. |
+| `GCP_CREDENTIALS_FILE` | `~/.config/gcloud/application_default_credentials.json` | Path to GCP ADC JSON file. Only used when `LLM_PROVIDER=vertex`. |
+| `OPENAI_API_KEY` | _(none)_ | API key or proxy token. Required when `LLM_PROVIDER=openai`. |
+| `OPENAI_BASE_URL` | _(none)_ | Custom endpoint URL (e.g., LiteLLM proxy). Only needed when `LLM_PROVIDER=openai` with a non-default endpoint. |
 
 ### Secrets
 
@@ -75,6 +77,21 @@ DB_INIT=true \
 ```
 
 This skips Ollama and configures the backend to use Claude via the Vertex AI API. Your local GCP Application Default Credentials are automatically patched into the cluster secret.
+
+### OpenShift with OpenAI-Compatible API (e.g., LiteLLM)
+
+Deploy using any OpenAI-compatible endpoint (LiteLLM, vLLM serving, etc.):
+
+```bash
+LLM_PROVIDER=openai \
+LLM_MODEL=claude-sonnet-4-6 \
+OPENAI_API_KEY=$LITELLM_TOKEN \
+OPENAI_BASE_URL=$LITELLM_BASE_URL \
+DB_INIT=true \
+./deploy/kubernetes/deploy-all.sh
+```
+
+This skips Ollama and configures the backend to call the specified OpenAI-compatible endpoint.
 
 ### Pre-existing Namespace (no cluster-admin)
 

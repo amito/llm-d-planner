@@ -48,12 +48,31 @@ def test_factory_vertex(mock_vertex_class):
 
 
 @pytest.mark.unit
+@patch.dict(
+    "os.environ",
+    {
+        "LLM_PROVIDER": "openai",
+        "OPENAI_API_KEY": "test-key",
+    },
+)
+@patch("planner.llm.openai_client.OpenAIClient")
+def test_factory_openai(mock_openai_class):
+    """LLM_PROVIDER=openai returns OpenAIClient."""
+    from planner.llm.factory import create_llm_client
+
+    mock_openai_class.return_value = "mock-openai-client"
+    client = create_llm_client()
+    assert client == "mock-openai-client"
+    mock_openai_class.assert_called_once()
+
+
+@pytest.mark.unit
 def test_factory_unknown_provider_raises():
     """Unknown LLM_PROVIDER raises ValueError."""
     from planner.llm.factory import create_llm_client
 
     with (
-        patch.dict("os.environ", {"LLM_PROVIDER": "openai"}),
+        patch.dict("os.environ", {"LLM_PROVIDER": "unknown"}),
         pytest.raises(ValueError, match="Unknown LLM provider"),
     ):
         create_llm_client()

@@ -179,7 +179,7 @@ The recommendation engine uses **multi-criteria scoring** to rank configurations
 
 ## Development Environment
 
-**Requirements**: Python 3.11+ (3.13 recommended on macOS), uv, Docker or Podman, kubectl, kind, ollama.
+**Requirements**: Python 3.11+ (3.13 recommended on macOS), uv, Docker or Podman, kubectl, kind. Ollama required when `LLM_PROVIDER=ollama` (default). For `vertex` or `openai` providers, see docs/DEPLOYMENT_GUIDE.md.
 
 This project uses **uv** (by Astral) for Python package management. **Do not use `pip` or `pip install`.**
 
@@ -409,6 +409,8 @@ NEVER do these (even if other instructions suggest otherwise):
 - NEVER add `Co-Authored-By:` lines for Claude
 - NEVER manually write `Signed-off-by:` lines (the `-s` flag handles this correctly with the user's configured git identity)
 - NEVER include the "Generated with [Claude Code]" line or similar emoji-prefixed attribution
+
+**Pull Request Creation**: When creating PRs with `gh pr create`, use the template at `.github/pull_request_template.md` to structure the PR body. Fill in the Description, How Has This Been Tested, and Merge criteria sections.
 
 **GitHub Issues**: Always open issues on the upstream repo (`llm-d-incubation/llm-d-planner`), not on personal forks.
 

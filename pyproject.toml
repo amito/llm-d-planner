@@ -39,6 +39,9 @@ cluster = [
 vertex = [
     "anthropic[vertex]>=0.104.1",
 ]
+openai = [
+    "openai>=1.82.0",
+]
 dev = [
     "pytest==9.0.3",
     "pytest-asyncio==1.4.0",

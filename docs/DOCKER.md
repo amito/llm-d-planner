@@ -221,7 +221,7 @@ POSTGRES_USER=planner
 POSTGRES_PASSWORD=your_secure_password
 
 # Ollama Configuration
-OLLAMA_MODEL=qwen2.5:7b
+LLM_MODEL=qwen2.5:7b
 
 # Backend Configuration
 API_HOST=0.0.0.0

@@ -57,8 +57,12 @@ spec:
                   optional: true
             - name: OLLAMA_HOST
               value: http://ollama:11434
-            - name: OLLAMA_MODEL
-              value: granite3.3:2b
+            - name: LLM_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: planner-config
+                  key: LLM_MODEL
+                  optional: true
             - name: LLM_PROVIDER
               valueFrom:
                 configMapKeyRef:
@@ -81,6 +85,18 @@ spec:
                 secretKeyRef:
                   name: planner-secrets
                   key: gcp-credentials-json
+                  optional: true
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: openai-api-key
+                  optional: true
+            - name: OPENAI_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: planner-secrets
+                  key: openai-base-url
                   optional: true
             - name: GOOGLE_CLOUD_PROJECT
               valueFrom:
