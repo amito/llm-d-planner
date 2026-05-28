@@ -46,13 +46,23 @@ if [ -n "$DB_ADMIN_PASSWORD" ]; then
   rm -f "$RENDERED_DIR/secrets.yaml.bak"
 fi
 
-# Inject LLM_PROVIDER and VERTEX_MODEL into configmap
+# Inject OpenAI credentials into secrets if provided via environment
+if [ -n "$OPENAI_API_KEY" ]; then
+  sed -i.bak "s|openai-api-key: .*|openai-api-key: ${OPENAI_API_KEY}|" "$RENDERED_DIR/secrets.yaml"
+  rm -f "$RENDERED_DIR/secrets.yaml.bak"
+fi
+if [ -n "$OPENAI_BASE_URL" ]; then
+  sed -i.bak "s|openai-base-url: .*|openai-base-url: ${OPENAI_BASE_URL}|" "$RENDERED_DIR/secrets.yaml"
+  rm -f "$RENDERED_DIR/secrets.yaml.bak"
+fi
+
+# Inject LLM_PROVIDER and LLM_MODEL into configmap
 if [ "$LLM_PROVIDER" != "ollama" ]; then
   sed -i.bak "s|LLM_PROVIDER: .*|LLM_PROVIDER: ${LLM_PROVIDER}|" "$RENDERED_DIR/configmap.yaml"
   rm -f "$RENDERED_DIR/configmap.yaml.bak"
 fi
-if [ -n "$VERTEX_MODEL" ]; then
-  sed -i.bak "s|VERTEX_MODEL: .*|VERTEX_MODEL: ${VERTEX_MODEL}|" "$RENDERED_DIR/configmap.yaml"
+if [ -n "$LLM_MODEL" ]; then
+  sed -i.bak "s|LLM_MODEL: .*|LLM_MODEL: ${LLM_MODEL}|" "$RENDERED_DIR/configmap.yaml"
   rm -f "$RENDERED_DIR/configmap.yaml.bak"
 fi
 

@@ -19,7 +19,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 
 # Install Python dependencies (frozen = use lockfile exactly, no-dev = skip dev deps)
-RUN uv sync --frozen --no-dev --extra cluster --extra vertex
+RUN uv sync --frozen --no-dev --extra cluster --extra vertex --extra openai
 
 # Copy backend source code
 COPY src/planner ./src/planner

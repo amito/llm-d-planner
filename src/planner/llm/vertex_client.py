@@ -9,6 +9,8 @@ import os
 import tempfile
 from typing import Any, cast
 
+from planner.llm.client import log_llm_request, log_llm_response, strip_markdown_fences
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -29,7 +31,7 @@ class VertexClient:
             raise ValueError("VERTEX_PROJECT_ID environment variable is required for Vertex AI")
 
         self.region: str = region or os.getenv("VERTEX_REGION", "global") or "global"
-        self.model: str = model or os.getenv("VERTEX_MODEL", _DEFAULT_MODEL) or _DEFAULT_MODEL
+        self.model: str = model or os.getenv("LLM_MODEL", _DEFAULT_MODEL) or _DEFAULT_MODEL
 
         self._setup_credentials()
 
@@ -76,13 +78,7 @@ class VertexClient:
         Returns:
             Response dict with 'message' containing 'content'.
         """
-        if messages:
-            last_msg = messages[-1]
-            logger.info(
-                "[LLM REQUEST] Role: %s, Content length: %d chars",
-                last_msg.get("role"),
-                len(last_msg.get("content", "")),
-            )
+        log_llm_request(logger, messages)
 
         response = self._client.messages.create(
             model=self.model,
@@ -91,17 +87,17 @@ class VertexClient:
             temperature=temperature,
         )
 
-        first_block = response.content[0]
-        response_text: str = (
-            first_block.text  # type: ignore[union-attr]
-            if hasattr(first_block, "text")
-            else str(first_block)
-        )
-        logger.info(
-            "[LLM RESPONSE] Model: %s, Response length: %d chars",
-            self.model,
-            len(response_text),
-        )
+        if not response.content:
+            logger.warning("LLM returned no content in response")
+            response_text = ""
+        else:
+            first_block = response.content[0]
+            response_text = (
+                first_block.text  # type: ignore[union-attr]
+                if hasattr(first_block, "text")
+                else str(first_block)
+            )
+        log_llm_response(logger, self.model, response_text)
 
         return {"message": {"content": response_text}}
 
@@ -122,16 +118,7 @@ class VertexClient:
         messages = [{"role": "user", "content": prompt}]
         result = self.chat(messages, format_json=True, temperature=temperature)
         response_text = result["message"]["content"]
-
-        # Strip markdown code fences (```json ... ```) that Claude often wraps around JSON
-        stripped = response_text.strip()
-        if stripped.startswith("```"):
-            lines = stripped.split("\n")
-            # Remove first line (```json) and last line (```)
-            lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            stripped = "\n".join(lines).strip()
+        stripped = strip_markdown_fences(response_text)
 
         try:
             parsed: dict[str, Any] = json.loads(stripped)

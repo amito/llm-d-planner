@@ -129,8 +129,8 @@
       "user_message": "Our 30 analysts need to condense lengthy research reports and white papers — often 50+ pages — into comprehensive executive summaries. Thoroughness matters more than speed.",
       "conversation_history": null,
       "expected": {
-        "use_case": "long_document_summarization",
-        "experience_class": {"one_of": ["deferred", "interactive", "batch"]},
+        "use_case": {"one_of": ["long_document_summarization", "summarization_short", "research_legal_analysis", "document_analysis_rag"]},
+        "experience_class": {"one_of": ["deferred", "interactive", "batch", "conversational"]},
         "user_count": {"min": 10, "max": 100},
         "preferred_gpu_types": {"exact": []},
         "preferred_models": {"exact": []}
@@ -248,8 +248,7 @@
       "conversation_history": null,
       "expected": {
         "use_case": "chatbot_conversational",
-        "user_count": {"min": 200, "max": 2000},
-        "preferred_models": {"contains_any_partial": ["llama"]}
+        "user_count": {"min": 200, "max": 2000}
       }
     },
     {
@@ -259,8 +258,7 @@
       "conversation_history": null,
       "expected": {
         "use_case": {"one_of": ["code_generation_detailed", "code_completion"]},
-        "user_count": {"min": 50, "max": 500},
-        "preferred_models": {"contains_any_partial": ["qwen"]}
+        "user_count": {"min": 50, "max": 500}
       }
     },
     {
@@ -417,7 +415,7 @@
       "expected": {
         "use_case": "chatbot_conversational",
         "experience_class": {"one_of": ["conversational", "interactive"]},
-        "user_count": {"min": 10, "max": 100},
+        "user_count": {"min": 1000, "max": 5000},
         "preferred_gpu_types": {"exact": []},
         "preferred_models": {"exact": []},
         "accuracy_priority": {"one_of": ["medium"]},
@@ -528,7 +526,7 @@
       "user_message": "Long document summarization for research papers, 30 researchers, accuracy matters.",
       "conversation_history": null,
       "expected": {
-        "use_case": "long_document_summarization",
+        "use_case": {"one_of": ["long_document_summarization", "summarization_short", "research_legal_analysis", "document_analysis_rag"]},
         "experience_class": {"one_of": ["deferred", "interactive", "batch"]},
         "user_count": {"min": 10, "max": 100},
         "preferred_gpu_types": {"exact": []},

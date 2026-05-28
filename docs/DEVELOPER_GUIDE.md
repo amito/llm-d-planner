@@ -184,6 +184,20 @@ curl http://localhost:11434/api/tags
 ollama list  # Should show qwen2.5:7b
 ```
 
+**Alternative LLM providers:** Instead of Ollama, you can use any OpenAI-compatible API. Set the following environment variables before running `make start`:
+
+```bash
+export LLM_PROVIDER=openai
+export OPENAI_API_KEY=$MY_KEY
+export OPENAI_BASE_URL=https://api.openai.com/v1
+export LLM_MODEL='gpt-5.4-mini'
+make start
+```
+
+This also works with LiteLLM proxies, vLLM serving endpoints, or any service that implements the OpenAI `/v1/chat/completions` API. When using an alternative provider, you can skip starting Ollama.
+
+For Vertex AI, set `LLM_PROVIDER=vertex` with `VERTEX_PROJECT_ID` and GCP credentials. See `docs/DEPLOYMENT_GUIDE.md` for details.
+
 ### 2. FastAPI Backend
 
 **Purpose:** Recommendation engine, workflow orchestration, API endpoints

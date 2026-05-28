@@ -16,6 +16,8 @@ except ImportError:
     logging.warning("Ollama library not available. LLM features will be limited.")
 
 
+from planner.llm.client import log_llm_request, log_llm_response
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,12 +29,12 @@ class OllamaClient:
         Initialize Ollama client.
 
         Args:
-            model: Model name to use. Falls back to OLLAMA_MODEL env var,
+            model: Model name to use. Falls back to LLM_MODEL env var,
                    then "qwen2.5:7b".
             host: Optional Ollama host URL. Falls back to OLLAMA_HOST env var,
                   then localhost:11434.
         """
-        default_model = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        default_model = os.getenv("LLM_MODEL", "qwen2.5:7b")
         self.model: str = model if model else default_model
         self.host = host or os.getenv("OLLAMA_HOST")
 
@@ -64,15 +66,9 @@ class OllamaClient:
             raise RuntimeError("Ollama library not available")
 
         try:
-            # Log the request (last message is typically the user prompt)
+            log_llm_request(logger, messages)
             if messages:
-                last_msg = messages[-1]
-                logger.info(
-                    f"[LLM REQUEST] Role: {last_msg.get('role')}, Content length: {len(last_msg.get('content', ''))} chars"
-                )
-                logger.debug(
-                    f"[LLM PROMPT] {last_msg.get('content', '')[:500]}..."
-                )  # Log first 500 chars at debug level
+                logger.debug(f"[LLM PROMPT] {messages[-1].get('content', '')[:500]}...")
 
             fmt: Literal["", "json"] = "json" if format_json else ""
             response = self._client.chat(  # type: ignore[call-overload]
@@ -82,16 +78,9 @@ class OllamaClient:
                 options={"temperature": temperature},
             )
 
-            # Log the full response
             response_content = response.get("message", {}).get("content", "")
-            logger.info("=" * 80)
-            logger.info(
-                f"[LLM RESPONSE] Model: {self.model}, Response length: {len(response_content)} chars"
-            )
-            logger.info("[LLM RESPONSE CONTENT - START]")
-            logger.info(response_content)
-            logger.info("[LLM RESPONSE CONTENT - END]")
-            logger.info("=" * 80)
+            log_llm_response(logger, self.model, response_content)
+            logger.debug("[LLM RESPONSE CONTENT] %s", response_content)
 
             return dict(response)
 

@@ -128,10 +128,10 @@ check-prereqs: ## Check if required tools are installed
 	@printf "$(GREEN)✓ docker compose found$(NC)\n"
 	@printf "$(GREEN)All prerequisites satisfied!$(NC)\n"
 
-setup-backend: ## Set up Python environment (includes backend and UI dependencies)
+setup-backend: ## Set up Python environment (all dependencies including optional providers)
 	@printf "$(BLUE)Setting up Python environment...$(NC)\n"
-	uv sync --extra ui --extra dev
-	@printf "$(GREEN)✓ Python environment ready (includes backend and UI dependencies)$(NC)\n"
+	uv sync --extra ui --extra dev --extra vertex --extra openai
+	@printf "$(GREEN)✓ Python environment ready (includes all dependencies)$(NC)\n"
 
 setup-vertex: ## Install Vertex AI dependencies (only needed for LLM_PROVIDER=vertex)
 	@printf "$(BLUE)Installing Vertex AI dependencies...$(NC)\n"

@@ -38,6 +38,7 @@ uv.lock
 
 # Design context, rationale, and history
 .design/
+docs/superpowers/
 
 # Repo-specific rules and skills
 .agents/
