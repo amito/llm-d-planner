@@ -37,7 +37,7 @@ cluster = [
     "kubernetes>=35.0.0",
 ]
 vertex = [
-    "anthropic[vertex]>=0.52.0",
+    "anthropic[vertex]>=0.104.1",
 ]
 dev = [
     "pytest==9.0.3",
