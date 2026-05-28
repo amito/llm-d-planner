@@ -249,12 +249,27 @@ make db-load-estimated  # Load estimated performance data
 make db-shell           # Open psql shell
 ```
 
+### Container Images
+
+```bash
+make image-build-backend    # Build backend container image
+make image-build-ui         # Build UI container image
+make image-build-simulator  # Build vLLM simulator container image
+make image-build            # Build all container images
+make image-push             # Push all container images to Quay.io
+```
+
+Container runtime auto-detects Docker or Podman. Override with `CONTAINER_TOOL=podman make ...`.
+
 ### Docker Compose (alternative to native services)
 
 ```bash
 make docker-up          # Start all services via Docker Compose
-make docker-down        # Stop all
 make docker-up-dev      # Development mode with live reload
+make docker-down        # Stop all
+make docker-down-v      # Stop and remove volumes
+make docker-logs        # Follow logs from all services
+make docker-ps          # Show status of services
 ```
 
 ### Kubernetes / KIND Cluster
@@ -265,15 +280,6 @@ make cluster-stop       # Delete cluster
 make cluster-status     # Show status
 make clean-deployments  # Delete all InferenceServices
 ```
-
-### Container Builds
-
-```bash
-make build-backend      # Build backend Docker image
-make build-simulator    # Build vLLM simulator image
-```
-
-Container runtime auto-detects Docker or Podman. Override with `CONTAINER_TOOL=podman make ...`.
 
 ## Working with This Repository
 

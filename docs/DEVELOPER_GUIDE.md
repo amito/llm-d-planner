@@ -637,7 +637,7 @@ make format
 ### Building the Simulator
 
 ```bash
-make build-simulator
+make image-build-simulator
 ```
 
 Creates `vllm-simulator:latest` Docker image.
@@ -661,7 +661,7 @@ curl -X POST http://localhost:8080/v1/completions \
 ### Pushing to Quay.io
 
 ```bash
-make push-simulator
+make image-push-simulator
 ```
 
 Auto-prompts for login if not authenticated.
