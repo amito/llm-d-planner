@@ -57,20 +57,13 @@ This repository includes a **Makefile** that provides convenient shortcuts for a
 
 | Task | Docker Compose Command | Makefile Shortcut |
 |------|------------------------|-------------------|
-| **Build images** | `docker-compose build` | `make docker-build` |
+| **Build images** | `docker-compose build` | `make image-build` |
 | **Start services** | `docker-compose up -d` | `make docker-up` |
 | **Start dev mode** | `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up` | `make docker-up-dev` |
 | **Stop services** | `docker-compose down` | `make docker-down` |
 | **Stop + remove volumes** | `docker-compose down -v` | `make docker-down-v` |
-| **View logs (all)** | `docker-compose logs -f` | `make docker-logs` |
-| **View backend logs** | `docker-compose logs -f backend` | `make docker-logs-backend` |
-| **View UI logs** | `docker-compose logs -f ui` | `make docker-logs-ui` |
+| **View logs** | `docker-compose logs -f` | `make docker-logs` |
 | **Check status** | `docker-compose ps` | `make docker-ps` |
-| **Restart services** | `docker-compose restart` | `make docker-restart` |
-| **Clean everything** | `docker-compose down -v --remove-orphans` | `make docker-clean` |
-| **Backend shell** | `docker-compose exec backend /bin/bash` | `make docker-shell-backend` |
-| **UI shell** | `docker-compose exec ui /bin/bash` | `make docker-shell-ui` |
-| **PostgreSQL shell** | `docker-compose exec postgres psql -U planner -d planner` | `make docker-shell-postgres` |
 
 ### Examples
 
@@ -84,9 +77,9 @@ docker-compose down
 
 **Using Makefile (equivalent):**
 ```bash
-make docker-build
+make image-build
 make docker-up
-make docker-logs-backend
+make docker-logs
 make docker-down
 ```
 
@@ -127,7 +120,12 @@ All operations below show both `docker-compose` commands and their `make` equiva
 ```bash
 # Build all images
 docker-compose build
-make docker-build
+make image-build
+
+# Build specific images
+make image-build-backend
+make image-build-ui
+make image-build-simulator
 
 # Build specific service (docker-compose only)
 docker-compose build backend
@@ -153,22 +151,17 @@ make docker-down-v
 
 # Restart services
 docker-compose restart
-make docker-restart
 
-# Restart specific service (docker-compose only)
+# Restart specific service
 docker-compose restart backend
 
 # View logs (all services)
 docker-compose logs -f
 make docker-logs
 
-# View backend logs
+# View specific service logs
 docker-compose logs -f backend
-make docker-logs-backend
-
-# View UI logs
 docker-compose logs -f ui
-make docker-logs-ui
 
 # Check service status
 docker-compose ps
@@ -180,7 +173,6 @@ make docker-ps
 ```bash
 # Access PostgreSQL CLI
 docker-compose exec postgres psql -U planner -d planner
-make docker-shell-postgres
 
 # Run database migrations/scripts
 docker-compose exec postgres psql -U planner -d planner -f /scripts/schema.sql
@@ -285,10 +277,7 @@ make docker-logs
 
 # View specific service logs
 docker-compose logs -f backend
-make docker-logs-backend
-
 docker-compose logs -f ui
-make docker-logs-ui
 ```
 
 #### Access Container Shell
@@ -296,15 +285,12 @@ make docker-logs-ui
 ```bash
 # Backend container
 docker-compose exec backend /bin/bash
-make docker-shell-backend
 
 # UI container
 docker-compose exec ui /bin/bash
-make docker-shell-ui
 
 # PostgreSQL container
 docker-compose exec postgres /bin/bash
-make docker-shell-postgres
 ```
 
 #### Check Service Health
@@ -371,9 +357,7 @@ docker system prune  # Free up space
 **Check service logs:**
 ```bash
 docker-compose logs backend
-make docker-logs-backend
-
-docker-compose logs postgres  # Use docker-compose for PostgreSQL
+docker-compose logs postgres
 ```
 
 **Verify dependencies:**
@@ -390,7 +374,7 @@ docker-compose exec postgres psql -U planner -c "\dt"
 **Ensure PostgreSQL is healthy:**
 ```bash
 docker-compose ps postgres
-make docker-ps  # Show all services
+make docker-ps
 
 docker-compose logs postgres
 ```

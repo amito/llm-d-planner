@@ -282,16 +282,32 @@ open-ui: ## Open UI in browser
 open-backend: ## Open backend API docs in browser
 	@$(OPEN_CMD) http://localhost:8000/docs
 
-##@ Docker & Simulator
+##@ Container Images
 
-build-backend: ## Build backend Docker image
+image-build-backend: ## Build backend container image
 	@printf "$(BLUE)Building backend image...$(NC)\n"
 	$(CONTAINER_TOOL) build -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
 	@printf "$(GREEN)✓ Backend image built:$(NC)\n"
 	@printf "  - $(BACKEND_IMAGE):$(BACKEND_TAG)\n"
 	@printf "  - $(BACKEND_FULL_IMAGE)\n"
 
-push-backend: build-backend ## Push backend image to Quay.io
+image-build-ui: ## Build UI container image
+	@printf "$(BLUE)Building UI image...$(NC)\n"
+	$(CONTAINER_TOOL) build -f ui/Dockerfile -t $(UI_IMAGE):$(UI_TAG) -t $(UI_FULL_IMAGE) .
+	@printf "$(GREEN)✓ UI image built:$(NC)\n"
+	@printf "  - $(UI_IMAGE):$(UI_TAG)\n"
+	@printf "  - $(UI_FULL_IMAGE)\n"
+
+image-build-simulator: ## Build vLLM simulator container image
+	@printf "$(BLUE)Building simulator image...$(NC)\n"
+	$(CONTAINER_TOOL) build -f $(SIMULATOR_DIR)/Dockerfile -t vllm-simulator:latest -t $(SIMULATOR_FULL_IMAGE) .
+	@printf "$(GREEN)✓ Simulator image built:$(NC)\n"
+	@printf "  - vllm-simulator:latest\n"
+	@printf "  - $(SIMULATOR_FULL_IMAGE)\n"
+
+image-build: image-build-backend image-build-ui image-build-simulator ## Build all container images
+
+image-push-backend: image-build-backend ## Push backend image to Quay.io
 	@printf "$(BLUE)Pushing backend image to $(BACKEND_FULL_IMAGE)...$(NC)\n"
 	@if ! $(CONTAINER_TOOL) login quay.io --get-login > /dev/null 2>&1; then \
 		printf "$(YELLOW)Not logged in to Quay.io. Please login:$(NC)\n"; \
@@ -303,16 +319,20 @@ push-backend: build-backend ## Push backend image to Quay.io
 	$(CONTAINER_TOOL) push $(BACKEND_FULL_IMAGE)
 	@printf "$(GREEN)✓ Image pushed to $(BACKEND_FULL_IMAGE)$(NC)\n"
 
-build-simulator: ## Build vLLM simulator Docker image
-	@printf "$(BLUE)Building simulator image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f $(SIMULATOR_DIR)/Dockerfile -t vllm-simulator:latest -t $(SIMULATOR_FULL_IMAGE) .
-	@printf "$(GREEN)✓ Simulator image built:$(NC)\n"
-	@printf "  - vllm-simulator:latest\n"
-	@printf "  - $(SIMULATOR_FULL_IMAGE)\n"
+image-push-ui: image-build-ui ## Push UI image to Quay.io
+	@printf "$(BLUE)Pushing UI image to $(UI_FULL_IMAGE)...$(NC)\n"
+	@if ! $(CONTAINER_TOOL) login quay.io --get-login > /dev/null 2>&1; then \
+		printf "$(YELLOW)Not logged in to Quay.io. Please login:$(NC)\n"; \
+		$(CONTAINER_TOOL) login quay.io || (printf "$(RED)✗ Login failed$(NC)\n" && exit 1); \
+	else \
+		printf "$(GREEN)✓ Already logged in to Quay.io$(NC)\n"; \
+	fi
+	@printf "$(BLUE)Pushing image...$(NC)\n"
+	$(CONTAINER_TOOL) push $(UI_FULL_IMAGE)
+	@printf "$(GREEN)✓ Image pushed to $(UI_FULL_IMAGE)$(NC)\n"
 
-push-simulator: build-simulator ## Push simulator image to Quay.io
+image-push-simulator: image-build-simulator ## Push simulator image to Quay.io
 	@printf "$(BLUE)Pushing simulator image to $(SIMULATOR_FULL_IMAGE)...$(NC)\n"
-	@# Check if logged in to Quay.io
 	@if ! $(CONTAINER_TOOL) login quay.io --get-login > /dev/null 2>&1; then \
 		printf "$(YELLOW)Not logged in to Quay.io. Please login:$(NC)\n"; \
 		$(CONTAINER_TOOL) login quay.io || (printf "$(RED)✗ Login failed$(NC)\n" && exit 1); \
@@ -323,24 +343,9 @@ push-simulator: build-simulator ## Push simulator image to Quay.io
 	$(CONTAINER_TOOL) push $(SIMULATOR_FULL_IMAGE)
 	@printf "$(GREEN)✓ Image pushed to $(SIMULATOR_FULL_IMAGE)$(NC)\n"
 
-pull-simulator: ## Pull simulator image from Quay.io
-	@printf "$(BLUE)Pulling simulator image from $(SIMULATOR_FULL_IMAGE)...$(NC)\n"
-	$(CONTAINER_TOOL) pull $(SIMULATOR_FULL_IMAGE)
-	$(CONTAINER_TOOL) tag $(SIMULATOR_FULL_IMAGE) vllm-simulator:latest
-	@printf "$(GREEN)✓ Image pulled and tagged as vllm-simulator:latest$(NC)\n"
+image-push: image-push-backend image-push-ui image-push-simulator ## Push all container images to Quay.io
 
-docker-build: ## Build all Docker images
-	@printf "$(BLUE)Building all Docker images...$(NC)\n"
-	DOCKER_BUILDKIT=1 docker-compose build --parallel
-	@printf "$(GREEN)✓ All images built$(NC)\n"
-
-docker-push: ## Push backend and UI images to $(REGISTRY)/$(REGISTRY_ORG)
-	@printf "$(BLUE)Tagging and pushing images to $(REGISTRY)/$(REGISTRY_ORG)...$(NC)\n"
-	$(CONTAINER_TOOL) tag $(BACKEND_IMAGE):$(BACKEND_TAG) $(BACKEND_FULL_IMAGE)
-	$(CONTAINER_TOOL) tag $(UI_IMAGE):$(UI_TAG) $(UI_FULL_IMAGE)
-	$(CONTAINER_TOOL) push $(BACKEND_FULL_IMAGE)
-	$(CONTAINER_TOOL) push $(UI_FULL_IMAGE)
-	@printf "$(GREEN)✓ Images pushed to $(REGISTRY)/$(REGISTRY_ORG)$(NC)\n"
+##@ Docker Compose
 
 docker-up: ## Start all services with Docker Compose
 	@printf "$(BLUE)Starting all services with Docker Compose...$(NC)\n"
@@ -376,40 +381,15 @@ docker-down-v: ## Stop and remove volumes
 	docker-compose down -v
 	@printf "$(GREEN)✓ Services stopped and volumes removed$(NC)\n"
 
-docker-logs: ## View logs from all Docker services
+docker-logs: ## View logs from all Docker Compose services
 	@docker-compose logs -f
-
-docker-logs-backend: ## View backend Docker logs
-	@docker-compose logs -f backend
-
-docker-logs-ui: ## View UI Docker logs
-	@docker-compose logs -f ui
 
 docker-ps: ## Show status of Docker Compose services
 	@docker-compose ps
 
-docker-restart: ## Restart Docker Compose services
-	@printf "$(BLUE)Restarting Docker Compose services...$(NC)\n"
-	docker-compose restart
-	@printf "$(GREEN)✓ Services restarted$(NC)\n"
-
-docker-clean: ## Remove all Docker resources
-	@printf "$(BLUE)Cleaning Docker resources...$(NC)\n"
-	docker-compose down -v --remove-orphans
-	@printf "$(GREEN)✓ Docker resources cleaned$(NC)\n"
-
-docker-shell-backend: ## Open shell in backend container
-	@docker-compose exec backend /bin/bash
-
-docker-shell-ui: ## Open shell in UI container
-	@docker-compose exec ui /bin/bash
-
-docker-shell-postgres: ## Open PostgreSQL shell in container
-	@docker-compose exec postgres psql -U planner -d planner
-
 ##@ Kubernetes Cluster
 
-cluster-start: check-prereqs build-simulator ## Create KIND cluster and load simulator image
+cluster-start: check-prereqs image-build-simulator ## Create KIND cluster and load simulator image
 	@printf "$(BLUE)Creating KIND cluster...$(NC)\n"
 	./scripts/kind-cluster.sh start
 	@printf "$(GREEN)✓ Cluster ready!$(NC)\n"
@@ -427,7 +407,7 @@ cluster-restart: ## Restart KIND cluster
 cluster-status: ## Show cluster status
 	./scripts/kind-cluster.sh status
 
-cluster-load-simulator: build-simulator ## Load simulator image into KIND cluster
+cluster-load-simulator: image-build-simulator ## Load simulator image into KIND cluster
 	@printf "$(BLUE)Loading simulator image into KIND cluster...$(NC)\n"
 	kind load docker-image vllm-simulator:latest --name $(KIND_CLUSTER_NAME)
 	@printf "$(GREEN)✓ Simulator image loaded$(NC)\n"
