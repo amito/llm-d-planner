@@ -37,7 +37,7 @@ cluster = [
     "kubernetes>=36.0.1",
 ]
 vertex = [
-    "anthropic[vertex]>=0.104.1",
+    "anthropic[vertex]>=0.105.2",
 ]
 openai = [
     "openai>=1.82.0",
