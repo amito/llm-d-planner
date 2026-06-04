@@ -34,7 +34,7 @@ ui = [
     "matplotlib>=3.10.9",
 ]
 cluster = [
-    "kubernetes>=36.0.1",
+    "kubernetes>=36.0.2",
 ]
 vertex = [
     "anthropic[vertex]>=0.104.1",
