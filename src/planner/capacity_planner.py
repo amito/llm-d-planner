@@ -13,7 +13,10 @@ configuration, and workload characteristics.
 
 import contextlib
 import io
+import json
+import logging
 import math
+import os
 import re
 from dataclasses import dataclass
 from enum import StrEnum
@@ -26,31 +29,75 @@ from huggingface_hub.hf_api import ModelInfo, SafetensorsRepoMetadata
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     from transformers import AutoConfig
 
-# Memory Overhead Constants (in GiB)
-# Empirically validated against vLLM on H100 GPUs with seq_len=16000, batch_size=1
-# Source: empirical-test/analysis-results.md
-# Test environment: H100 (79.18 GiB), vLLM with FlashAttention, max_model_len=16000
-ACTIVATION_MEMORY_BASE_DENSE_GIB = (
-    5.5  # Dense models: Qwen3-0.6B (5.56), Llama-8B (4.76), Llama-70B/TP2 (4.84)
-)
-ACTIVATION_MEMORY_BASE_MOE_GIB = 8.0  # MoE models: gpt-oss-20b (7.38)
-ACTIVATION_MEMORY_BASE_MULTIMODAL_GIB = 2.5  # Multimodal models: Mistral-Small-3.2-24B (2.12)
-ACTIVATION_REFERENCE_SEQ_LEN = 16000  # Reference sequence length for empirical measurements
-VLLM_NON_TORCH_MEMORY_TP1_GIB = 0.15  # TP=1: empirical range 0.13-0.14 GiB
-VLLM_NON_TORCH_MEMORY_TPN_GIB = 0.6  # TP≥2: empirical 0.55 GiB (TP=2)
-# Note: CUDA graph memory is included in activation memory profiling, not a separate constant
+_logger = logging.getLogger(__name__)
 
-# Tier 1: Validated activation profiles from empirical vLLM measurements on H100.
-# Key = architecture string from model_config.architectures[0]
-# Value = activation memory in GiB (torch peak memory increase from vLLM profiling)
-# Source: config_explorer/empirical-vllm-memory-results.md
-VALIDATED_ACTIVATION_PROFILES = {
-    "LlamaForCausalLM": 4.8,  # Empirical: Llama-8B (4.76), Llama-70B/TP2 (4.84)
-    "Qwen2ForCausalLM": 5.6,  # Empirical: same family as Qwen3
-    "Qwen3ForCausalLM": 5.6,  # Empirical: Qwen3-0.6B (5.56), Qwen3-32B (5.64)
-    "PixtralForConditionalGeneration": 2.5,  # Empirical: Mistral-Small-3.2-24B (2.12)
-    "Mistral3ForConditionalGeneration": 2.5,  # Same architecture family as Pixtral
-}
+# Memory Overhead Constants (in GiB)
+# Loaded from data/configuration/vllm_memory_constants.json (calibrated against
+# vLLM v0.19.0 on H100-80GB, 49 runs across 28 models).
+# See docs/accuracy/vllm-v0.19.0-accuracy-report.md for methodology.
+_CONSTANTS_PATH = os.path.join(
+    os.path.dirname(__file__), "..", "..", "data", "configuration", "vllm_memory_constants.json"
+)
+
+_EXPECTED_ACTIVATION_BASE_KEYS = {"dense", "moe", "multimodal"}
+_EXPECTED_NON_TORCH_KEYS = {"tp1_pp1", "tp1_ppN", "tpN_pp1", "tpN_ppN"}
+
+
+def _load_memory_constants() -> dict[str, Any]:
+    try:
+        with open(_CONSTANTS_PATH) as f:
+            data: dict[str, Any] = json.load(f)
+            return data
+    except FileNotFoundError:
+        _logger.warning(
+            "Memory constants file not found at %s — using built-in defaults", _CONSTANTS_PATH
+        )
+        return {}
+    except json.JSONDecodeError as e:
+        _logger.warning(
+            "Failed to parse memory constants file %s: %s — using built-in defaults",
+            _CONSTANTS_PATH,
+            e,
+        )
+        return {}
+
+
+def _validate_constants(constants: dict[str, Any]) -> None:
+    if not constants:
+        return
+
+    activation_base = constants.get("activation_base_gib")
+    if activation_base is None:
+        _logger.warning("Memory constants file missing 'activation_base_gib' section")
+    elif missing := _EXPECTED_ACTIVATION_BASE_KEYS - set(activation_base):
+        _logger.warning("activation_base_gib missing keys: %s", missing)
+
+    non_torch = constants.get("non_torch_overhead_gib")
+    if non_torch is None:
+        _logger.warning("Memory constants file missing 'non_torch_overhead_gib' section")
+    elif missing := _EXPECTED_NON_TORCH_KEYS - set(non_torch):
+        _logger.warning("non_torch_overhead_gib missing keys: %s", missing)
+
+    if "activation_profiles" not in constants:
+        _logger.warning("Memory constants file missing 'activation_profiles' section")
+
+
+_CONSTANTS = _load_memory_constants()
+_validate_constants(_CONSTANTS)
+_ACTIVATION_BASE = _CONSTANTS.get("activation_base_gib", {})
+_NON_TORCH = _CONSTANTS.get("non_torch_overhead_gib", {})
+
+ACTIVATION_MEMORY_BASE_DENSE_GIB: float = _ACTIVATION_BASE.get("dense", 2.00)
+ACTIVATION_MEMORY_BASE_MOE_GIB: float = _ACTIVATION_BASE.get("moe", 2.50)
+ACTIVATION_MEMORY_BASE_MULTIMODAL_GIB: float = _ACTIVATION_BASE.get("multimodal", 2.00)
+VLLM_NON_TORCH_MEMORY_TP1_PP1_GIB: float = _NON_TORCH.get("tp1_pp1", 0.27)
+VLLM_NON_TORCH_MEMORY_TP1_PPN_GIB: float = _NON_TORCH.get("tp1_ppN", 0.07)
+VLLM_NON_TORCH_MEMORY_TPN_GIB: float = _NON_TORCH.get("tpN_pp1", 2.10)
+VLLM_NON_TORCH_MEMORY_TP1_GIB = VLLM_NON_TORCH_MEMORY_TP1_PP1_GIB
+
+# Per-architecture activation profiles loaded from the constants file.
+# Falls back to base constants (dense/moe/multimodal) for unknown architectures.
+VALIDATED_ACTIVATION_PROFILES: dict[str, float] = _CONSTANTS.get("activation_profiles", {})
 
 # Tier 2: Multimodal architectures typically have lower activation memory
 # because the vision encoder does not participate in CUDA graph capture
@@ -348,19 +395,29 @@ def max_context_len(model_config: AutoConfig) -> int:
     return int(text_config.max_position_embeddings)
 
 
-def estimate_vllm_non_torch_memory(tp: int = 1) -> float:
+def estimate_vllm_non_torch_memory(tp: int = 1, pp: int = 1) -> float:
     """
-    Estimate non-torch memory (CUDA runtime, Python interpreter) in GiB.
+    Estimate non-torch memory (CUDA runtime, Python interpreter) in GiB per GPU.
 
-    Non-torch memory increases with TP due to NCCL/communication overhead.
+    Non-torch memory varies with parallelism strategy:
+    - TP=1, PP=1: minimal overhead
+    - TP=1, PP≥2: P2P send/receive buffers only
+    - TP≥2: NCCL all-reduce buffers dominate
+
+    Actual values are loaded from vllm_memory_constants.json.
 
     Args:
         tp: Tensor parallelism degree
+        pp: Pipeline parallelism degree
 
     Returns:
         Non-torch memory in GiB per GPU
     """
-    return VLLM_NON_TORCH_MEMORY_TP1_GIB if tp == 1 else VLLM_NON_TORCH_MEMORY_TPN_GIB
+    if tp >= 2:
+        return VLLM_NON_TORCH_MEMORY_TPN_GIB
+    if pp >= 2:
+        return VLLM_NON_TORCH_MEMORY_TP1_PPN_GIB
+    return VLLM_NON_TORCH_MEMORY_TP1_PP1_GIB
 
 
 def estimate_vllm_cuda_graph_memory() -> float:
@@ -385,32 +442,16 @@ def estimate_vllm_activation_memory(config: AutoConfig, tp: int = 1) -> float:
     1. Validated profiles: exact empirical measurements for known architectures
     2. Model type fallback: constants for MoE, multimodal, or dense models
 
-    CRITICAL: Activation memory is CONSTANT per model type, NOT dependent on
-    max_model_len or batch_size. This was empirically validated:
-    - Qwen3-0.6B at max_model_len=16000: 5.56 GiB
-    - Qwen3-0.6B at max_model_len=32000: 5.56 GiB (SAME!)
+    Activation memory is CONSTANT per model type, NOT dependent on
+    max_model_len or batch_size. Empirically validated across context lengths
+    2048–32768 with identical results.
 
-    The activation memory represents FIXED overhead from:
-    - CUDA graph compilation and capture (fixed batch sizes: 1,2,4,8,16,32...)
-    - vLLM's warmup profiling phase with dummy sequences
-    - PyTorch memory allocator pre-allocation and fragmentation
-    - Fixed-size workspace buffers allocated during engine initialization
-    - FlashAttention workspace buffers (pre-allocated)
-
-    Runtime per-request activation buffers (which DO scale with seq_len) are
-    allocated from the KV cache memory pool, not counted here.
-
-    Empirical validation:
-    - Dense models: 4.76-5.56 GiB (Qwen3-0.6B, Llama-8B, Llama-70B)
-    - MoE models: 7.38 GiB (gpt-oss-20b with 32 experts)
-    - Multimodal models: 2.12 GiB (Mistral-Small-3.2-24B)
-
-    Source: config_explorer/empirical-vllm-memory-results.md
+    Calibrated against vLLM v0.19.0 on H100-80GB (49 runs, 28 models).
+    Source: accuracy/results/v0.19.0/accuracy_report.md
 
     Args:
         config: Model configuration (can be full config or text_config)
-        tp: Tensor parallelism degree (note: empirical data shows activation
-            memory does NOT scale inversely with TP)
+        tp: Tensor parallelism degree (activation is TP-invariant)
 
     Returns:
         float: Estimated peak activation memory in GiB (constant per model type)
@@ -908,7 +949,7 @@ def allocatable_kv_cache_memory(
     cuda_graph_memory = estimate_vllm_cuda_graph_memory() * gpu_count  # Returns 0.0
 
     # Non-torch memory scales with TP due to NCCL/communication overhead
-    non_torch_memory = estimate_vllm_non_torch_memory(tp) * gpu_count
+    non_torch_memory = estimate_vllm_non_torch_memory(tp, pp) * gpu_count
 
     total_consumed = model_size + activation_memory + cuda_graph_memory + non_torch_memory
 
@@ -1415,7 +1456,7 @@ def calculate_capacity(
             estimate_vllm_activation_memory(model_config, tp=tp), 4
         )
         result["cuda_graph_memory_gb"] = round(estimate_vllm_cuda_graph_memory(), 4)
-        result["non_torch_memory_gb"] = round(estimate_vllm_non_torch_memory(tp), 4)
+        result["non_torch_memory_gb"] = round(estimate_vllm_non_torch_memory(tp, pp), 4)
         result["model_memory_gb"] = round(model_memory_req(model_id, model_config, hf_token), 2)
         result["available_gpu_memory_gb"] = round(
             available_gpu_memory(gpu_memory_int, gpu_mem_util), 2
