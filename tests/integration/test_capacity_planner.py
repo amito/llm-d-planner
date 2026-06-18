@@ -446,7 +446,7 @@ def test_allocatable_kv_cache_memory():
                 # Note: activation memory is constant per model type
                 activation_memory = estimate_vllm_activation_memory(model_config, tp) * dp
                 cuda_graph_memory = estimate_vllm_cuda_graph_memory() * gpu_count
-                non_torch_memory = estimate_vllm_non_torch_memory(tp) * gpu_count
+                non_torch_memory = estimate_vllm_non_torch_memory(tp, pp) * gpu_count
 
                 expected = max(
                     0,
@@ -624,19 +624,26 @@ def test_inference_dtype_byte():
 @pytest.mark.integration
 def test_estimate_vllm_non_torch_memory():
     """Tests that non-torch memory estimation returns TP-dependent values"""
-    # TP=1: 0.15 GiB
+    # TP=1, PP=1: 0.27 GiB (calibrated on vLLM v0.19.0)
     actual_tp1 = estimate_vllm_non_torch_memory(tp=1)
-    expected_tp1 = 0.15
+    expected_tp1 = 0.27
     assert actual_tp1 == expected_tp1, f"Expected {expected_tp1} GiB for TP=1, got {actual_tp1} GiB"
     assert isinstance(actual_tp1, float), "Should return a float"
 
-    # TP>=2: 0.6 GiB
+    # TP>=2: 2.10 GiB (NCCL all-reduce buffers)
     actual_tp2 = estimate_vllm_non_torch_memory(tp=2)
-    expected_tp2 = 0.6
+    expected_tp2 = 2.10
     assert actual_tp2 == expected_tp2, f"Expected {expected_tp2} GiB for TP=2, got {actual_tp2} GiB"
 
     actual_tp4 = estimate_vllm_non_torch_memory(tp=4)
     assert actual_tp4 == expected_tp2, f"Expected {expected_tp2} GiB for TP=4, got {actual_tp4} GiB"
+
+    # TP=1, PP>=2: 0.07 GiB (P2P send/receive buffers only)
+    actual_pp2 = estimate_vllm_non_torch_memory(tp=1, pp=2)
+    expected_pp2 = 0.07
+    assert actual_pp2 == expected_pp2, (
+        f"Expected {expected_pp2} GiB for TP=1/PP=2, got {actual_pp2} GiB"
+    )
 
 
 @pytest.mark.integration
@@ -662,9 +669,9 @@ def test_estimate_vllm_activation_memory_basic():
     assert isinstance(activation_mem, float), "Should return a float"
     assert activation_mem > 0, f"Activation memory should be positive, got {activation_mem}"
 
-    # For a dense model, activation memory should be around 5.5 GB (constant)
-    assert 4.5 <= activation_mem <= 6.0, (
-        f"Activation memory should be ~5.5 GB, got {activation_mem} GiB"
+    # Qwen2ForCausalLM has a calibrated profile of 2.25 GiB (vLLM v0.19.0)
+    assert 1.5 <= activation_mem <= 3.0, (
+        f"Activation memory should be ~2.25 GB, got {activation_mem} GiB"
     )
 
 
@@ -720,7 +727,7 @@ def test_estimate_vllm_activation_memory_constant():
     # Get the actual result
     actual_mem_gib = estimate_vllm_activation_memory(model_config, tp)
 
-    # Qwen2.5-0.5B has architecture Qwen2ForCausalLM, which has a validated profile of 5.6
+    # Qwen2.5-0.5B has architecture Qwen2ForCausalLM, which has a validated profile of 2.25
     expected = VALIDATED_ACTIVATION_PROFILES.get(
         "Qwen2ForCausalLM", ACTIVATION_MEMORY_BASE_DENSE_GIB
     )
@@ -734,12 +741,12 @@ def test_estimate_vllm_activation_memory_empirical_validation():
     """Tests activation memory estimates against empirical vLLM measurements"""
     # Activation memory is constant per model type, independent of max_model_len
 
-    # Test case 1: Qwen3-0.6B (dense, TP=1)
-    # Empirical: 5.56 GiB at both 16K and 32K, Expected with base 5.5: 5.5 GiB
+    # Test case 1: Qwen2.5-0.5B (dense, TP=1)
+    # Calibrated profile for Qwen2ForCausalLM: 2.25 GiB (vLLM v0.19.0)
     qwen_config = get_model_config_from_hf(qwen_model)
     qwen_activation = estimate_vllm_activation_memory(qwen_config, tp=1)
-    assert 5.0 <= qwen_activation <= 6.0, (
-        f"Qwen3-0.6B activation {qwen_activation} GiB outside expected range [5.0, 6.0] (empirical: 5.56)"
+    assert 1.5 <= qwen_activation <= 3.0, (
+        f"Qwen activation {qwen_activation} GiB outside expected range [1.5, 3.0] (calibrated: 2.25)"
     )
 
     # Test case 2: TP=2 should give same result as TP=1 (empirical observation)
@@ -753,16 +760,15 @@ def test_estimate_vllm_activation_memory_empirical_validation():
 @pytest.mark.integration
 def test_estimate_vllm_activation_memory_moe():
     """Tests that MoE models use higher activation memory constant"""
-    # MoE models have higher activation overhead due to expert routing
-    # Empirical: gpt-oss-20b = 7.38 GiB
+    # MoE models use Qwen3MoeForCausalLM profile (2.68 GiB) or MoE base (2.50 GiB)
 
     moe_model = gpt_oss
     moe_config = get_model_config_from_hf(moe_model)
     moe_activation = estimate_vllm_activation_memory(moe_config, tp=1)
 
-    # Should be around 8.0 GB for MoE models
-    assert 7.0 <= moe_activation <= 9.0, (
-        f"MoE activation {moe_activation} GiB outside expected range [7.0, 9.0] (empirical: 7.38)"
+    # Calibrated range for MoE models (vLLM v0.19.0)
+    assert 2.0 <= moe_activation <= 3.5, (
+        f"MoE activation {moe_activation} GiB outside expected range [2.0, 3.5]"
     )
 
     # Should be higher than dense models
@@ -806,12 +812,7 @@ def test_estimate_vllm_activation_memory_validated_lookup():
         f"Mistral-Small activation should be {expected} GiB (validated), got {mistral_activation} GiB"
     )
 
-    # Should be much less than the generic dense constant
-    assert mistral_activation < ACTIVATION_MEMORY_BASE_DENSE_GIB, (
-        f"Mistral multimodal ({mistral_activation}) should be < dense default ({ACTIVATION_MEMORY_BASE_DENSE_GIB})"
-    )
-
-    # Qwen2.5-0.5B has architecture Qwen2ForCausalLM, validated at 5.6 GiB
+    # Qwen2.5-0.5B has architecture Qwen2ForCausalLM, validated at 2.25 GiB
     qwen_config = get_model_config_from_hf(qwen_model)
     qwen_activation = estimate_vllm_activation_memory(qwen_config, tp=1)
     expected_qwen = VALIDATED_ACTIVATION_PROFILES["Qwen2ForCausalLM"]
