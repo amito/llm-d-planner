@@ -120,7 +120,7 @@ def _catalog_model_to_model_info(model: dict) -> ModelInfo:
     return _ModelInfo(
         {
             "model_id": name,
-            "name": name.split("/")[-1],
+            "name": name,
             "provider": model.get("provider", "Unknown"),
             "family": _extract_family(name),
             "size_parameters": _parse_size(size_str) if size_str else f"{param_b}B",
