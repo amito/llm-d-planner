@@ -85,13 +85,29 @@ class TestDbStatus:
         with (
             patch("planner.api.routes.database._get_connection", return_value=mock_conn),
             patch("planner.api.routes.database.get_db_stats", return_value=stats),
+            patch("planner.api.routes.database._get_benchmark_source_type", return_value="postgresql"),
         ):
             resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
         assert body["total_benchmarks"] == 100
+        assert body["benchmark_source"] == {"type": "postgresql"}
         mock_conn.close.assert_called_once()
+
+    def test_includes_benchmark_source_model_catalog(self, client):
+        mock_conn = MagicMock()
+        stats = _sample_stats()
+        with (
+            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
+            patch("planner.api.routes.database.get_db_stats", return_value=stats),
+            patch("planner.api.routes.database._get_benchmark_source_type", return_value="model_catalog"),
+            patch.dict("os.environ", {"MODEL_CATALOG_SOURCE_ID": "my_catalog"}),
+        ):
+            resp = client.get("/api/v1/db/status")
+        assert resp.status_code == 200
+        source = resp.json()["benchmark_source"]
+        assert source == {"type": "model_catalog", "model_catalog_source_id": "my_catalog"}
 
     def test_returns_503_on_db_error(self, client):
         with patch(

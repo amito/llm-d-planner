@@ -14,6 +14,7 @@ import os
 import psycopg2
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile, status
 
+from planner.api.dependencies import _get_benchmark_source_type
 from planner.knowledge_base.loader import (
     extract_metadata,
     get_db_stats,
@@ -63,6 +64,17 @@ async def verify_admin(x_admin_password: str | None = Header(None)):
     return {"verified": True}
 
 
+def _build_benchmark_source_info() -> dict:
+    """Build the benchmark_source section for status responses."""
+    source_type = _get_benchmark_source_type()
+    info: dict = {"type": source_type}
+    if source_type == "model_catalog":
+        info["model_catalog_source_id"] = (
+            os.getenv("MODEL_CATALOG_SOURCE_ID", "").strip() or "redhat_ai_validated_models"
+        )
+    return info
+
+
 @router.get("/db/status")
 async def db_status():
     """Get current benchmark database statistics."""
@@ -70,7 +82,11 @@ async def db_status():
         conn = _get_connection()
         try:
             stats = get_db_stats(conn)
-            return {"success": True, **stats}
+            return {
+                "success": True,
+                **stats,
+                "benchmark_source": _build_benchmark_source_info(),
+            }
         finally:
             conn.close()
     except Exception as e:
