@@ -85,7 +85,9 @@ class TestDbStatus:
         with (
             patch("planner.api.routes.database._get_connection", return_value=mock_conn),
             patch("planner.api.routes.database.get_db_stats", return_value=stats),
-            patch("planner.api.routes.database._get_benchmark_source_type", return_value="postgresql"),
+            patch(
+                "planner.api.routes.database._get_benchmark_source_type", return_value="postgresql"
+            ),
         ):
             resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
@@ -101,7 +103,10 @@ class TestDbStatus:
         with (
             patch("planner.api.routes.database._get_connection", return_value=mock_conn),
             patch("planner.api.routes.database.get_db_stats", return_value=stats),
-            patch("planner.api.routes.database._get_benchmark_source_type", return_value="model_catalog"),
+            patch(
+                "planner.api.routes.database._get_benchmark_source_type",
+                return_value="model_catalog",
+            ),
             patch.dict("os.environ", {"MODEL_CATALOG_SOURCE_ID": "my_catalog"}),
         ):
             resp = client.get("/api/v1/db/status")
