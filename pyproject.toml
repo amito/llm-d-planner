@@ -40,7 +40,7 @@ vertex = [
     "anthropic[vertex]>=0.109.2",
 ]
 openai = [
-    "openai>=1.82.0",
+    "openai>=2.43.0",
 ]
 dev = [
     "pytest==9.1.0",
