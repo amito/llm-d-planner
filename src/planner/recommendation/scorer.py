@@ -1,13 +1,13 @@
 """Solution scoring for multi-criteria recommendation ranking.
 
 Scores deployment configurations on 3 criteria (0-100 scale):
-- Accuracy/Quality: Model capability (from Artificial Analysis benchmarks or param count fallback)
+- Quality: Model capability (from quality_scoring package or param count fallback)
 - Price: Cost efficiency (inverse of cost, normalized)
-- Latency: SLO compliance with capped scoring (from Andre's PostgreSQL benchmarks)
+- Latency: SLO compliance with capped scoring (from PostgreSQL benchmarks)
 
 INTEGRATION NOTE:
-- Quality scoring: Uses Yuval's weighted_scores CSVs (Artificial Analysis benchmarks)
-- Latency/Price: Uses Andre's scoring logic and benchmark data
+- Quality scoring: Uses quality_scoring package (Arena + Artificial Analysis benchmarks)
+- Latency/Price: Uses local scoring logic and benchmark data
 - Latency scoring uses min/max ranges from usecase_slo_workload.json to cap scoring
   (no extra credit for latencies below the "min" threshold)
 """
@@ -20,21 +20,13 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-# Try to import use-case quality scorer
-try:
-    from .quality import score_model_quality
-
-    USE_CASE_QUALITY_AVAILABLE = True
-except ImportError:
-    USE_CASE_QUALITY_AVAILABLE = False
-
 
 class Scorer:
     """Score deployment configurations on 3 criteria (0-100 scale)."""
 
-    # Accuracy tiers based on model parameter count (in billions)
-    # Larger models generally have higher accuracy/capability
-    ACCURACY_TIERS = {
+    # Quality tiers based on model parameter count (in billions)
+    # Larger models generally have higher quality/capability
+    QUALITY_TIERS = {
         3: 40,
         4: 45,
         7: 55,
@@ -53,7 +45,7 @@ class Scorer:
 
     # Default weights for balanced score
     DEFAULT_WEIGHTS = {
-        "accuracy": 0.45,
+        "quality": 0.45,
         "price": 0.45,
         "latency": 0.10,
     }
@@ -121,37 +113,9 @@ class Scorer:
             overage_ratio = actual_ms / max_ms
             return max(0, 60 - (overage_ratio - 1) * 60)
 
-    def score_accuracy(
-        self, model_size_str: str, model_name: str | None = None, use_case: str | None = None
-    ) -> int:
+    def score_quality_by_size(self, model_size_str: str) -> int:
         """
-        Score model accuracy/quality.
-
-        Priority:
-        1. Use-case specific benchmark score (Artificial Analysis data) if available
-        2. Fallback to model size-based heuristic (Andre's original logic)
-
-        Args:
-            model_size_str: Model size string (e.g., "8B", "70B", "8x7B")
-            model_name: Optional model name for use-case-specific scoring
-            use_case: Optional use case for benchmark-based scoring
-
-        Returns:
-            Score 0-100
-        """
-        # Try use-case-specific quality scoring first (Yuval's contribution)
-        if USE_CASE_QUALITY_AVAILABLE and model_name and use_case:
-            quality_score = score_model_quality(model_name, use_case)
-            if quality_score > 0:
-                logger.debug(f"Quality score for {model_name} ({use_case}): {quality_score:.1f}")
-                return int(quality_score)
-
-        # Fallback to size-based heuristic (Andre's original logic)
-        return self.score_accuracy_by_size(model_size_str)
-
-    def score_accuracy_by_size(self, model_size_str: str) -> int:
-        """
-        Score model accuracy based on parameter count tier (fallback).
+        Score model quality based on parameter count tier (fallback).
 
         Args:
             model_size_str: Model size or HuggingFace model ID containing a
@@ -165,13 +129,13 @@ class Scorer:
 
         # Find the closest tier at or below the param count
         best_score = 40  # minimum score
-        for tier_size, tier_score in sorted(self.ACCURACY_TIERS.items()):
+        for tier_size, tier_score in sorted(self.QUALITY_TIERS.items()):
             if param_count >= tier_size:
                 best_score = tier_score
             else:
                 break
 
-        logger.debug(f"Accuracy score for {model_size_str} ({param_count}B): {best_score}")
+        logger.debug(f"Quality score for {model_size_str} ({param_count}B): {best_score}")
         return best_score
 
     def score_price(self, cost_per_month: float, min_cost: float, max_cost: float) -> int:
@@ -357,7 +321,7 @@ class Scorer:
 
     def score_balanced(
         self,
-        accuracy_score: int,
+        quality_score: float,
         price_score: int,
         latency_score: int,
         weights: dict | None = None,
@@ -366,10 +330,10 @@ class Scorer:
         Calculate weighted composite score.
 
         Args:
-            accuracy_score: Accuracy score (0-100)
+            quality_score: Quality score (0-100)
             price_score: Price score (0-100)
             latency_score: Latency score (0-100)
-            weights: Optional custom weights (default: 45% accuracy, 45% price,
+            weights: Optional custom weights (default: 45% quality, 45% price,
                      10% latency)
 
         Returns:
@@ -378,12 +342,14 @@ class Scorer:
         w = weights or self.DEFAULT_WEIGHTS
 
         balanced = (
-            accuracy_score * w["accuracy"] + price_score * w["price"] + latency_score * w["latency"]
+            quality_score * w["quality"]
+            + price_score * w["price"]
+            + latency_score * w["latency"]
         )
 
         logger.debug(
             f"Balanced score: {balanced:.1f} "
-            f"(A={accuracy_score}, P={price_score}, L={latency_score})"
+            f"(Q={quality_score}, P={price_score}, L={latency_score})"
         )
         return round(balanced, 1)
 

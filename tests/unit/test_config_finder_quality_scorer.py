@@ -73,33 +73,41 @@ def _make_slo() -> SLOTargets:
 
 @pytest.mark.unit
 def test_config_finder_accepts_quality_scorer():
-    """ConfigFinder should accept an optional quality_scorer parameter."""
+    """ConfigFinder should accept an optional ScoringEngine parameter."""
     mock_source = MagicMock()
     mock_catalog = MagicMock()
-    mock_scorer = MagicMock()
-    mock_scorer.get_quality_score.return_value = 75.0
+    mock_engine = MagicMock()
+    mock_engine.get_scores.return_value = None  # No scorecard available
 
     finder = ConfigFinder(
         benchmark_repo=mock_source,
         catalog=mock_catalog,
-        quality_scorer=mock_scorer,
+        engine=mock_engine,
+        quality_weights={},
     )
-    assert finder._quality_scorer is mock_scorer
+    assert finder._engine is mock_engine
 
 
 @pytest.mark.unit
 def test_config_finder_quality_scorer_defaults_to_none():
-    """When no quality_scorer provided, _quality_scorer should be None."""
+    """When no ScoringEngine provided, _engine should be None."""
     mock_source = MagicMock()
     mock_catalog = MagicMock()
 
     finder = ConfigFinder(benchmark_repo=mock_source, catalog=mock_catalog)
-    assert finder._quality_scorer is None
+    assert finder._engine is None
 
 
 @pytest.mark.unit
 def test_injected_scorer_used_in_plan_all_capacities():
-    """When quality_scorer is injected, plan_all_capacities uses it instead of score_model_quality."""
+    """When ScoringEngine is injected, plan_all_capacities uses it to compute quality scores."""
+    from quality_scoring.models import (
+        CompositeScore,
+        MatchType,
+        ModelScorecard,
+        NormalizedScore,
+    )
+
     mock_source = MagicMock()
     bench = _make_bench()
     mock_source.find_configurations_meeting_slo.return_value = [bench]
@@ -108,13 +116,35 @@ def test_injected_scorer_used_in_plan_all_capacities():
     mock_catalog.get_all_models.return_value = []
     mock_catalog.calculate_gpu_cost.return_value = 2.70
 
-    mock_scorer = MagicMock()
-    mock_scorer.get_quality_score.return_value = 82.5
+    mock_engine = MagicMock()
+    # Return a scorecard with 82.5 percentile
+    scorecard = ModelScorecard(
+        model_name="test-model",
+        arena_name="test-model",
+        aa_name=None,
+        arena_match_type=MatchType.EXACT,
+        aa_match_type=MatchType.NONE,
+        overall=CompositeScore(
+            category="overall",
+            percentile=82.5,
+            arena_score=NormalizedScore(
+                raw_score=1400.0,
+                percentile=82.5,
+                tied_rank=1,
+                population_size=100,
+                source="arena",
+            ),
+            aa_score=None,
+        ),
+        categories={},
+    )
+    mock_engine.get_scores.return_value = scorecard
 
     finder = ConfigFinder(
         benchmark_repo=mock_source,
         catalog=mock_catalog,
-        quality_scorer=mock_scorer,
+        engine=mock_engine,
+        quality_weights={"chatbot": {"categories": {}}},
     )
 
     results, _warnings = finder.plan_all_capacities(
@@ -123,22 +153,21 @@ def test_injected_scorer_used_in_plan_all_capacities():
         intent=_make_intent(),
     )
 
-    # Verify the injected scorer was called
-    mock_scorer.get_quality_score.assert_called()
-    # Should have been called with the model name and use case
-    call_args = mock_scorer.get_quality_score.call_args_list[0]
+    # Verify the injected engine was called
+    mock_engine.get_scores.assert_called()
+    # Should have been called with the model name (bench.model_hf_repo)
+    call_args = mock_engine.get_scores.call_args_list[0]
     assert call_args[0][0] == "RedHatAI/test-model"
-    assert call_args[0][1] == "chatbot_conversational"
 
-    # Verify we got results with accuracy score from the injected scorer
+    # Verify we got results with quality score from the injected engine
     assert len(results) >= 1
     assert results[0].scores is not None
-    assert results[0].scores.accuracy_score >= 82  # 82.5 truncated to int
+    assert results[0].scores.quality_score == 82.5  # exact float match
 
 
 @pytest.mark.unit
 def test_default_scorer_used_when_none_injected():
-    """When no quality_scorer injected, plan_all_capacities uses the default score_model_quality."""
+    """When no ScoringEngine injected, plan_all_capacities falls back to size-based scoring."""
     mock_source = MagicMock()
     bench = _make_bench()
     mock_source.find_configurations_meeting_slo.return_value = [bench]
@@ -150,28 +179,32 @@ def test_default_scorer_used_when_none_injected():
     finder = ConfigFinder(
         benchmark_repo=mock_source,
         catalog=mock_catalog,
-        # No quality_scorer -- uses default
+        # No engine -- uses fallback
     )
 
-    with patch(
-        "planner.recommendation.quality.score_model_quality",
-        return_value=60.0,
-    ) as mock_default:
-        results, _warnings = finder.plan_all_capacities(
-            traffic_profile=_make_traffic(),
-            slo_targets=_make_slo(),
-            intent=_make_intent(),
-        )
+    results, _warnings = finder.plan_all_capacities(
+        traffic_profile=_make_traffic(),
+        slo_targets=_make_slo(),
+        intent=_make_intent(),
+    )
 
-        mock_default.assert_called()
-        assert len(results) >= 1
-        assert results[0].scores is not None
-        assert results[0].scores.accuracy_score >= 60
+    # Without an engine, should fall back to size-based scoring
+    assert len(results) >= 1
+    assert results[0].scores is not None
+    # Size-based scoring should give a reasonable score (model_hf_repo doesn't have size, so minimum)
+    assert results[0].scores.quality_score > 0
 
 
 @pytest.mark.unit
 def test_injected_scorer_uses_hf_repo():
-    """Scorer is always called with bench.model_hf_repo to preserve quantization info."""
+    """ScoringEngine is always called with bench.model_hf_repo to preserve quantization info."""
+    from quality_scoring.models import (
+        CompositeScore,
+        MatchType,
+        ModelScorecard,
+        NormalizedScore,
+    )
+
     mock_source = MagicMock()
     bench = _make_bench(model="RedHatAI/some-model-quantized.w4a16")
     mock_source.find_configurations_meeting_slo.return_value = [bench]
@@ -184,13 +217,34 @@ def test_injected_scorer_uses_hf_repo():
     mock_catalog.get_all_models.return_value = [mock_model]
     mock_catalog.calculate_gpu_cost.return_value = 2.70
 
-    mock_scorer = MagicMock()
-    mock_scorer.get_quality_score.return_value = 70.0
+    mock_engine = MagicMock()
+    scorecard = ModelScorecard(
+        model_name="test-model",
+        arena_name="test-model",
+        aa_name=None,
+        arena_match_type=MatchType.EXACT,
+        aa_match_type=MatchType.NONE,
+        overall=CompositeScore(
+            category="overall",
+            percentile=70.0,
+            arena_score=NormalizedScore(
+                raw_score=1400.0,
+                percentile=70.0,
+                tied_rank=1,
+                population_size=100,
+                source="arena",
+            ),
+            aa_score=None,
+        ),
+        categories={},
+    )
+    mock_engine.get_scores.return_value = scorecard
 
     finder = ConfigFinder(
         benchmark_repo=mock_source,
         catalog=mock_catalog,
-        quality_scorer=mock_scorer,
+        engine=mock_engine,
+        quality_weights={"chatbot": {"categories": {}}},
     )
 
     results, _warnings = finder.plan_all_capacities(
@@ -199,10 +253,10 @@ def test_injected_scorer_uses_hf_repo():
         intent=_make_intent(),
     )
 
-    # Scorer called once with the HF repo name (not display name)
-    assert mock_scorer.get_quality_score.call_count == 1
-    call_args = mock_scorer.get_quality_score.call_args[0]
+    # Engine called once with the HF repo name (not display name)
+    assert mock_engine.get_scores.call_count == 1
+    call_args = mock_engine.get_scores.call_args[0]
     assert call_args[0] == "RedHatAI/some-model-quantized.w4a16"
     assert len(results) >= 1
     assert results[0].scores is not None
-    assert results[0].scores.accuracy_score >= 70
+    assert results[0].scores.quality_score >= 70

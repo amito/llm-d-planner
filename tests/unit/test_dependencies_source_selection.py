@@ -58,6 +58,8 @@ def _make_mock_app():
 def test_model_catalog_mode_creates_client_and_syncs():
     """When source is model_catalog, init_app_state() creates client and starts sync."""
     app = _make_mock_app()
+    mock_engine = MagicMock()
+    mock_weights = {"chatbot": {"categories": {"overall": 5}}}
     with (
         patch("planner.knowledge_base.model_catalog_client.ModelCatalogClient") as mock_client_cls,
         patch("planner.api.dependencies._sync_model_catalog_async") as mock_sync,
@@ -66,7 +68,14 @@ def test_model_catalog_mode_creates_client_and_syncs():
         patch("planner.api.dependencies.SLOTemplateRepository"),
         patch("planner.api.dependencies.DeploymentGenerator"),
         patch("planner.api.dependencies.YAMLValidator"),
-        patch("planner.recommendation.quality.usecase_scorer.UseCaseQualityScorer") as mock_qs_cls,
+        patch(
+            "planner.recommendation.quality.scoring.build_scoring_engine",
+            return_value=(mock_engine, {}),
+        ),
+        patch(
+            "planner.recommendation.quality.scoring.load_quality_weights", return_value=mock_weights
+        ),
+        patch("planner.recommendation.quality.scoring.validate_quality_weights"),
         patch("planner.recommendation.config_finder.ConfigFinder") as mock_cf_cls,
     ):
         deps.init_app_state(app)
@@ -74,9 +83,11 @@ def test_model_catalog_mode_creates_client_and_syncs():
         # Client created
         mock_client_cls.assert_called_once()
 
-        # Workflow wired with shared ConfigFinder using shared instances
+        # Workflow wired with ConfigFinder using engine and quality weights
         mock_cf_cls.assert_called_once_with(
-            catalog=mock_mc.return_value, quality_scorer=mock_qs_cls.return_value
+            catalog=mock_mc.return_value,
+            engine=mock_engine,
+            quality_weights=mock_weights,
         )
         mock_wf_cls.assert_called_once_with(config_finder=mock_cf_cls.return_value)
 
@@ -92,16 +103,30 @@ def test_model_catalog_mode_creates_client_and_syncs():
 def test_postgresql_workflow_uses_defaults():
     """When source is postgresql, init_app_state() creates RecommendationWorkflow with shared catalog."""
     app = _make_mock_app()
+    mock_engine = MagicMock()
+    mock_weights = {"chatbot": {"categories": {"overall": 5}}}
     with (
         patch("planner.api.dependencies.RecommendationWorkflow") as mock_wf_cls,
         patch("planner.api.dependencies.ModelCatalog") as mock_mc,
         patch("planner.api.dependencies.SLOTemplateRepository"),
         patch("planner.api.dependencies.DeploymentGenerator"),
         patch("planner.api.dependencies.YAMLValidator"),
+        patch(
+            "planner.recommendation.quality.scoring.build_scoring_engine",
+            return_value=(mock_engine, {}),
+        ),
+        patch(
+            "planner.recommendation.quality.scoring.load_quality_weights", return_value=mock_weights
+        ),
+        patch("planner.recommendation.quality.scoring.validate_quality_weights"),
         patch("planner.recommendation.config_finder.ConfigFinder") as mock_cf_cls,
     ):
         deps.init_app_state(app)
-        mock_cf_cls.assert_called_once_with(catalog=mock_mc.return_value)
+        mock_cf_cls.assert_called_once_with(
+            catalog=mock_mc.return_value,
+            engine=mock_engine,
+            quality_weights=mock_weights,
+        )
         mock_wf_cls.assert_called_once_with(config_finder=mock_cf_cls.return_value)
         assert app.state.workflow == mock_wf_cls.return_value
         assert app.state.model_catalog_client is None
@@ -118,6 +143,12 @@ def test_init_app_state_sets_all_singletons():
         patch("planner.api.dependencies.SLOTemplateRepository") as mock_slo,
         patch("planner.api.dependencies.DeploymentGenerator") as mock_dg,
         patch("planner.api.dependencies.YAMLValidator") as mock_yv,
+        patch(
+            "planner.recommendation.quality.scoring.build_scoring_engine",
+            return_value=(MagicMock(), {}),
+        ),
+        patch("planner.recommendation.quality.scoring.load_quality_weights", return_value={}),
+        patch("planner.recommendation.quality.scoring.validate_quality_weights"),
         patch("planner.recommendation.config_finder.ConfigFinder"),
     ):
         deps.init_app_state(app)
