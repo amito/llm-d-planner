@@ -1,0 +1,170 @@
+from __future__ import annotations
+
+import enum
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from quality_scoring.resolver import MatchResult
+
+
+class MatchType(enum.Enum):
+    EXACT = "exact"
+    EQUIVALENT = "equivalent"
+    FUZZY = "fuzzy"
+    NONE = "none"
+
+
+@dataclass
+class RankEntry:
+    """A model's position in a ranking."""
+
+    rank: int
+    model_name: str
+    score: float
+    extra: dict[str, str | float] = field(default_factory=dict)
+
+
+@dataclass
+class ComparisonTable:
+    """A table comparing models across dimensions."""
+
+    title: str
+    headers: list[str]
+    rows: list[list[str]]
+    alignments: list[str] | None = None
+
+
+@dataclass
+class HeadToHead:
+    """Head-to-head comparison between two models."""
+
+    model_a: str
+    model_b: str
+    dimensions: list[str]
+    a_scores: list[float]
+    b_scores: list[float]
+    deltas: list[float]
+    a_wins: int = 0
+    b_wins: int = 0
+    ties: int = 0
+
+
+@dataclass
+class DistributionStats:
+    """Population-level statistics for a score distribution."""
+
+    count: int
+    min: float
+    max: float
+    median: float
+    mean: float
+    stdev: float
+    p25: float
+    p75: float
+
+
+@dataclass
+class SourceData:
+    """All data produced by a single data source for a comparison."""
+
+    source_name: str
+    source_description: str
+    methodology: str
+    global_rankings: list[ComparisonTable] = field(default_factory=list)
+    comparison_tables: list[ComparisonTable] = field(default_factory=list)
+    head_to_heads: list[HeadToHead] = field(default_factory=list)
+    findings: list[str] = field(default_factory=list)
+    models_found: list[str] = field(default_factory=list)
+    models_not_found: list[str] = field(default_factory=list)
+    suggestions: dict[str, list[str]] = field(default_factory=dict)
+    match_details: dict[str, str] = field(default_factory=dict)
+    cache_status: str | None = None
+    distribution_stats: DistributionStats | None = None
+    chart_path: Path | None = None
+    chart_models: list[dict[str, object]] = field(default_factory=list)
+
+
+@dataclass
+class ResolutionReport:
+    """Result of resolving model names against a source's known models."""
+
+    results: list[MatchResult]
+    available_names: list[str]
+
+
+@dataclass
+class ComparisonResult:
+    """Complete comparison result from all sources."""
+
+    model_names: list[str]
+    sources: list[SourceData] = field(default_factory=list)
+    overall_conclusions: list[str] = field(default_factory=list)
+    scorecards: list[ModelScorecard] = field(default_factory=list)
+    category_findings: list[CategoryFinding] = field(default_factory=list)
+    arena_weight: float = 0.5
+    aa_weight: float = 0.5
+    composite_chart_path: Path | None = None
+
+
+@dataclass
+class NormalizedScore:
+    """A model's normalized score in a single category from a single source."""
+
+    raw_score: float
+    percentile: float
+    tied_rank: int
+    population_size: int
+    source: str
+    confidence: float = 1.0
+    adjustment: str | None = None
+
+
+@dataclass
+class CompositeScore:
+    """A model's composite score in a single category."""
+
+    category: str
+    percentile: float
+    arena_score: NormalizedScore | None
+    aa_score: NormalizedScore | None
+
+    @property
+    def provenance(self) -> str:
+        if self.arena_score and self.aa_score:
+            return "both"
+        if self.arena_score:
+            return "arena_only"
+        if self.aa_score:
+            return "aa_only"
+        return "none"
+
+
+@dataclass
+class ModelScorecard:
+    """Complete scoring profile for a single model."""
+
+    model_name: str
+    arena_name: str | None
+    aa_name: str | None
+    arena_match_type: MatchType | None = None
+    aa_match_type: MatchType | None = None
+    overall: CompositeScore | None = None
+    categories: dict[str, CompositeScore] = field(default_factory=dict)
+
+
+@dataclass
+class CategoryFinding:
+    """Structured per-category finding for template rendering.
+
+    ranked_models is sorted descending by percentile — all models
+    with data in this category, not just the top and bottom.
+    """
+
+    category: str
+    display_name: str
+    ranked_models: list[tuple[str, float]]
+    gap_description: str
+    provenance: str
+    variant_notes: list[str] = field(default_factory=list)

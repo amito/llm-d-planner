@@ -417,7 +417,7 @@ clean-deployments: ## Delete all InferenceServices from cluster
 	kubectl delete inferenceservices --all
 	@printf "$(GREEN)✓ All deployments deleted$(NC)\n"
 
-##@ PostgreSQL Database
+##@ Data
 
 db-start: ## Start PostgreSQL (initializes schema on first run)
 	@printf "$(BLUE)Starting PostgreSQL...$(NC)\n"
@@ -515,6 +515,19 @@ db-query-models: ## Query available models in database
 
 db-reset: db-remove db-start ## Reset PostgreSQL (remove and reinitialize)
 	@printf "$(GREEN)✓ PostgreSQL reset complete$(NC)\n"
+
+quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
+	@printf "$(BLUE)Syncing Arena leaderboard (no API key needed)...$(NC)\n"
+	@LLM_QUALITY_CACHE_DIR=data/quality uv run python -c "from quality_scoring.arena_client import sync; count, path = sync(); print(f'Arena: {count} rows')"
+	@printf "$(BLUE)Syncing AA models (requires AA_API_KEY)...$(NC)\n"
+	@if [ -n "$$AA_API_KEY" ]; then \
+		LLM_QUALITY_CACHE_DIR=data/quality uv run python -c "from quality_scoring.aa_client import sync; count, path = sync(api_key='$$AA_API_KEY'); print(f'AA: {count} models')"; \
+	else \
+		printf "$(YELLOW)⚠ AA_API_KEY not set — skipping AA sync$(NC)\n"; \
+	fi
+	@printf "$(BLUE)Formatting JSON files for readable diffs...$(NC)\n"
+	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['data/quality/arena_models.json', 'data/quality/aa_models.json', 'data/quality/arena_dist.json', 'data/quality/aa_dist.json'] if pathlib.Path(f).is_file()]"
+	@printf "$(GREEN)✓ Quality data synced to data/quality/$(NC)\n"
 
 ##@ Testing
 

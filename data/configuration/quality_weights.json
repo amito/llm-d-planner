@@ -1,0 +1,80 @@
+{
+  "_description": "Default category weights per use case for quality scoring. Categories map to quality_scoring benchmark dimensions (Arena + Artificial Analysis). Weights are relative integers (normalized internally). Composited categories (overall, coding, math) combine both Arena and AA data.",
+  "chatbot_conversational": {
+    "categories": {
+      "overall": 4,
+      "instruction_following": 3,
+      "multi_turn": 3,
+      "creative_writing": 2,
+      "hard_prompts": 2
+    }
+  },
+  "code_completion": {
+    "categories": {
+      "coding": 5,
+      "livecodebench": 3,
+      "math": 2,
+      "scicode": 2
+    }
+  },
+  "code_generation_detailed": {
+    "categories": {
+      "coding": 4,
+      "livecodebench": 3,
+      "math": 2,
+      "instruction_following": 2,
+      "hard_prompts": 1,
+      "scicode": 1
+    }
+  },
+  "translation": {
+    "categories": {
+      "overall": 4,
+      "instruction_following": 3,
+      "creative_writing": 2,
+      "longer_query": 2
+    }
+  },
+  "content_generation": {
+    "categories": {
+      "creative_writing": 4,
+      "instruction_following": 3,
+      "overall": 3,
+      "hard_prompts": 1
+    }
+  },
+  "summarization_short": {
+    "categories": {
+      "overall": 4,
+      "instruction_following": 4,
+      "longer_query": 2
+    }
+  },
+  "document_analysis_rag": {
+    "categories": {
+      "overall": 3,
+      "expert": 3,
+      "longer_query": 2,
+      "instruction_following": 2,
+      "mmlu_pro": 1,
+      "industry_software_and_it_services": 1
+    }
+  },
+  "long_document_summarization": {
+    "categories": {
+      "longer_query": 4,
+      "overall": 3,
+      "instruction_following": 3
+    }
+  },
+  "research_legal_analysis": {
+    "categories": {
+      "expert": 3,
+      "overall": 3,
+      "industry_legal_and_government": 2,
+      "hard_prompts": 2,
+      "gpqa": 1,
+      "industry_life_and_physical_and_social_science": 1
+    }
+  }
+}
