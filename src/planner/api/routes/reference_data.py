@@ -1,6 +1,5 @@
 """Reference data endpoints (models, GPU types, benchmarks, etc.)."""
 
-import csv
 import json
 import logging
 from pathlib import Path
@@ -84,56 +83,3 @@ async def get_priority_weights():
     except Exception as e:
         logger.error(f"Failed to load priority weights: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e
-
-
-@router.get("/weighted-scores/{use_case}")
-async def get_weighted_scores(use_case: str):
-    """Get use-case-specific weighted scores from CSV."""
-    try:
-        # Map use case to CSV filename
-        use_case_to_file = {
-            "chatbot_conversational": "opensource_chatbot_conversational.csv",
-            "code_completion": "opensource_code_completion.csv",
-            "code_generation_detailed": "opensource_code_generation_detailed.csv",
-            "document_analysis_rag": "opensource_document_analysis_rag.csv",
-            "summarization_short": "opensource_summarization_short.csv",
-            "long_document_summarization": "opensource_long_document_summarization.csv",
-            "translation": "opensource_translation.csv",
-            "content_generation": "opensource_content_generation.csv",
-            "research_legal_analysis": "opensource_research_legal_analysis.csv",
-        }
-
-        filename = use_case_to_file.get(use_case)
-        if not filename:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid use case: {use_case}. Valid options: {list(use_case_to_file.keys())}",
-            )
-
-        csv_path = _get_data_path() / "benchmarks" / "accuracy" / "weighted_scores" / filename
-
-        if not csv_path.exists():
-            logger.error(f"Weighted scores CSV not found at: {csv_path}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Weighted scores file not found for use case: {use_case}",
-            )
-
-        # Read CSV using built-in csv module
-        records = []
-        with open(csv_path, encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                records.append(row)
-
-        logger.info(f"Loaded {len(records)} weighted score records for use case: {use_case}")
-
-        return {"success": True, "use_case": use_case, "count": len(records), "scores": records}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to load weighted scores: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to load weighted scores: {str(e)}",
-        ) from e

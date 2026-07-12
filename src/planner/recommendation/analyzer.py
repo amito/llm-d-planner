@@ -17,7 +17,7 @@ class Analyzer:
     def generate_ranked_lists(
         self,
         configurations: list[DeploymentRecommendation],
-        min_accuracy: int | None = None,
+        min_quality: float | None = None,
         max_cost: float | None = None,
         top_n: int = 5,
         weights: dict[str, int] | None = None,
@@ -29,30 +29,30 @@ class Analyzer:
 
         Args:
             configurations: List of scored DeploymentRecommendations
-            min_accuracy: Minimum accuracy score filter (0-100)
+            min_quality: Minimum quality score filter (0-100)
             max_cost: Maximum monthly cost filter (USD)
             top_n: Number of top configurations to return per list
             weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency
+                     Keys: quality, price, latency
             use_case: Use case identifier (unused, kept for API compatibility)
-            preferred_models: User-specified models that bypass min_accuracy filter
+            preferred_models: User-specified models that bypass min_quality filter
 
         Returns:
-            Dict with keys: best_accuracy, lowest_cost, lowest_latency, balanced
+            Dict with keys: best_quality, lowest_cost, lowest_latency, balanced
         """
-        filtered = self._apply_filters(configurations, min_accuracy, max_cost, preferred_models)
+        filtered = self._apply_filters(configurations, min_quality, max_cost, preferred_models)
 
         if not filtered:
             logger.warning("No configurations remain after filtering")
             return {
-                "best_accuracy": [],
+                "best_quality": [],
                 "lowest_cost": [],
                 "lowest_latency": [],
                 "balanced": [],
             }
 
-        def get_accuracy(x):
-            return x.scores.accuracy_score if x.scores else 0
+        def get_quality(x):
+            return x.scores.quality_score if x.scores else 0
 
         def get_cost_inverted(x):
             cost = x.cost_per_month_usd or float("inf")
@@ -78,29 +78,29 @@ class Analyzer:
                         break
             return result
 
-        sorted_by_accuracy = sorted(
+        sorted_by_quality = sorted(
             filtered,
-            key=lambda x: (get_accuracy(x), get_cost_inverted(x), get_latency(x)),
+            key=lambda x: (get_quality(x), get_cost_inverted(x), get_latency(x)),
             reverse=True,
         )
         sorted_by_cost = sorted(
             filtered,
-            key=lambda x: (get_cost_inverted(x), get_accuracy(x), get_latency(x)),
+            key=lambda x: (get_cost_inverted(x), get_quality(x), get_latency(x)),
             reverse=True,
         )
         sorted_by_balanced = sorted(
             filtered,
-            key=lambda x: (get_balanced(x), get_accuracy(x), get_cost_inverted(x)),
+            key=lambda x: (get_balanced(x), get_quality(x), get_cost_inverted(x)),
             reverse=True,
         )
 
         ranked_lists = {
-            "best_accuracy": deduplicate_by_model(sorted_by_accuracy, top_n),
+            "best_quality": deduplicate_by_model(sorted_by_quality, top_n),
             "lowest_cost": deduplicate_by_model(sorted_by_cost, top_n),
             "lowest_latency": deduplicate_by_model(
                 sorted(
                     filtered,
-                    key=lambda x: (get_latency(x), get_accuracy(x), get_cost_inverted(x)),
+                    key=lambda x: (get_latency(x), get_quality(x), get_cost_inverted(x)),
                     reverse=True,
                 ),
                 top_n,
@@ -117,34 +117,34 @@ class Analyzer:
     def _apply_filters(
         self,
         configs: list[DeploymentRecommendation],
-        min_accuracy: int | None,
+        min_quality: float | None,
         max_cost: float | None,
         preferred_models: list[str] | None = None,
     ) -> list[DeploymentRecommendation]:
         """
-        Apply accuracy and cost filters to configurations.
+        Apply quality and cost filters to configurations.
 
         Args:
             configs: List of configurations to filter
-            min_accuracy: Minimum accuracy score (0-100), None = no filter
+            min_quality: Minimum quality score (0-100), None = no filter
             max_cost: Maximum monthly cost (USD), None = no filter
-            preferred_models: User-specified models that bypass min_accuracy filter
+            preferred_models: User-specified models that bypass min_quality filter
 
         Returns:
             Filtered list of configurations
         """
         filtered = configs
 
-        # Filter by minimum accuracy — exempt user-specified preferred models
-        if min_accuracy is not None and min_accuracy > 0:
+        # Filter by minimum quality — exempt user-specified preferred models
+        if min_quality is not None and min_quality > 0:
             preferred_set = {m.lower() for m in preferred_models} if preferred_models else set()
             filtered = [
                 c
                 for c in filtered
-                if (c.scores and c.scores.accuracy_score >= min_accuracy)
+                if (c.scores and c.scores.quality_score >= min_quality)
                 or (c.model_id and c.model_id.lower() in preferred_set)
             ]
-            logger.debug(f"After min_accuracy={min_accuracy} filter: {len(filtered)} configs")
+            logger.debug(f"After min_quality={min_quality} filter: {len(filtered)} configs")
 
         # Filter by maximum cost
         if max_cost is not None and max_cost > 0:
@@ -164,7 +164,7 @@ class Analyzer:
         Count unique configurations across all ranked lists.
 
         Since the same configuration may appear in multiple lists
-        (e.g., best accuracy AND lowest cost), this counts unique ones.
+        (e.g., best quality AND lowest cost), this counts unique ones.
 
         Args:
             ranked_lists: Dict of ranked lists

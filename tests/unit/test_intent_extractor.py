@@ -18,7 +18,7 @@ def _base_intent(**overrides) -> dict:
         "use_case": "chatbot_conversational",
         "experience_class": "conversational",
         "user_count": 500,
-        "accuracy_priority": "medium",
+        "quality_priority": "medium",
         "cost_priority": "medium",
         "latency_priority": "medium",
     }
@@ -135,7 +135,7 @@ def test_clean_llm_output_does_not_match_garbage(extractor, garbage):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_true_preserves_priority(extractor, prefix):
     """When *_mentioned is true, the LLM's priority is kept."""
     raw = _base_intent(
@@ -149,7 +149,7 @@ def test_mentioned_true_preserves_priority(extractor, prefix):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_false_resets_non_medium_priority(extractor, prefix):
     """When *_mentioned is false, a non-medium priority is forced to medium."""
     raw = _base_intent(
@@ -163,7 +163,7 @@ def test_mentioned_false_resets_non_medium_priority(extractor, prefix):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_false_keeps_medium_priority(extractor, prefix):
     """When *_mentioned is false but priority is already medium, no change needed."""
     raw = _base_intent(
@@ -177,7 +177,7 @@ def test_mentioned_false_keeps_medium_priority(extractor, prefix):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_missing_defaults_to_trust(extractor, prefix):
     """When *_mentioned is absent, the priority is trusted (default True)."""
     raw = _base_intent(**{f"{prefix}_priority": "high"})
@@ -187,7 +187,7 @@ def test_mentioned_missing_defaults_to_trust(extractor, prefix):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_string_true_preserves_priority(extractor, prefix):
     """String 'true' is parsed correctly as truthy."""
     raw = _base_intent(
@@ -201,7 +201,7 @@ def test_mentioned_string_true_preserves_priority(extractor, prefix):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_string_false_resets_priority(extractor, prefix):
     """String 'false' is parsed correctly as falsy."""
     raw = _base_intent(
@@ -215,7 +215,7 @@ def test_mentioned_string_false_resets_priority(extractor, prefix):
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("prefix", ["accuracy", "cost", "latency"])
+@pytest.mark.parametrize("prefix", ["quality", "cost", "latency"])
 def test_mentioned_string_False_case_insensitive(extractor, prefix):
     """String 'False' (capitalized) is treated as falsy."""
     raw = _base_intent(
@@ -232,7 +232,7 @@ def test_mentioned_string_False_case_insensitive(extractor, prefix):
 def test_mentioned_fields_not_in_cleaned_output(extractor):
     """*_mentioned fields are consumed and not passed through to the final dict."""
     raw = _base_intent(
-        accuracy_mentioned=True,
+        quality_mentioned=True,
         cost_mentioned=False,
         latency_mentioned=True,
     )
@@ -245,15 +245,15 @@ def test_mentioned_fields_not_in_cleaned_output(extractor):
 def test_mentioned_false_resets_multiple_priorities(extractor):
     """All three priorities can be independently gated by their *_mentioned flags."""
     raw = _base_intent(
-        accuracy_priority="high",
-        accuracy_mentioned=True,
+        quality_priority="high",
+        quality_mentioned=True,
         cost_priority="low",
         cost_mentioned=False,
         latency_priority="high",
         latency_mentioned=False,
     )
     cleaned = extractor._clean_llm_output(raw)
-    assert cleaned["accuracy_priority"] == "high"
+    assert cleaned["quality_priority"] == "high"
     assert cleaned["cost_priority"] == "medium"
     assert cleaned["latency_priority"] == "medium"
 

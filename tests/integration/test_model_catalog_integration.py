@@ -44,17 +44,14 @@ def test_sync_writes_to_postgresql(client):
 
     from planner.knowledge_base.model_catalog import ModelCatalog
     from planner.knowledge_base.model_catalog_sync import sync_model_catalog
-    from planner.recommendation.quality.usecase_scorer import UseCaseQualityScorer
 
     conn = psycopg2.connect(db_url)
     try:
         catalog = ModelCatalog()
-        scorer = UseCaseQualityScorer()
         result = sync_model_catalog(
             client=client,
             conn=conn,
             model_catalog=catalog,
-            quality_scorer=scorer,
         )
         assert len(result.errors) == 0
         if result.benchmarks_inserted == 0:

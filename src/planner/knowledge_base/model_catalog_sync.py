@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import logging
@@ -18,7 +17,6 @@ from psycopg2.extras import execute_batch
 if TYPE_CHECKING:
     from planner.knowledge_base.model_catalog import ModelCatalog, ModelInfo
     from planner.knowledge_base.model_catalog_client import ModelCatalogClient
-    from planner.recommendation.quality.usecase_scorer import UseCaseQualityScorer
 
 logger = logging.getLogger(__name__)
 
@@ -232,9 +230,8 @@ def sync_model_catalog(
     client: ModelCatalogClient,
     conn: pg_connection,
     model_catalog: ModelCatalog,
-    quality_scorer: UseCaseQualityScorer,
 ) -> SyncResult:
-    """Sync Model Catalog data into PostgreSQL, ModelCatalog, and quality scorer."""
+    """Sync Model Catalog data into PostgreSQL and ModelCatalog."""
     result = SyncResult()
 
     try:
@@ -246,7 +243,6 @@ def sync_model_catalog(
 
     rows: list[dict] = []
     model_infos: list[ModelInfo] = []
-    accuracy_scores: dict[str, float] = {}
 
     for model in models:
         model_name = model.get("name", "")
@@ -283,12 +279,6 @@ def sync_model_catalog(
                     continue
                 if row is not None:
                     rows.append(row)
-            elif a_type == "metrics-artifact" and m_type == "accuracy-metrics":
-                props = artifact.get("customProperties", {})
-                avg = props.get("overall_average") if isinstance(props, dict) else None
-                if isinstance(avg, dict):
-                    with contextlib.suppress(ValueError, TypeError):
-                        accuracy_scores[model_name.lower()] = float(avg.get("double_value", 0))
 
     if rows:
         if result.errors:
@@ -311,10 +301,7 @@ def sync_model_catalog(
 
     if model_infos:
         result.models_merged = model_catalog.merge_external_models(model_infos)
-    if accuracy_scores:
-        quality_scorer.set_catalog_fallback(accuracy_scores)
-        result.quality_scores_loaded = len(accuracy_scores)
 
-    logger.info("Sync complete: %d benchmarks, %d models, %d scores",
-                result.benchmarks_inserted, result.models_merged, result.quality_scores_loaded)  # fmt: skip
+    logger.info("Sync complete: %d benchmarks, %d models",
+                result.benchmarks_inserted, result.models_merged)  # fmt: skip
     return result

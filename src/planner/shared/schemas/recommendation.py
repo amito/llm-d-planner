@@ -20,7 +20,7 @@ class GPUConfig(BaseModel):
 class ConfigurationScores(BaseModel):
     """Scores for a deployment configuration (0-100 scale)."""
 
-    accuracy_score: int = Field(..., description="Model accuracy/capability score (0-100)")
+    quality_score: float = Field(..., description="Model quality/capability score (0-100)")
     price_score: int = Field(..., description="Cost efficiency score - inverse of cost (0-100)")
     latency_score: int = Field(..., description="SLO headroom score (0-100)")
     balanced_score: float = Field(..., description="Weighted composite score (0-100)")
@@ -109,8 +109,8 @@ class RankedRecommendationsResponse(BaseModel):
     """
 
     # Filters applied
-    min_accuracy_threshold: int | None = Field(
-        default=None, description="Minimum accuracy score filter applied"
+    min_quality_threshold: float | None = Field(
+        default=None, description="Minimum quality score filter applied"
     )
     max_cost_ceiling: float | None = Field(
         default=None, description="Maximum monthly cost filter applied (USD)"
@@ -125,8 +125,8 @@ class RankedRecommendationsResponse(BaseModel):
     )
 
     # Ranked lists (top 5 each, sorted by respective criterion)
-    best_accuracy: list[DeploymentRecommendation] = Field(
-        default_factory=list, description="Top configs sorted by accuracy score"
+    best_quality: list[DeploymentRecommendation] = Field(
+        default_factory=list, description="Top configs sorted by quality score"
     )
     lowest_cost: list[DeploymentRecommendation] = Field(
         default_factory=list, description="Top configs sorted by price score"

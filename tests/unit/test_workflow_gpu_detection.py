@@ -77,7 +77,7 @@ class TestWorkflowGPUDetection:
         # Mock Analyzer to avoid complex schema validation
         mock_analyzer = mock_analyzer_cls.return_value
         mock_analyzer.generate_ranked_lists.return_value = {
-            "best_accuracy": [],
+            "best_quality": [],
             "lowest_cost": [],
             "lowest_latency": [],
             "balanced": [],

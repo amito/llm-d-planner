@@ -25,7 +25,7 @@ class SimpleRecommendationRequest(BaseModel):
 class BalancedWeights(BaseModel):
     """Weights for balanced score calculation (0-10 scale)."""
 
-    accuracy: int = 4
+    quality: int = 4
     price: int = 4
     latency: int = 1
 
@@ -60,7 +60,7 @@ class RankedRecommendationFromSpecRequest(BaseModel):
     enable_estimated: bool = True  # Run roofline estimation for missing benchmarks
 
     # Ranking options
-    min_accuracy: int | None = None
+    min_quality: float | None = None
     max_cost: float | None = None
     include_near_miss: bool = True
     weights: BalancedWeights | None = None
@@ -172,7 +172,7 @@ def ranked_recommend_from_spec(
 
     Returns 4 ranked views of deployment configurations:
     - balanced: Weighted composite score
-    - best_accuracy: Top configs by model capability
+    - best_quality: Top configs by model capability
     - lowest_cost: Top configs by price efficiency
     - lowest_latency: Top configs by SLO headroom
 
@@ -198,13 +198,13 @@ def ranked_recommend_from_spec(
         logger.info(f"  ttft_target_ms: {request.ttft_target_ms}ms")
         logger.info(f"  itl_target_ms: {request.itl_target_ms}ms")
         logger.info(f"  e2e_target_ms: {request.e2e_target_ms}ms")
-        logger.info(f"  min_accuracy: {request.min_accuracy}")
+        logger.info(f"  min_quality: {request.min_quality}")
         logger.info(f"  max_cost: {request.max_cost}")
         logger.info(f"  include_near_miss: {request.include_near_miss}")
         logger.info(f"  enable_estimated: {request.enable_estimated}")
         if request.weights:
             logger.info(
-                f"  weights: accuracy={request.weights.accuracy}, price={request.weights.price}, "
+                f"  weights: quality={request.weights.quality}, price={request.weights.price}, "
                 f"latency={request.weights.latency}"
             )
         else:
@@ -237,7 +237,7 @@ def ranked_recommend_from_spec(
         weights_dict = None
         if request.weights:
             weights_dict = {
-                "accuracy": request.weights.accuracy,
+                "quality": request.weights.quality,
                 "price": request.weights.price,
                 "latency": request.weights.latency,
             }
@@ -245,7 +245,7 @@ def ranked_recommend_from_spec(
         # Generate ranked recommendations from specs
         response = workflow.generate_ranked_recommendations_from_spec(
             specifications=specifications,
-            min_accuracy=request.min_accuracy,
+            min_quality=request.min_quality,
             max_cost=request.max_cost,
             include_near_miss=request.include_near_miss,
             weights=weights_dict,

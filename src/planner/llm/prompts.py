@@ -36,8 +36,8 @@ Schema:
   "domain_specialization": [],
   "preferred_gpu_types": [],
   "preferred_models": [],
-  "accuracy_mentioned": false,
-  "accuracy_priority": "medium",
+  "quality_mentioned": false,
+  "quality_priority": "medium",
   "cost_mentioned": false,
   "cost_priority": "medium",
   "latency_mentioned": false,
@@ -93,7 +93,7 @@ MODELS:
 * If the message contains a Hugging Face model ID, copy it exactly into preferred_models.
 * If no model is explicitly mentioned => [].
 
-ACCURACY / COST / LATENCY:
+QUALITY / COST / LATENCY:
 
 * Set *_mentioned = true ONLY if that topic is explicitly stated.
 * NEVER infer these fields from use_case or context.
@@ -101,7 +101,7 @@ ACCURACY / COST / LATENCY:
 * *_priority measures importance to the user.
 * Wanting lower cost means cost_priority = "high".
 * Wanting lower latency or faster responses means latency_priority = "high".
-* Saying quality, accuracy, or correctness is critical means accuracy_priority = "high".
+* Saying quality, accuracy, or correctness is critical means quality_priority = "high".
 * Saying a topic is unimportant, does not matter, or is not a concern means that topic's priority = "low".
 * Otherwise, when explicitly mentioned but not strongly emphasized => "medium".
 

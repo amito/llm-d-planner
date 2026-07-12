@@ -109,7 +109,7 @@ def assert_intent_matches(intent: DeploymentIntent, expected: dict) -> None:
 
     # Priority fields
     for field in [
-        "accuracy_priority",
+        "quality_priority",
         "cost_priority",
         "latency_priority",
     ]:

@@ -286,9 +286,9 @@ class TestSyncModelCatalog:
     def test_full_flow(self, mock_execute_batch):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, quality_scorer = self._build_mocks()
+        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
 
-        result = sync_model_catalog(client, conn, model_catalog, quality_scorer)
+        result = sync_model_catalog(client, conn, model_catalog)
 
         # DELETE was called for model_catalog source
         delete_calls = [c for c in cursor.execute.call_args_list if "DELETE" in str(c)]
@@ -307,24 +307,17 @@ class TestSyncModelCatalog:
         assert len(merged_models) == 1
         assert merged_models[0].model_id == "RedHatAI/granite-3.1-8b-instruct"
 
-        # set_catalog_fallback was called with scores dict
-        quality_scorer.set_catalog_fallback.assert_called_once()
-        scores = quality_scorer.set_catalog_fallback.call_args[0][0]
-        assert "redhatai/granite-3.1-8b-instruct" in scores
-        assert scores["redhatai/granite-3.1-8b-instruct"] == pytest.approx(72.5)
-
         # SyncResult fields
         assert result.benchmarks_inserted == 1
         assert result.models_merged == 1
-        assert result.quality_scores_loaded == 1
         assert result.errors == []
 
     @patch("planner.knowledge_base.model_catalog_sync.execute_batch")
     def test_transaction_committed(self, mock_execute_batch):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, quality_scorer = self._build_mocks()
-        sync_model_catalog(client, conn, model_catalog, quality_scorer)
+        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
+        sync_model_catalog(client, conn, model_catalog)
 
         conn.commit.assert_called()
 
@@ -332,10 +325,10 @@ class TestSyncModelCatalog:
     def test_db_error_rolls_back(self, mock_execute_batch):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, quality_scorer = self._build_mocks()
+        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
         mock_execute_batch.side_effect = Exception("DB error")
 
-        result = sync_model_catalog(client, conn, model_catalog, quality_scorer)
+        result = sync_model_catalog(client, conn, model_catalog)
 
         conn.rollback.assert_called_once()
         assert result.benchmarks_inserted == 0
@@ -345,7 +338,7 @@ class TestSyncModelCatalog:
     def test_skips_malformed_artifacts(self, mock_execute_batch):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, quality_scorer = self._build_mocks()
+        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
 
         # Add a malformed artifact (missing model_id)
         bad_artifact = _perf_artifact()
@@ -357,7 +350,7 @@ class TestSyncModelCatalog:
             _accuracy_artifact(overall_average=72.5),
         ]
 
-        result = sync_model_catalog(client, conn, model_catalog, quality_scorer)
+        result = sync_model_catalog(client, conn, model_catalog)
         # Only the valid artifact should be inserted
         assert result.benchmarks_inserted == 1
 
@@ -365,10 +358,10 @@ class TestSyncModelCatalog:
     def test_client_list_failure(self, mock_execute_batch):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, quality_scorer = self._build_mocks()
+        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
         client.list_models.side_effect = Exception("Network error")
 
-        result = sync_model_catalog(client, conn, model_catalog, quality_scorer)
+        result = sync_model_catalog(client, conn, model_catalog)
 
         assert result.benchmarks_inserted == 0
         assert result.models_merged == 0
