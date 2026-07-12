@@ -15,6 +15,7 @@ from planner.api.routes import (
     gpu_recommender_router,
     health_router,
     intent_router,
+    quality_router,
     recommendation_router,
     reference_data_router,
     specification_router,
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(configuration_router)
     app.include_router(reference_data_router)
     app.include_router(database_router)
+    app.include_router(quality_router)
 
     logger.info(f"Planner API starting with log level: {logging.getLevelName(log_level)}")
 

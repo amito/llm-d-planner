@@ -301,10 +301,10 @@ def render_use_case_input_tab(priority: str):
                 st.session_state.pop("_last_spec_fingerprint", None)
 
                 for key in [
-                    "accuracy_priority",
+                    "quality_priority",
                     "cost_priority",
                     "latency_priority",
-                    "weight_accuracy",
+                    "weight_quality",
                     "weight_cost",
                     "weight_latency",
                 ]:
@@ -317,15 +317,15 @@ def render_use_case_input_tab(priority: str):
                 pw_map = priority_config.get("priority_weights", {}) if priority_config else {}
                 defaults_cfg = priority_config.get("defaults", {}) if priority_config else {}
                 default_weights = defaults_cfg.get(
-                    "weights", {"accuracy": 5, "cost": 4, "latency": 2}
+                    "weights", {"quality": 5, "cost": 4, "latency": 2}
                 )
 
-                st.session_state.accuracy_priority = extraction.get("accuracy_priority", "medium")
+                st.session_state.quality_priority = extraction.get("quality_priority", "medium")
                 st.session_state.cost_priority = extraction.get("cost_priority", "medium")
                 st.session_state.latency_priority = extraction.get("latency_priority", "medium")
 
-                st.session_state.weight_accuracy = pw_map.get("accuracy", {}).get(
-                    st.session_state.accuracy_priority, default_weights["accuracy"]
+                st.session_state.weight_quality = pw_map.get("quality", {}).get(
+                    st.session_state.quality_priority, default_weights["quality"]
                 )
                 st.session_state.weight_cost = pw_map.get("cost", {}).get(
                     st.session_state.cost_priority, default_weights["cost"]
@@ -335,11 +335,11 @@ def render_use_case_input_tab(priority: str):
                 )
 
                 logger.info(
-                    f"Initialized priorities from extraction: accuracy={st.session_state.accuracy_priority}, "
+                    f"Initialized priorities from extraction: quality={st.session_state.quality_priority}, "
                     f"cost={st.session_state.cost_priority}, latency={st.session_state.latency_priority}"
                 )
                 logger.info(
-                    f"Initialized weights: accuracy={st.session_state.weight_accuracy}, "
+                    f"Initialized weights: quality={st.session_state.weight_quality}, "
                     f"cost={st.session_state.weight_cost}, latency={st.session_state.weight_latency}"
                 )
 
@@ -473,7 +473,7 @@ def render_results_tab(priority: str):
     percentile = st.session_state.get("slo_percentile", "p95")
 
     weights = {
-        "accuracy": st.session_state.get("weight_accuracy", 5),
+        "quality": st.session_state.get("weight_quality", 5),
         "price": st.session_state.get("weight_cost", 4),
         "latency": st.session_state.get("weight_latency", 2),
     }

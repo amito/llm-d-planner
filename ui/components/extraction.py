@@ -9,13 +9,13 @@ from api_client import fetch_catalog_model_ids, fetch_gpu_types
 
 def _format_priorities(extraction: dict) -> str:
     """Format priority display from extraction data."""
-    accuracy = extraction.get("accuracy_priority", "medium")
+    quality = extraction.get("quality_priority", "medium")
     cost = extraction.get("cost_priority", "medium")
     latency = extraction.get("latency_priority", "medium")
 
     parts = []
-    if accuracy != "medium":
-        parts.append(f"Accuracy: {accuracy.title()}")
+    if quality != "medium":
+        parts.append(f"Quality: {quality.title()}")
     if cost != "medium":
         parts.append(f"Cost: {cost.title()}")
     if latency != "medium":
@@ -99,10 +99,10 @@ def render_extraction_with_approval(extraction: dict):
             st.session_state.recommendation_result = None
             st.session_state.user_input = ""
             for key in [
-                "accuracy_priority",
+                "quality_priority",
                 "cost_priority",
                 "latency_priority",
-                "weight_accuracy",
+                "weight_quality",
                 "weight_cost",
                 "weight_latency",
             ]:
@@ -162,12 +162,12 @@ def render_extraction_edit_form(extraction: dict):
         )
 
     with col2:
-        priorities = ["balanced", "low_latency", "cost_saving", "high_accuracy", "high_throughput"]
+        priorities = ["balanced", "low_latency", "cost_saving", "high_quality", "high_throughput"]
         priority_labels = {
             "balanced": "Balanced",
             "low_latency": "Low Latency",
             "cost_saving": "Cost Saving",
-            "high_accuracy": "High Accuracy",
+            "high_quality": "High Quality",
             "high_throughput": "High Throughput",
         }
         current_priority = extraction.get("priority", "balanced")

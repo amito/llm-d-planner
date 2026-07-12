@@ -32,7 +32,7 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
     backend_scores = winner.get("scores", {}) or {}
     ui_breakdown = winner.get("score_breakdown", {}) or {}
     breakdown = {
-        "quality_score": backend_scores.get("accuracy_score", ui_breakdown.get("quality_score", 0)),
+        "quality_score": backend_scores.get("quality_score", ui_breakdown.get("quality_score", 0)),
         "latency_score": backend_scores.get("latency_score", ui_breakdown.get("latency_score", 0)),
         "cost_score": backend_scores.get("price_score", ui_breakdown.get("cost_score", 0)),
     }
@@ -155,12 +155,12 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
             unsafe_allow_html=True,
         )
 
-        w_accuracy = st.session_state.get("weight_accuracy", 5)
+        w_quality = st.session_state.get("weight_quality", 5)
         w_latency = st.session_state.get("weight_latency", 2)
         w_cost = st.session_state.get("weight_cost", 4)
-        w_total = w_accuracy + w_latency + w_cost
+        w_total = w_quality + w_latency + w_cost
         weights = {
-            "accuracy": w_accuracy / w_total if w_total > 0 else 0.33,
+            "quality": w_quality / w_total if w_total > 0 else 0.33,
             "latency": w_latency / w_total if w_total > 0 else 0.33,
             "cost": w_cost / w_total if w_total > 0 else 0.33,
         }
@@ -169,11 +169,11 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
         l_score = breakdown.get("latency_score", 0)
         c_score = breakdown.get("cost_score", 0)
 
-        q_contrib = q_score * weights["accuracy"]
+        q_contrib = q_score * weights["quality"]
         l_contrib = l_score * weights["latency"]
         c_contrib = c_score * weights["cost"]
 
-        render_score_bar("Accuracy", "", q_score, "score-bar-accuracy", q_contrib)
+        render_score_bar("Quality", "", q_score, "score-bar-quality", q_contrib)
         render_score_bar("Latency", "", l_score, "score-bar-latency", l_contrib)
         render_score_bar("Cost", "", c_score, "score-bar-cost", c_contrib)
 
@@ -189,7 +189,7 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
         <div style="padding: 1rem; border-radius: 0.75rem; margin-bottom: 1rem; ">
             <p style="margin: 0; font-size: 0.95rem; line-height: 1.6;">
                 <strong>{model_name}</strong> ranked highest for <strong>{use_case_display}</strong>
-                with a balanced score of <strong>{breakdown.get("quality_score", 0):.0f}</strong> accuracy,
+                with a balanced score of <strong>{breakdown.get("quality_score", 0):.0f}</strong> quality,
                 <strong>{breakdown.get("latency_score", 0):.0f}</strong> latency,
                 and <strong>{breakdown.get("cost_score", 0):.0f}</strong> cost efficiency.
             </p>
@@ -405,10 +405,10 @@ def show_category_dialog():
 
     category_config = {
         "balanced": {"title": "Balanced - Top 5", "field": "final", "top5_key": "top5_balanced"},
-        "accuracy": {
-            "title": "Best Accuracy - Top 5",
-            "field": "accuracy",
-            "top5_key": "top5_accuracy",
+        "quality": {
+            "title": "Best Quality - Top 5",
+            "field": "quality",
+            "top5_key": "top5_quality",
         },
         "latency": {
             "title": "Best Latency - Top 5",
@@ -479,7 +479,7 @@ def show_category_dialog():
             </div>
             <div style="display: flex; gap: 1rem; margin-bottom: 0.75rem; padding: 0.5rem;
                         border-radius: 8px;">
-                <span style="font-size: 0.8rem;">Acc: {scores["accuracy"]:.0f}</span>
+                <span style="font-size: 0.8rem;">Quality: {scores["quality"]:.0f}</span>
                 <span style="font-size: 0.8rem;">Lat: {scores["latency"]:.0f}</span>
                 <span style="font-size: 0.8rem;">Cost: {scores["cost"]:.0f}</span>
                 <span style="font-size: 0.8rem; font-weight: 600;">Final: {scores["final"]:.1f}</span>
@@ -538,7 +538,7 @@ def show_full_table_dialog():
 
     categories = [
         ("balanced", "Balanced"),
-        ("best_accuracy", "Best Accuracy"),
+        ("best_quality", "Best Quality"),
         ("lowest_cost", "Lowest Cost"),
         ("lowest_latency", "Lowest Latency"),
     ]
@@ -557,7 +557,7 @@ def show_full_table_dialog():
                 ttft = rec.get("predicted_ttft_p95_ms", 0)
                 cost = rec.get("cost_per_month_usd", 0)
                 scores = rec.get("scores", {}) or {}
-                accuracy = scores.get("accuracy_score", 0)
+                quality = scores.get("quality_score", 0)
                 balanced = scores.get("balanced_score", 0)
                 meets_slo = rec.get("meets_slo", False)
                 slo_icon = "Yes" if meets_slo else "No"
@@ -568,10 +568,10 @@ def show_full_table_dialog():
                     else ""
                 )
 
-                row = f'<tr ><td style="padding: 0.75rem 0.5rem;">{cat_display}</td><td style="padding: 0.75rem 0.5rem; font-weight: 500;">{model_name}</td><td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">{gpu_str}</td><td style="padding: 0.75rem 0.5rem; text-align: right; ">{ttft:.0f}ms</td><td style="padding: 0.75rem 0.5rem; text-align: right; ">${cost:,.0f}</td><td style="padding: 0.75rem 0.5rem; text-align: center; ">{accuracy:.0f}</td><td style="padding: 0.75rem 0.5rem; text-align: center; ">{balanced:.1f}</td><td style="padding: 0.75rem 0.5rem; text-align: center;">{slo_icon}</td></tr>'
+                row = f'<tr ><td style="padding: 0.75rem 0.5rem;">{cat_display}</td><td style="padding: 0.75rem 0.5rem; font-weight: 500;">{model_name}</td><td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">{gpu_str}</td><td style="padding: 0.75rem 0.5rem; text-align: right; ">{ttft:.0f}ms</td><td style="padding: 0.75rem 0.5rem; text-align: right; ">${cost:,.0f}</td><td style="padding: 0.75rem 0.5rem; text-align: center; ">{quality:.0f}</td><td style="padding: 0.75rem 0.5rem; text-align: center; ">{balanced:.1f}</td><td style="padding: 0.75rem 0.5rem; text-align: center;">{slo_icon}</td></tr>'
                 all_rows.append(row)
 
-    header = '<thead><tr ><th style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Category</th><th style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Model</th><th style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">GPU Config</th><th style="text-align: right; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">TTFT</th><th style="text-align: right; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Cost/mo</th><th style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Acc</th><th style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Score</th><th style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">SLO</th></tr></thead>'
+    header = '<thead><tr ><th style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Category</th><th style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Model</th><th style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">GPU Config</th><th style="text-align: right; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">TTFT</th><th style="text-align: right; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Cost/mo</th><th style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Quality</th><th style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Score</th><th style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">SLO</th></tr></thead>'
 
     table_html = f'<table style="width: 100%; border-collapse: collapse; border-radius: 8px;">{header}<tbody>{"".join(all_rows)}</tbody></table>'
 

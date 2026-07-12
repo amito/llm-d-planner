@@ -327,7 +327,7 @@ def fetch_ranked_recommendations(
         ttft_target_ms: TTFT SLO target
         itl_target_ms: ITL SLO target
         e2e_target_ms: E2E SLO target
-        weights: Optional dict with accuracy, price, latency weights (0-10)
+        weights: Optional dict with quality, price, latency weights (0-10)
         include_near_miss: Whether to include near-SLO configurations
         percentile: Which percentile to use for SLO comparison (mean, p90, p95, p99)
         preferred_gpu_types: Optional list of GPU types to filter by (empty = any GPU)
