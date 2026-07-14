@@ -16,6 +16,7 @@ from planner.capacity_planner import (
     get_text_config,
 )
 from planner.knowledge_base.model_catalog import ModelCatalog
+from planner.shared.utils import catalog_to_optimizer_gpu_name
 
 
 class CostManager:
@@ -167,6 +168,9 @@ class GPURecommender:
             # Use GPU-specific max_gpus if configured, otherwise use default
             num_gpus = self.max_gpus_per_type.get(gpu_name, self.max_gpus)
 
+            # Translate catalog GPU name to llm_optimizer's expected name
+            optimizer_gpu_name = catalog_to_optimizer_gpu_name(gpu_name)
+
             constraint_parts = []
             if self.max_ttft is not None:
                 constraint_parts.append(f"ttft:p95<={self.max_ttft}ms")
@@ -180,7 +184,7 @@ class GPURecommender:
                 model=self.model_id,
                 input_len=self.input_len,
                 output_len=self.output_len,
-                gpu=gpu_name,
+                gpu=optimizer_gpu_name,
                 num_gpus=num_gpus,
                 framework="vllm",
                 target="throughput",
