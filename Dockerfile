@@ -1,5 +1,5 @@
 # Backend Dockerfile for Planner
-FROM --platform=linux/amd64 python:3.14-slim
+FROM python:3.14-slim
 
 # Set working directory
 WORKDIR /app
@@ -23,6 +23,7 @@ RUN uv sync --frozen --no-dev --extra cluster --extra vertex --extra openai
 
 # Copy backend source code
 COPY src/planner ./src/planner
+COPY src/quality_scoring ./src/quality_scoring
 
 # Copy data files (Knowledge Base)
 COPY data ./data

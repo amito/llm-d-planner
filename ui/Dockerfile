@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy UI source code
 COPY ui ./ui
 
+# Copy quality weights config (used by slo.py for benchmark display)
+COPY data/configuration/quality_weights.json ./data/configuration/quality_weights.json
+
 # Copy Streamlit configuration
 COPY .streamlit ./.streamlit
 

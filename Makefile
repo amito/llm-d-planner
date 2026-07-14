@@ -286,21 +286,21 @@ open-backend: ## Open backend API docs in browser
 
 image-build-backend: ## Build backend container image
 	@printf "$(BLUE)Building backend image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
 	@printf "$(GREEN)✓ Backend image built:$(NC)\n"
 	@printf "  - $(BACKEND_IMAGE):$(BACKEND_TAG)\n"
 	@printf "  - $(BACKEND_FULL_IMAGE)\n"
 
 image-build-ui: ## Build UI container image
 	@printf "$(BLUE)Building UI image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f ui/Dockerfile -t $(UI_IMAGE):$(UI_TAG) -t $(UI_FULL_IMAGE) .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -f ui/Dockerfile -t $(UI_IMAGE):$(UI_TAG) -t $(UI_FULL_IMAGE) .
 	@printf "$(GREEN)✓ UI image built:$(NC)\n"
 	@printf "  - $(UI_IMAGE):$(UI_TAG)\n"
 	@printf "  - $(UI_FULL_IMAGE)\n"
 
 image-build-simulator: ## Build vLLM simulator container image
 	@printf "$(BLUE)Building simulator image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f $(SIMULATOR_DIR)/Dockerfile -t vllm-simulator:latest -t $(SIMULATOR_FULL_IMAGE) .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -f $(SIMULATOR_DIR)/Dockerfile -t vllm-simulator:latest -t $(SIMULATOR_FULL_IMAGE) .
 	@printf "$(GREEN)✓ Simulator image built:$(NC)\n"
 	@printf "  - vllm-simulator:latest\n"
 	@printf "  - $(SIMULATOR_FULL_IMAGE)\n"
