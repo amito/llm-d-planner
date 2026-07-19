@@ -29,7 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ui = [
-    "streamlit==1.59.1",
+    "streamlit==1.59.2",
     "plotly>=6.3.0",
     "matplotlib>=3.10.9",
 ]
@@ -46,7 +46,7 @@ dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "httpx==0.28.1",
-    "ruff==0.15.20",
+    "ruff==0.15.21",
     "mypy>=2.1.0",
     "types-PyYAML>=6.0.12.20260518",
     "types-requests>=2.33.0.20260518",
