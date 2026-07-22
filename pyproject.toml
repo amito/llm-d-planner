@@ -21,7 +21,7 @@ dependencies = [
     "pyyaml==6.0.3",
     # HTTP client
     "requests==2.34.2",
-    "huggingface_hub>=1.23.0",
+    "huggingface_hub>=1.24.0",
     "transformers>=5.14.1",
     "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git",
     "python-multipart>=0.0.32",
