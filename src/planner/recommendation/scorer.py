@@ -1,14 +1,13 @@
 """Solution scoring for multi-criteria recommendation ranking.
 
-Scores deployment configurations on 4 criteria (0-100 scale):
+Scores deployment configurations on 3 criteria (0-100 scale):
 - Accuracy/Quality: Model capability (from Artificial Analysis benchmarks or param count fallback)
 - Price: Cost efficiency (inverse of cost, normalized)
 - Latency: SLO compliance with capped scoring (from Andre's PostgreSQL benchmarks)
-- Complexity: Deployment simplicity (fewer GPUs = simpler)
 
 INTEGRATION NOTE:
 - Quality scoring: Uses Yuval's weighted_scores CSVs (Artificial Analysis benchmarks)
-- Latency/Price/Complexity: Uses Andre's scoring logic and benchmark data
+- Latency/Price: Uses Andre's scoring logic and benchmark data
 - Latency scoring uses min/max ranges from usecase_slo_workload.json to cap scoring
   (no extra credit for latencies below the "min" threshold)
 """
@@ -31,7 +30,7 @@ except ImportError:
 
 
 class Scorer:
-    """Score deployment configurations on 4 criteria (0-100 scale)."""
+    """Score deployment configurations on 3 criteria (0-100 scale)."""
 
     # Accuracy tiers based on model parameter count (in billions)
     # Larger models generally have higher accuracy/capability
@@ -52,24 +51,11 @@ class Scorer:
         480: 98,
     }
 
-    # Complexity scores based on total GPU count
-    COMPLEXITY_SCORES = {
-        1: 100,
-        2: 90,
-        3: 82,
-        4: 75,
-        5: 70,
-        6: 65,
-        7: 62,
-        8: 60,
-    }
-
     # Default weights for balanced score
     DEFAULT_WEIGHTS = {
-        "accuracy": 0.40,
-        "price": 0.40,
+        "accuracy": 0.45,
+        "price": 0.45,
         "latency": 0.10,
-        "complexity": 0.10,
     }
 
     def __init__(self):
@@ -369,34 +355,11 @@ class Scorer:
         )
         return score, slo_status
 
-    def score_complexity(self, total_gpu_count: int) -> int:
-        """
-        Score complexity based on deployment topology.
-
-        Args:
-            total_gpu_count: Total GPUs required (tensor_parallel * replicas)
-
-        Returns:
-            Score 0-100 (100 = simplest, lower = more complex)
-        """
-        # Use predefined scores or calculate for larger counts
-        if total_gpu_count in self.COMPLEXITY_SCORES:
-            score = self.COMPLEXITY_SCORES[total_gpu_count]
-        elif total_gpu_count > 8:
-            # Linear decay for very large deployments
-            score = max(40, 60 - (total_gpu_count - 8) * 2)
-        else:
-            score = 60
-
-        logger.debug(f"Complexity score for {total_gpu_count} GPUs: {score}")
-        return score
-
     def score_balanced(
         self,
         accuracy_score: int,
         price_score: int,
         latency_score: int,
-        complexity_score: int,
         weights: dict | None = None,
     ) -> float:
         """
@@ -406,9 +369,8 @@ class Scorer:
             accuracy_score: Accuracy score (0-100)
             price_score: Price score (0-100)
             latency_score: Latency score (0-100)
-            complexity_score: Complexity score (0-100)
-            weights: Optional custom weights (default: 40% accuracy, 40% price,
-                     10% latency, 10% complexity)
+            weights: Optional custom weights (default: 45% accuracy, 45% price,
+                     10% latency)
 
         Returns:
             Weighted composite score (0-100)
@@ -416,15 +378,12 @@ class Scorer:
         w = weights or self.DEFAULT_WEIGHTS
 
         balanced = (
-            accuracy_score * w["accuracy"]
-            + price_score * w["price"]
-            + latency_score * w["latency"]
-            + complexity_score * w["complexity"]
+            accuracy_score * w["accuracy"] + price_score * w["price"] + latency_score * w["latency"]
         )
 
         logger.debug(
             f"Balanced score: {balanced:.1f} "
-            f"(A={accuracy_score}, P={price_score}, L={latency_score}, C={complexity_score})"
+            f"(A={accuracy_score}, P={price_score}, L={latency_score})"
         )
         return round(balanced, 1)
 

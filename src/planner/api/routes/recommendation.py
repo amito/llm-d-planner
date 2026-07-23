@@ -28,7 +28,6 @@ class BalancedWeights(BaseModel):
     accuracy: int = 4
     price: int = 4
     latency: int = 1
-    complexity: int = 1
 
 
 class RankedRecommendationFromSpecRequest(BaseModel):
@@ -171,18 +170,17 @@ def ranked_recommend_from_spec(
     have already been extracted and potentially edited by the user.
     Skips intent extraction and uses provided specs directly.
 
-    Returns 5 ranked views of deployment configurations:
+    Returns 4 ranked views of deployment configurations:
     - balanced: Weighted composite score
     - best_accuracy: Top configs by model capability
     - lowest_cost: Top configs by price efficiency
     - lowest_latency: Top configs by SLO headroom
-    - simplest: Top configs by deployment simplicity
 
     Args:
         request: Request with pre-built specification and optional filters
 
     Returns:
-        RankedRecommendationsResponse with 5 ranked lists
+        RankedRecommendationsResponse with 4 ranked lists
     """
     try:
         # Log complete request for debugging
@@ -207,7 +205,7 @@ def ranked_recommend_from_spec(
         if request.weights:
             logger.info(
                 f"  weights: accuracy={request.weights.accuracy}, price={request.weights.price}, "
-                f"latency={request.weights.latency}, complexity={request.weights.complexity}"
+                f"latency={request.weights.latency}"
             )
         else:
             logger.info("  weights: None (using defaults)")
@@ -242,7 +240,6 @@ def ranked_recommend_from_spec(
                 "accuracy": request.weights.accuracy,
                 "price": request.weights.price,
                 "latency": request.weights.latency,
-                "complexity": request.weights.complexity,
             }
 
         # Generate ranked recommendations from specs

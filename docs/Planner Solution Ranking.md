@@ -2,18 +2,18 @@
 
 ### Overview
 
-Planner recommends optimal LLM and GPU configurations that satisfy users' specific use cases and performance requirements. This document describes the implemented multi-criteria ranking system that scores and presents configuration options based on four optimization criteria.
+Planner recommends optimal LLM and GPU configurations that satisfy users' specific use cases and performance requirements. This document describes the implemented multi-criteria ranking system that scores and presents configuration options based on three optimization criteria.
 
-**Key Design Principle**: Configuration-first approach. The system queries all (model, GPU) configurations meeting SLO targets, then scores each on four criteria. This ensures no viable configurations are missed due to model pre-filtering.
+**Key Design Principle**: Configuration-first approach. The system queries all (model, GPU) configurations meeting SLO targets, then scores each on three criteria. This ensures no viable configurations are missed due to model pre-filtering.
 
 **Priority Hierarchy:**
-- **Primary Criteria**: Accuracy and Price (40% weight each in balanced score)
-- **Secondary Criteria**: Latency Performance and Operational Complexity (10% weight each)
+- **Primary Criteria**: Accuracy and Price (45% weight each in balanced score)
+- **Secondary Criteria**: Latency Performance (10% weight)
 - **Note**: All recommendations are pre-filtered to meet SLO requirements, so latency becomes a secondary differentiator for headroom beyond compliance
 
 ***
 
-### The Four Optimization Criteria
+### The Three Optimization Criteria
 
 #### 1. Accuracy (Model Quality)
 
@@ -64,28 +64,6 @@ Where `min_cost` and `max_cost` are computed across all viable configurations fo
 
 ***
 
-#### 4. Operational Complexity
-
-**Definition**: The difficulty of deploying and managing the configuration.
-
-**Scoring Method**: Based on total GPU count:
-
-| GPU Count | Score |
-|-----------|-------|
-| 1 | 100 |
-| 2 | 90 |
-| 3 | 82 |
-| 4 | 75 |
-| 5 | 70 |
-| 6 | 65 |
-| 7 | 62 |
-| 8 | 60 |
-| >8 | Linear decay (60 - 2*(n-8)), minimum 40 |
-
-**Rationale**: Fewer GPUs = simpler networking, easier troubleshooting, lower coordination overhead. A 2x H100 deployment may be preferred over 8x L4 even at higher cost due to reduced operational burden.
-
-***
-
 ### Configuration Variants
 
 #### Quantization Options
@@ -95,7 +73,6 @@ Quantization (FP16, FP8, INT8, INT4) creates distinct benchmark entries for each
 **Impact on Scores**:
 - **Price**: Reduced memory → fewer GPUs needed → lower cost
 - **Latency**: Faster inference from smaller compute requirements
-- **Complexity**: Smaller memory footprint enables single-GPU deployments
 - **Accuracy**: Generally preserved for FP8; slight reduction for INT4
 
 Quantized variants are identified by model ID suffixes (e.g., `-fp8-dynamic`, `-quantized.w4a16`).
@@ -104,22 +81,20 @@ Quantized variants are identified by model ID suffixes (e.g., `-fp8-dynamic`, `-
 
 ### Balanced Score Calculation
 
-The balanced score combines all four criteria with configurable weights:
+The balanced score combines all three criteria with configurable weights:
 
 ```python
 balanced_score = (
     accuracy_score * weight_accuracy +
     price_score * weight_price +
-    latency_score * weight_latency +
-    complexity_score * weight_complexity
+    latency_score * weight_latency
 )
 ```
 
 **Default Weights**:
-- Accuracy: 40%
-- Price: 40%
+- Accuracy: 45%
+- Price: 45%
 - Latency: 10%
-- Complexity: 10%
 
 **Custom Weights**: The API accepts a `weights` parameter (0-10 scale per criterion) that normalizes to percentages. This allows users to adjust priorities without changing code.
 
@@ -133,15 +108,14 @@ balanced_score = (
 - **Minimum Accuracy**: Optional threshold (e.g., ≥70) to exclude low-quality models
 - **Maximum Cost**: Optional ceiling (e.g., ≤$500/month) for budget constraints
 
-#### Five Ranked Views
+#### Four Ranked Views
 
 Each view presents up to 10 configurations sorted by the relevant criterion:
 
 1. **Best Accuracy**: Sorted by accuracy score (descending)
 2. **Lowest Cost**: Sorted by price score (descending)
 3. **Lowest Latency**: Sorted by latency score (descending)
-4. **Simplest**: Sorted by complexity score (descending)
-5. **Balanced**: Sorted by weighted composite score (descending)
+4. **Balanced**: Sorted by weighted composite score (descending)
 
 #### Near-SLO Configurations
 
@@ -158,10 +132,10 @@ Configurations within 20% of SLO targets are included with clear warnings:
 
 | Component | Location | Responsibility |
 |-----------|----------|----------------|
-| `Scorer` | `src/planner/recommendation/scorer.py` | Calculate 4 scores (0-100 scale) |
+| `Scorer` | `src/planner/recommendation/scorer.py` | Calculate 3 scores (0-100 scale) |
 | `UseCaseQualityScorer` | `src/planner/recommendation/quality/usecase_scorer.py` | Accuracy scoring based on use case fit |
 | `ConfigFinder.plan_all_capacities()` | `src/planner/recommendation/config_finder.py` | Query benchmarks, score all configs |
-| `Analyzer` | `src/planner/recommendation/analyzer.py` | Filter and sort into 5 ranked lists |
+| `Analyzer` | `src/planner/recommendation/analyzer.py` | Filter and sort into 4 ranked lists |
 | `RecommendationWorkflow` | `src/planner/orchestration/workflow.py` | Orchestrate end-to-end flow |
 
 #### Data Flow
@@ -177,14 +151,13 @@ plan_all_capacities()
     │   ├── Look up model in catalog
     │   ├── Calculate accuracy via score_model()
     │   ├── Calculate latency score and SLO status
-    │   ├── Calculate complexity score
     │   └── Build DeploymentRecommendation with scores
     └── Calculate price scores (after min/max known)
     ↓
 RankingService.generate_ranked_lists()
     ├── Apply filters (min_accuracy, max_cost)
     ├── Recalculate balanced scores if custom weights
-    └── Sort into 5 ranked views
+    └── Sort into 4 ranked views
     ↓
 RankedRecommendationsResponse
 ```
@@ -192,7 +165,7 @@ RankedRecommendationsResponse
 #### API Endpoints
 
 - **`POST /api/v1/recommend`**: Returns single best recommendation (balanced score)
-- **`POST /api/v1/ranked-recommend-from-spec`**: Returns all 5 ranked lists with filter support
+- **`POST /api/v1/ranked-recommend-from-spec`**: Returns all 4 ranked lists with filter support
 
 ***
 
@@ -201,18 +174,18 @@ RankedRecommendationsResponse
 ```
 🎯 Lowest Cost (Top 5):
 
-1. ✅ Llama-3.1-8B-FP8 on 1x L4     - $584/month  (Scores: A=60, P=100, L=92, C=100)
-2. ✅ Mistral-7B on 1x L4           - $584/month  (Scores: A=55, P=100, L=90, C=100)
-3. ✅ Qwen-2.5-7B-FP8 on 1x L4      - $584/month  (Scores: A=55, P=100, L=91, C=100)
-4. ⚠️ Llama-3.1-70B-FP8 on 2x A100  - $2,555/month (Scores: A=85, P=72, L=78, C=90) [TTFT +15% over SLO]
-5. ✅ Llama-3.1-70B on 2x H100      - $6,205/month (Scores: A=85, P=45, L=95, C=90)
+1. ✅ Llama-3.1-8B-FP8 on 1x L4     - $584/month  (Scores: A=60, P=100, L=92)
+2. ✅ Mistral-7B on 1x L4           - $584/month  (Scores: A=55, P=100, L=90)
+3. ✅ Qwen-2.5-7B-FP8 on 1x L4      - $584/month  (Scores: A=55, P=100, L=91)
+4. ⚠️ Llama-3.1-70B-FP8 on 2x A100  - $2,555/month (Scores: A=85, P=72, L=78) [TTFT +15% over SLO]
+5. ✅ Llama-3.1-70B on 2x H100      - $6,205/month (Scores: A=85, P=45, L=95)
 
 🏆 Best Accuracy (Top 5):
 
-1. ✅ Llama-3.1-70B on 2x H100      - $6,205/month (Scores: A=85, P=45, L=95, C=90)
-2. ⚠️ Llama-3.1-70B-FP8 on 2x A100  - $2,555/month (Scores: A=85, P=72, L=78, C=90) [Near-miss]
-3. ✅ Mixtral-8x7B on 4x A100       - $5,110/month (Scores: A=78, P=50, L=92, C=75)
-4. ✅ Llama-3.1-8B on 1x L4         - $584/month   (Scores: A=60, P=100, L=92, C=100)
+1. ✅ Llama-3.1-70B on 2x H100      - $6,205/month (Scores: A=85, P=45, L=95)
+2. ⚠️ Llama-3.1-70B-FP8 on 2x A100  - $2,555/month (Scores: A=85, P=72, L=78) [Near-miss]
+3. ✅ Mixtral-8x7B on 4x A100       - $5,110/month (Scores: A=78, P=50, L=92)
+4. ✅ Llama-3.1-8B on 1x L4         - $584/month   (Scores: A=60, P=100, L=92)
 ...
 ```
 

@@ -20,7 +20,7 @@ def _render_filter_summary():
         return
 
     all_passed = []
-    for cat in ["balanced", "best_accuracy", "lowest_cost", "lowest_latency", "simplest"]:
+    for cat in ["balanced", "best_accuracy", "lowest_cost", "lowest_latency"]:
         all_passed.extend(ranked_response.get(cat, []))
     unique_models = len({r.get("model_name", "") for r in all_passed if r.get("model_name")})
 
@@ -276,8 +276,6 @@ def render_top5_table(recommendations: list, priority: str):
     st.session_state.top5_accuracy = top5_accuracy
     st.session_state.top5_latency = top5_latency
     st.session_state.top5_cost = top5_cost
-    st.session_state.top5_simplest = ranked_response.get("simplest", [])[:5]
-
     # Render 4 category cards in a 2x2 grid
     col1, col2 = st.columns(2)
     _render_category_card("Balanced", top5_balanced, "final", "balanced", col1)
@@ -499,7 +497,7 @@ def render_recommendation_result(result: dict, priority: str, extraction: dict):
             winner = balanced_recs[0]
             recommendations = balanced_recs
         else:
-            for cat in ["best_accuracy", "lowest_cost", "lowest_latency", "simplest"]:
+            for cat in ["best_accuracy", "lowest_cost", "lowest_latency"]:
                 if ranked_response.get(cat):
                     winner = ranked_response[cat][0]
                     recommendations = ranked_response[cat]
@@ -531,7 +529,7 @@ def render_recommendation_result(result: dict, priority: str, extraction: dict):
 
     # Get all recommendations for the cards
     all_recs: list[dict[str, Any]] = []
-    for cat in ["balanced", "best_accuracy", "lowest_cost", "lowest_latency", "simplest"]:
+    for cat in ["balanced", "best_accuracy", "lowest_cost", "lowest_latency"]:
         cat_recs = (
             st.session_state.ranked_response.get(cat, [])
             if st.session_state.ranked_response

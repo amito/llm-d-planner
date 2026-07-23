@@ -43,7 +43,6 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "top5_accuracy": [],
     "top5_latency": [],
     "top5_cost": [],
-    "top5_simplest": [],
     # Category card navigation (index into top-5 lists)
     "cat_idx_balanced": 0,
     "cat_idx_accuracy": 0,

@@ -39,7 +39,7 @@ through:
 2. **SLO-driven capacity planning** - Translate business needs into technical
    specifications automatically
 3. **Multi-criteria recommendation ranking** - Present optimal trade-offs
-   between accuracy, cost, latency, and complexity
+   between accuracy, cost, and latency
 4. **Ready-to-use configurations** - Generate production-ready Kubernetes
    manifests for immediate deployment
 
@@ -87,7 +87,7 @@ Planner consists of **five major components**:
 │  │Conversational│  │Specification │  │Recommendation│  │ Config │ │
 │  │  Interface   │  │   Editor     │  │Viewer/Select │  │ Viewer │ │
 │  │              │  │              │  │              │  │        │ │
-│  │ Natural lang │  │ Edit SLOs,   │  │ 5 ranked     │  │ Display│ │
+│  │ Natural lang │  │ Edit SLOs,   │  │ 4 ranked     │  │ Display│ │
 │  │ input, show  │  │ priorities,  │  │ views, trade │  │ YAML,  │ │
 │  │ intent       │  │ thresholds   │  │ off analysis │  │download│ │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └────────┘ │
@@ -116,7 +116,7 @@ integrated views:
   - **SLO targets**: TTFT, ITL, E2E latency thresholds and percentile
     (p90/p95/p99)
   - **Quality thresholds**: Minimum accuracy score, maximum cost
-  - **User priorities**: Weights for accuracy, cost, latency, complexity in
+  - **User priorities**: Weights for accuracy, cost, latency in
     balanced ranking
   - **Future**: Editing of traffic profile parameters (prompt/output tokens,
     QPS), power/cooling budgets
@@ -126,7 +126,7 @@ integrated views:
 
 - Displays ranked recommendations in multiple views:
   - **List View**: Top recommendations in each category (Best Accuracy, Lowest
-    Cost, Lowest Latency, Simplest, Balanced)
+    Cost, Lowest Latency, Balanced)
   - **Future**: Pareto frontier charts for two-dimensional trade-offs (e.g.,
     cost vs. accuracy)
   - **Future**: Multi-dimensional visualization (>2 dimensions)
@@ -190,7 +190,7 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
 
 - Extract use case type (chatbot, code completion, summarization, etc.)
 - Identify user count and scale requirements
-- Determine user priorities (accuracy, cost, latency, complexity)
+- Determine user priorities (accuracy, cost, latency)
 - Capture domain specialization needs (e.g., medical, legal, financial)
 
 **Output**: Structured intent object with:
@@ -254,7 +254,7 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
 - **Accuracy Benchmarks**: Use-case specific quality evaluation criteria (for
   scoring)
 - **Quality Thresholds**: Minimum accuracy score, maximum cost (for filtering)
-- **User Priorities**: Weights for accuracy, cost, latency, complexity
+- **User Priorities**: Weights for accuracy, cost, latency
   trade-offs
 - **Future**: Power budget, cooling budget thresholds
 
@@ -276,12 +276,11 @@ SLO targets, priorities, and constraints before proceeding to recommendations
 │  │  Config Finder  │   │     Scorer      │   │    Analyzer     │  │
 │  │                 │   │                 │   │                 │  │
 │  │ Query benchmarks│──▶│ Score configs   │──▶│ Generate        │  │
-│  │ Filter by SLOs  │   │ on 5 dimensions:│   │ ranked views:   │  │
+│  │ Filter by SLOs  │   │ on 3 dimensions:│   │ ranked views:   │  │
 │  │ Calculate       │   │ - Accuracy      │   │ - Best Accuracy │  │
 │  │ replicas        │   │ - Cost          │   │ - Lowest Cost   │  │
 │  │                 │   │ - Latency       │   │ - Lowest Latency│  │
-│  │                 │   │ - Complexity    │   │ - Simplest      │  │
-│  │                 │   │ - Balanced      │   │ - Balanced      │  │
+│  │                 │   │                 │   │ - Balanced      │  │
 │  └─────────────────┘   └─────────────────┘   └─────────────────┘  │
 │                                                                   │
 │  Specification ─────────────────────────────────▶ Ranked Options  │
@@ -327,7 +326,7 @@ without real benchmark data
 
 **Role**: Evaluate each configuration on multiple criteria
 
-**Four Scoring Dimensions** (each 0-100 scale):
+**Three Scoring Dimensions** (each 0-100 scale):
 
 1. **Accuracy** (Primary Factor)
    - Use-case specific quality scores from benchmark databases
@@ -344,11 +343,6 @@ without real benchmark data
    - Important for user experience but all configs already meet SLOs
    - Extra credit for exceeding requirements, but diminishing returns
 
-4. **Complexity** (Secondary Factor)
-   - Deployment and operational simplicity
-   - Function of GPU count, tensor parallelism, replica count
-   - Fewer resources = higher score (easier to manage)
-
 **Future Primary Factors**:
 
 - Power requirements (datacenter constraints)
@@ -356,7 +350,7 @@ without real benchmark data
 
 **Note on Scoring Strategy**:
 
-- All four factors scored equally (0-100) in current implementation
+- All three factors scored equally (0-100) in current implementation
 - **Balanced composite** uses weighted combination with higher weights on
   primary factors (accuracy, cost)
 - Future may formalize Primary/Secondary distinction with explicit weight tiers
@@ -367,11 +361,10 @@ without real benchmark data
 
 **Processing**:
 
-1. Generate **five ranked views** of recommendations:
+1. Generate **four ranked views** of recommendations:
    - **Best Accuracy**: Sorted by quality/capability
    - **Lowest Cost**: Sorted by price efficiency
    - **Lowest Latency**: Sorted by SLO headroom
-   - **Simplest**: Sorted by deployment complexity (fewest GPUs)
    - **Balanced**: Sorted by weighted composite score (user priorities)
 
 2. Provide detailed rationale for each recommendation:
@@ -384,7 +377,7 @@ without real benchmark data
 - Model + GPU configuration details
 - Predicted performance metrics
 - Cost estimates (hourly, monthly)
-- Quality/complexity/latency scores
+- Quality/latency scores
 - Trade-off analysis vs. alternatives
 
 **Interface**: REST endpoint `/api/v1/ranked-recommend-from-spec`
@@ -504,8 +497,8 @@ components:
      ↓
 5. Recommendation Service
    a. Config Finder: Query benchmarks, calculate replicas
-   b. Scorer: Evaluate on 4 dimensions (accuracy, cost, latency, complexity)
-   c. Analyzer: Generate 5 ranked views
+   b. Scorer: Evaluate on 3 dimensions (accuracy, cost, latency)
+   c. Analyzer: Generate 4 ranked views
      ↓
 6. UI Recommendation Viewer
    - Display ranked options (Best Accuracy, Lowest Cost, etc.)
@@ -651,7 +644,7 @@ for different environments and requirements.
 2. **Specification Editability**: Users can review and modify auto-generated
    specs before committing
 3. **Multi-Criteria Optimization**: Balanced recommendations across accuracy,
-   cost, latency, and complexity
+   cost, and latency
 4. **SLO-Driven Planning**: Recommendations guaranteed to meet user's latency
    and throughput requirements
 5. **Explainability**: Clear rationale for why each recommendation was made,

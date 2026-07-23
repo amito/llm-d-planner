@@ -23,7 +23,6 @@ class ConfigurationScores(BaseModel):
     accuracy_score: int = Field(..., description="Model accuracy/capability score (0-100)")
     price_score: int = Field(..., description="Cost efficiency score - inverse of cost (0-100)")
     latency_score: int = Field(..., description="SLO headroom score (0-100)")
-    complexity_score: int = Field(..., description="Deployment simplicity score (0-100)")
     balanced_score: float = Field(..., description="Weighted composite score (0-100)")
     slo_status: Literal["compliant", "near_miss", "exceeds"] = Field(
         ..., description="SLO compliance status"
@@ -105,7 +104,7 @@ class DeploymentRecommendation(BaseModel):
 class RankedRecommendationsResponse(BaseModel):
     """Response containing multiple ranked recommendation lists.
 
-    Provides 5 different views of the same configurations, each sorted
+    Provides 4 different views of the same configurations, each sorted
     by a different criterion to help users explore trade-offs.
     """
 
@@ -134,9 +133,6 @@ class RankedRecommendationsResponse(BaseModel):
     )
     lowest_latency: list[DeploymentRecommendation] = Field(
         default_factory=list, description="Top configs sorted by latency score"
-    )
-    simplest: list[DeploymentRecommendation] = Field(
-        default_factory=list, description="Top configs sorted by complexity score"
     )
     balanced: list[DeploymentRecommendation] = Field(
         default_factory=list, description="Top configs sorted by weighted composite score"

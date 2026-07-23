@@ -13,7 +13,7 @@ Remove dead code from the recommendation API. The UI has two functions that call
 | `throughput_priority` | **REMOVE** | Not used; throughput is handled by explicit `expected_qps` |
 | `weights` | **KEEP** | Drives MCDM scoring in `capacity_planner.py` |
 
-The `weights` dict (accuracy, price, latency, complexity) controls all recommendation ranking. The other fields are remnants of an older design.
+The `weights` dict (accuracy, price, latency) controls all recommendation ranking. The other fields are remnants of an older design.
 
 ---
 
@@ -39,7 +39,6 @@ weights = {
     "accuracy": st.session_state.get("weight_accuracy", 5),
     "price": st.session_state.get("weight_cost", 4),
     "latency": st.session_state.get("weight_latency", 2),
-    "complexity": 0,
 }
 
 recommendation = fetch_ranked_recommendations(

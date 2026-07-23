@@ -242,7 +242,7 @@ class RecommendationWorkflow:
 
         This is the enhanced workflow that returns multiple ranked views
         instead of a single best recommendation. Useful for exploring
-        trade-offs between accuracy, cost, latency, and complexity.
+        trade-offs between accuracy, cost, and latency.
 
         Args:
             user_message: User's deployment request
@@ -251,10 +251,10 @@ class RecommendationWorkflow:
             max_cost: Maximum monthly cost filter (USD)
             include_near_miss: Whether to include near-SLO configurations
             weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency, complexity
+                     Keys: accuracy, price, latency
 
         Returns:
-            RankedRecommendationsResponse with 5 ranked lists
+            RankedRecommendationsResponse with 4 ranked lists
         """
         logger.info("Starting ranked recommendation workflow")
 
@@ -319,7 +319,6 @@ class RecommendationWorkflow:
             best_accuracy=ranked_lists["best_accuracy"],
             lowest_cost=ranked_lists["lowest_cost"],
             lowest_latency=ranked_lists["lowest_latency"],
-            simplest=ranked_lists["simplest"],
             balanced=ranked_lists["balanced"],
             total_configs_evaluated=len(all_configs),
             configs_after_filters=configs_after_filters,
@@ -347,10 +346,10 @@ class RecommendationWorkflow:
             max_cost: Maximum monthly cost filter (USD)
             include_near_miss: Whether to include near-SLO configurations
             weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency, complexity
+                     Keys: accuracy, price, latency
 
         Returns:
-            RankedRecommendationsResponse with 5 ranked lists
+            RankedRecommendationsResponse with 4 ranked lists
         """
         from planner.shared.schemas import (
             DeploymentIntent,
@@ -458,7 +457,6 @@ class RecommendationWorkflow:
             best_accuracy=ranked_lists["best_accuracy"],
             lowest_cost=ranked_lists["lowest_cost"],
             lowest_latency=ranked_lists["lowest_latency"],
-            simplest=ranked_lists["simplest"],
             balanced=ranked_lists["balanced"],
             total_configs_evaluated=len(all_configs),
             configs_after_filters=configs_after_filters,

@@ -34,7 +34,6 @@ def get_scores(rec: dict) -> dict:
         "accuracy": backend_scores.get("accuracy_score", 0),
         "latency": backend_scores.get("latency_score", 0),
         "cost": backend_scores.get("price_score", 0),
-        "complexity": backend_scores.get("complexity_score", 0),
         "final": backend_scores.get("balanced_score", 0),
     }
 
