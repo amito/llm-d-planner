@@ -64,7 +64,7 @@ This repository contains the architecture design for **Planner**, an open-source
   - **components/**: Modular UI components
     - `settings.py`: Configuration tab with benchmark database management
 
-- **data/**: Benchmark, configuration, and archive data
+- **data/**: Benchmark and configuration data
   - **benchmarks/**: Benchmark data
     - **performance/**: Latency/throughput benchmarks (JSON, loaded into PostgreSQL)
       - `benchmarks_BLIS.json`: Latency/throughput benchmarks from BLIS simulator
@@ -77,7 +77,6 @@ This repository contains the architecture design for **Planner**, an open-source
     - `demo_scenarios.json`: 3 test scenarios
     - `priority_weights.json`: Scoring priority weights
     - `usecase_slo_workload.json`: Use case SLO and workload profiles
-  - **archive/**: Unused/reference-only files
 
 ## Important Behavioral Notes for Claude
 

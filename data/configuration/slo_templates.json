@@ -1,5 +1,5 @@
 {
-  "_description": "SLO templates for use cases - derived from slo_ranges.json real benchmark data",
+  "_description": "SLO templates for use cases derived from real benchmark data",
   "use_cases": {
     "chatbot_conversational": {
       "use_case": "Chatbot Conversational",

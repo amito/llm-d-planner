@@ -286,7 +286,6 @@ The `RecommendationWorkflow` orchestrates all steps and returns the appropriate 
 | [data/configuration/model_catalog.json](../data/configuration/model_catalog.json) | 47 curated models with metadata | ModelCatalog, ModelEvaluator |
 | [data/benchmarks/performance/benchmarks_BLIS.json](../data/benchmarks/performance/benchmarks_BLIS.json) | Latency benchmarks (loaded to PostgreSQL) | BenchmarkRepository |
 | [data/benchmarks/accuracy/weighted_scores/*.csv](../data/benchmarks/accuracy/weighted_scores/) | 9 use-case quality score files | UseCaseQualityScorer |
-| [data/archive/usecase_weights.json](../data/archive/usecase_weights.json) | Benchmark weight definitions per use case | Documentation |
 
 ---
 

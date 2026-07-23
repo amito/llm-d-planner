@@ -8,7 +8,6 @@ This document explains how we create use-case specific CSV files that rank the 2
 
 ### Data Source
 - **Master CSV**: `opensource_all_benchmarks.csv` (206 open-source models)
-- **Red Hat Models**: `redhat_models_benchmarks.csv` (50 models with performance data)
 - **Benchmark Source**: [Artificial Analysis Intelligence Index](https://artificialanalysis.ai/methodology/intelligence-benchmarking)
 - **Reference**: [LLM Stats Benchmarks](https://llm-stats.com/benchmarks)
 
@@ -187,7 +186,7 @@ Models are sorted by score (descending), with top performers listed first.
 
 ## Configuration File
 
-Weights are stored in `data/archive/optimized_weights.json` for programmatic access.
+Weights are defined per use case in the weighted score CSV files above.
 
 ## Results Summary (December 2024)
 
