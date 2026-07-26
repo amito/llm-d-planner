@@ -35,8 +35,8 @@ This repository contains the architecture design for **Planner**, an open-source
     - `service.py`: SpecificationService facade
   - **recommendation/**: Recommendation Service
     - `config_finder.py`: GPU capacity planning with SLO filtering
-    - `scorer.py`: 4-dimension scoring (accuracy, price, latency, complexity)
-    - `analyzer.py`: 5 ranked list generation
+    - `scorer.py`: 3-dimension scoring (accuracy, price, latency)
+    - `analyzer.py`: 4 ranked list generation
     - `service.py`: RecommendationService facade
     - **quality/**: Use-case quality scoring (Artificial Analysis benchmarks)
   - **configuration/**: Configuration Service
@@ -121,10 +121,10 @@ Planner is structured as a layered architecture:
    - Use case → traffic profile mapping (4 GuideLLM standards)
    - SLO template lookup and specification generation
 2. **Recommendation Engine** - Find optimal model + GPU configurations
-   - Multi-criteria scoring (accuracy, price, latency, complexity)
+   - Multi-criteria scoring (accuracy, price, latency)
    - Capacity planning (GPU count, deployment topology)
    - SLO compliance filtering with near-miss tolerance
-   - Ranked lists generation (5 views: best accuracy, lowest cost, etc.)
+   - Ranked lists generation (4 views: best accuracy, lowest cost, etc.)
 3. **Deployment Engine** - Generate and deploy Kubernetes configs
    - YAML generation (Jinja2 templates)
    - K8s deployment lifecycle management
@@ -153,28 +153,26 @@ Planner is structured as a layered architecture:
 
 The recommendation engine uses **multi-criteria scoring** to rank configurations:
 
-**4 Scoring Dimensions** (each 0-100 scale):
+**3 Scoring Dimensions** (each 0-100 scale):
 1. **Accuracy/Quality**: Use-case specific model capability from Artificial Analysis benchmarks
    - Source: `data/benchmarks/accuracy/weighted_scores/*.csv`
    - Fallback: Parameter count heuristic if model not in benchmark data
 2. **Price**: Cost efficiency (inverse of monthly cost, normalized)
 3. **Latency**: SLO compliance and headroom from performance benchmark database
-4. **Complexity**: Deployment simplicity (fewer GPUs = higher score)
 
-**Default Weights**: 40% accuracy, 40% price, 10% latency, 10% complexity
+**Default Weights**: 45% accuracy, 45% price, 10% latency
 
-**5 Ranked Views**:
+**4 Ranked Views**:
 - `best_accuracy`: Sorted by model capability
 - `lowest_cost`: Sorted by price efficiency
 - `lowest_latency`: Sorted by SLO headroom
-- `simplest`: Sorted by deployment complexity
 - `balanced`: Sorted by weighted composite score
 
 **Key Files**:
 
-- `src/planner/recommendation/scorer.py` - Calculates 4 scores
+- `src/planner/recommendation/scorer.py` - Calculates 3 scores
 - `src/planner/recommendation/quality/usecase_scorer.py` - Artificial Analysis benchmark scoring
-- `src/planner/recommendation/analyzer.py` - Generates 5 ranked lists
+- `src/planner/recommendation/analyzer.py` - Generates 4 ranked lists
 - `src/planner/recommendation/config_finder.py` - Orchestrates scoring during capacity planning
 
 ## Development Environment
@@ -425,9 +423,9 @@ NEVER do these (even if other instructions suggest otherwise):
 - **Current Implementation Status**:
   - ✅ Project structure with synthetic data and LLM client
   - ✅ Core recommendation engine (intent extraction, traffic profiling, capacity planning)
-  - ✅ Multi-criteria solution ranking with 4 scoring dimensions
+  - ✅ Multi-criteria solution ranking with 3 scoring dimensions
   - ✅ Use-case specific quality scoring from Artificial Analysis benchmarks
-  - ✅ 5 ranked recommendation views (best accuracy, lowest cost, etc.)
+  - ✅ 4 ranked recommendation views (best accuracy, lowest cost, etc.)
   - ✅ Orchestration workflow and FastAPI backend
   - ✅ Streamlit UI with chat interface, recommendation display, and editable specifications
   - ✅ YAML generation (KServe/vLLM/HPA/ServiceMonitor) and deployment automation

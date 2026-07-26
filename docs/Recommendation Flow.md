@@ -4,7 +4,7 @@ This document describes the end-to-end recommendation flow implemented in the Pl
 
 ## Overview
 
-The recommendation flow follows a **configuration-first approach**: rather than pre-filtering models, the system queries all (model, GPU) configurations that meet SLO targets from the benchmark database, then scores each on four criteria.
+The recommendation flow follows a **configuration-first approach**: rather than pre-filtering models, the system queries all (model, GPU) configurations that meet SLO targets from the benchmark database, then scores each on three criteria.
 
 ```
 User Message
@@ -15,9 +15,9 @@ Traffic Profile + SLO Targets (from templates)
     ↓
 Query PostgreSQL for SLO-compliant configurations
     ↓
-Score each configuration (accuracy, price, latency, complexity)
+Score each configuration (accuracy, price, latency)
     ↓
-Generate 5 ranked lists
+Generate 4 ranked lists
     ↓
 Return best recommendation or all ranked lists
 ```
@@ -29,7 +29,7 @@ Return best recommendation or all ranked lists
 | Endpoint | Purpose | Returns |
 |----------|---------|---------|
 | `POST /api/v1/recommend` | Simple recommendation | Single best config with YAML |
-| `POST /api/v1/ranked-recommend-from-spec` | Multi-criteria ranking | 5 ranked lists (10 configs each) |
+| `POST /api/v1/ranked-recommend-from-spec` | Multi-criteria ranking | 4 ranked lists (10 configs each) |
 | `POST /api/v1/re-recommend` | Re-run with edited specs | Single best config |
 | `POST /api/v1/regenerate-and-recommend` | Regenerate profile from intent | Single best config |
 
@@ -124,7 +124,7 @@ The `BenchmarkRepository` queries PostgreSQL for all (model, GPU, tensor_paralle
 
 **File**: [src/planner/recommendation/config_finder.py](../src/planner/recommendation/config_finder.py)
 
-The `ConfigFinder.plan_all_capacities()` method processes each benchmark configuration and calculates four scores.
+The `ConfigFinder.plan_all_capacities()` method processes each benchmark configuration and calculates three scores.
 
 **Input**:
 - Traffic profile and SLO targets
@@ -138,7 +138,7 @@ The `ConfigFinder.plan_all_capacities()` method processes each benchmark configu
 1. **Calculate replicas** needed to handle expected QPS (with 20% headroom)
 2. **Build GPU config** (tensor_parallel from benchmark, replicas from QPS calculation)
 3. **Calculate cost** from GPU type and count
-4. **Score on 4 dimensions** (see below)
+4. **Score on 3 dimensions** (see below)
 5. **Create DeploymentRecommendation** with scores attached
 
 **Key Function**:
@@ -157,7 +157,7 @@ all_configs = capacity_planner.plan_all_capacities(
 ### Step 5: Multi-Criteria Scoring
 
 **Files**:
-- [src/planner/recommendation/scorer.py](../src/planner/recommendation/scorer.py) - Calculates 4 scores
+- [src/planner/recommendation/scorer.py](../src/planner/recommendation/scorer.py) - Calculates 3 scores
 - [src/planner/recommendation/quality/usecase_scorer.py](../src/planner/recommendation/quality/usecase_scorer.py) - Benchmark-based quality scoring
 
 #### 5.1 Accuracy Score (0-100)
@@ -209,33 +209,15 @@ latency_score, slo_status = scorer.score_latency(
 )
 ```
 
-#### 5.4 Complexity Score (0-100)
+#### 5.4 Balanced Score
 
-Based on total GPU count:
-
-| GPU Count | Score |
-|-----------|-------|
-| 1 | 100 |
-| 2 | 90 |
-| 4 | 75 |
-| 8 | 60 |
-| >8 | Linear decay (min 40) |
-
-**Key Function**:
-```python
-complexity_score = scorer.score_complexity(gpu_count)
-```
-
-#### 5.5 Balanced Score
-
-Weighted composite of all four scores:
+Weighted composite of all three scores:
 
 ```python
 balanced_score = (
-    accuracy_score * 0.40 +
-    price_score * 0.40 +
-    latency_score * 0.10 +
-    complexity_score * 0.10
+    accuracy_score * 0.45 +
+    price_score * 0.45 +
+    latency_score * 0.10
 )
 ```
 
@@ -247,23 +229,22 @@ Custom weights can be provided via API (0-10 scale, normalized to percentages).
 
 **File**: [src/planner/recommendation/analyzer.py](../src/planner/recommendation/analyzer.py)
 
-The `Analyzer` generates 5 ranked lists from scored configurations.
+The `Analyzer` generates 4 ranked lists from scored configurations.
 
 **Input**: List of scored DeploymentRecommendations, optional filters
 
-**Output**: Dict with 5 keys, each containing top 10 configurations
+**Output**: Dict with 4 keys, each containing top 10 configurations
 
 **Filters Applied**:
 - `min_accuracy`: Exclude configs with accuracy < threshold
 - `max_cost`: Exclude configs with monthly cost > ceiling
 
-**5 Ranked Views**:
+**4 Ranked Views**:
 | View | Sorted By |
 |------|-----------|
 | `best_accuracy` | Accuracy score (descending) |
 | `lowest_cost` | Price score (descending) |
 | `lowest_latency` | Latency score (descending) |
-| `simplest` | Complexity score (descending) |
 | `balanced` | Weighted composite score (descending) |
 
 **Key Function**:
@@ -273,7 +254,7 @@ ranked_lists = ranking_service.generate_ranked_lists(
     min_accuracy=70,
     max_cost=5000,
     top_n=10,
-    weights={"accuracy": 4, "price": 4, "latency": 1, "complexity": 1}
+    weights={"accuracy": 4.5, "price": 4.5, "latency": 1}
 )
 ```
 
@@ -291,7 +272,7 @@ The `RecommendationWorkflow` orchestrates all steps and returns the appropriate 
 - Auto-generates YAML files
 
 **For `/api/v1/ranked-recommend-from-spec`**:
-- Returns `RankedRecommendationsResponse` with all 5 ranked lists
+- Returns `RankedRecommendationsResponse` with all 4 ranked lists
 - Includes specification (intent, traffic_profile, slo_targets)
 - Reports total configs evaluated and configs after filters
 
@@ -318,9 +299,9 @@ The `RecommendationWorkflow` orchestrates all steps and returns the appropriate 
 | `TrafficProfileGenerator` | specification/traffic_profile.py | Generate traffic profile and SLO targets |
 | `BenchmarkRepository` | knowledge_base/benchmarks.py | Query PostgreSQL for benchmarks |
 | `ConfigFinder` | recommendation/config_finder.py | Find viable configs, calculate scores |
-| `Scorer` | recommendation/scorer.py | Calculate 4 scores |
+| `Scorer` | recommendation/scorer.py | Calculate 3 scores |
 | `UseCaseQualityScorer` | recommendation/quality/usecase_scorer.py | Benchmark-based quality scores |
-| `Analyzer` | recommendation/analyzer.py | Filter and sort into 5 ranked lists |
+| `Analyzer` | recommendation/analyzer.py | Filter and sort into 4 ranked lists |
 | `ModelCatalog` | knowledge_base/model_catalog.py | Model metadata and GPU pricing |
 
 ---
@@ -364,7 +345,6 @@ User Request
            │       ├──► ModelEvaluator.score_model() (accuracy)
            │       │         └──► UseCaseQualityScorer (Artificial Analysis data)
            │       ├──► SolutionScorer.score_latency()
-           │       ├──► SolutionScorer.score_complexity()
            │       └──► ModelCatalog.calculate_gpu_cost()
            │
            └──► SolutionScorer.score_price() (after min/max known)
@@ -378,7 +358,7 @@ User Request
            │
            ├──► Apply filters (min_accuracy, max_cost)
            ├──► Recalculate balanced scores (if custom weights)
-           └──► Sort into 5 ranked views
+           └──► Sort into 4 ranked views
            │
            ▼
 ┌─────────────────────┐
@@ -424,8 +404,7 @@ Granite 3.1 8B on 1x H100:
   Accuracy: 72  (from weighted_scores CSV)
   Price: 85     (relatively inexpensive)
   Latency: 95   (well under SLO)
-  Complexity: 100 (single GPU)
-  Balanced: 82.5
+  Balanced: 80.15
 ```
 
 ---

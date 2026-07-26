@@ -51,8 +51,8 @@ API endpoint.
   types without running benchmarks
 - **SLO-Driven Recommendations** - Get optimal model + GPU configurations backed
   by real benchmarks, with estimated performance fallback
-- **Multi-Criteria Ranking** - Score configurations on accuracy, price, latency,
-  and complexity with 5 ranked views
+- **Multi-Criteria Ranking** - Score configurations on accuracy, price, and
+  latency with 4 ranked views
 - **What-If Analysis** - Explore alternatives and compare cost vs. latency
   tradeoffs
 - **One-Click Deployment** - Generate production-ready KServe/vLLM YAML and

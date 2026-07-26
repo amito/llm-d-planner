@@ -61,8 +61,7 @@
     "best_accuracy": "Highest RAW accuracy score from Artificial Analysis benchmarks (no weighting)",
     "lowest_cost": "Lowest price/GPU cost (raw score, cheaper = better)",
     "lowest_latency": "Fastest TTFT/ITL/E2E latency (raw score)",
-    "simplest": "Best model with FEWEST GPUs (1 GPU = 100 score, 8 GPU = 60 score)",
-    "balanced": "Weighted combination: accuracy(40%) + price(40%) + latency(10%) + complexity(10%)"
+    "balanced": "Weighted combination: accuracy(45%) + price(45%) + latency(10%)"
   },
   
   "slo_ranges": {
@@ -176,22 +175,15 @@
     "L4": {"gpu_counts": [5, 6, 10, 16, 24], "performance_tier": "entry"}
   },
   
-  "complexity_scoring": {
-    "_note": "Simplicity score - fewer GPUs = higher score",
-    "1_gpu": 100, "2_gpu": 90, "3_gpu": 82, "4_gpu": 75,
-    "5_gpu": 70, "6_gpu": 65, "7_gpu": 62, "8_gpu": 60
-  },
-  
   "priority_adjustments": {
     "_note": "SLO factors multiply the max values. Weights affect BALANCED score only.",
     "balanced": {
       "ttft_factor": 1.0,
       "itl_factor": 1.0,
       "e2e_factor": 1.0,
-      "accuracy": 0.40,
-      "price": 0.40,
+      "accuracy": 0.45,
+      "price": 0.45,
       "latency": 0.10,
-      "complexity": 0.10,
       "description": "Default - show ALL configs",
       "expected_configs": "ALL configs pass"
     },
@@ -199,10 +191,9 @@
       "ttft_factor": 1.0,
       "itl_factor": 1.0,
       "e2e_factor": 1.0,
-      "accuracy": 0.60,
-      "price": 0.20,
-      "latency": 0.10,
-      "complexity": 0.10,
+      "accuracy": 0.67,
+      "price": 0.22,
+      "latency": 0.11,
       "description": "Same SLOs - prioritize accuracy in scoring",
       "expected_configs": "ALL configs pass"
     },
@@ -210,10 +201,9 @@
       "ttft_factor": 0.03,
       "itl_factor": 0.25,
       "e2e_factor": 0.083,
-      "accuracy": 0.15,
-      "price": 0.15,
-      "latency": 0.60,
-      "complexity": 0.10,
+      "accuracy": 0.17,
+      "price": 0.17,
+      "latency": 0.66,
       "description": "TIGHTEN SLOs: TTFT<450ms, ITL<50ms, E2E<5000ms for 512/256 → ~63% pass",
       "expected_configs": "~217 of 344 configs for chatbot"
     },
@@ -221,10 +211,9 @@
       "ttft_factor": 1.0,
       "itl_factor": 1.0,
       "e2e_factor": 1.0,
-      "accuracy": 0.20,
-      "price": 0.60,
-      "latency": 0.10,
-      "complexity": 0.10,
+      "accuracy": 0.22,
+      "price": 0.67,
+      "latency": 0.11,
       "description": "Same SLOs - prioritize cost in scoring",
       "expected_configs": "ALL configs pass"
     },
@@ -232,10 +221,9 @@
       "ttft_factor": 1.0,
       "itl_factor": 1.0,
       "e2e_factor": 1.0,
-      "accuracy": 0.15,
-      "price": 0.25,
-      "latency": 0.20,
-      "complexity": 0.10,
+      "accuracy": 0.23,
+      "price": 0.38,
+      "latency": 0.39,
       "description": "Same SLOs - prioritize throughput in scoring",
       "expected_configs": "ALL configs pass"
     }

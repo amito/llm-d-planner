@@ -6,7 +6,7 @@ on task-specific benchmarks (MMLU-Pro, LiveCodeBench, IFBench, etc.).
 Integration with Planner:
 - Provides use-case specific quality scores (replaces legacy size-based heuristics)
 - Andre's latency/throughput benchmarks from PostgreSQL are KEPT as-is
-- The final recommendation combines: Our quality + Andre's latency/cost/complexity
+- The final recommendation combines: Our quality + Andre's latency/cost scoring
 """
 
 import csv

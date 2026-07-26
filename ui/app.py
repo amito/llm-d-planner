@@ -476,7 +476,6 @@ def render_results_tab(priority: str):
         "accuracy": st.session_state.get("weight_accuracy", 5),
         "price": st.session_state.get("weight_cost", 4),
         "latency": st.session_state.get("weight_latency", 2),
-        "complexity": 0,
     }
 
     preferred_gpu_types = final_extraction.get("preferred_gpu_types", [])

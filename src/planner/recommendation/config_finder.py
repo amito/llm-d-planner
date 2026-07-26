@@ -154,7 +154,7 @@ class ConfigFinder:
         Plan GPU capacity and return ALL viable configurations meeting SLO.
 
         Queries benchmarks for all (model, GPU) configurations meeting SLO targets,
-        then scores each on accuracy, price, latency, and complexity.
+        then scores each on accuracy, price, and latency.
 
         Args:
             traffic_profile: Traffic characteristics (prompt_tokens, output_tokens)
@@ -163,7 +163,7 @@ class ConfigFinder:
             include_near_miss: Whether to include configs within tolerance of SLO
             near_miss_tolerance: How much over SLO to allow (0.2 = 20%)
             weights: Custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency, complexity
+                     Keys: accuracy, price, latency
             cluster_gpu_types: Detected GPU types from cluster (None = detection
                 not attempted, [] = no GPUs detected, non-empty = hard filter
                 intersected with user preferences)
@@ -403,8 +403,6 @@ class ConfigFinder:
                 model_size = model.size_parameters if model else bench.model_hf_repo
                 accuracy_score = scorer.score_accuracy_by_size(model_size)
 
-            complexity_score = scorer.score_complexity(total_gpus)  # Use total GPUs for complexity
-
             # Determine model_id and model_name
             # Use catalog info if available, otherwise use benchmark model_hf_repo
             model_id = model.model_id if model else bench.model_hf_repo
@@ -462,7 +460,6 @@ class ConfigFinder:
                     accuracy_score=accuracy_score,
                     price_score=0,  # Placeholder
                     latency_score=latency_score,
-                    complexity_score=complexity_score,
                     balanced_score=0.0,  # Placeholder
                     slo_status=slo_status,
                 ),
@@ -498,7 +495,6 @@ class ConfigFinder:
                             accuracy_score=rec.scores.accuracy_score,
                             price_score=price_score,
                             latency_score=rec.scores.latency_score,
-                            complexity_score=rec.scores.complexity_score,
                             weights=normalized_weights,
                         ),
                         1,

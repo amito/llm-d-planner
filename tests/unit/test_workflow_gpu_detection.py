@@ -80,7 +80,6 @@ class TestWorkflowGPUDetection:
             "best_accuracy": [],
             "lowest_cost": [],
             "lowest_latency": [],
-            "simplest": [],
             "balanced": [],
         }
         mock_analyzer.get_unique_configs_count.return_value = 0

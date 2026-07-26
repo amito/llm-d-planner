@@ -1,6 +1,6 @@
 """Ranking service for multi-criteria recommendation sorting.
 
-Each card (Best Accuracy, Lowest Cost, Best Latency, Simplest, Balanced)
+Each card (Best Accuracy, Lowest Cost, Best Latency, Balanced)
 ranks ALL filtered configurations independently by its own criterion.
 """
 
@@ -25,7 +25,7 @@ class Analyzer:
         preferred_models: list[str] | None = None,
     ) -> dict[str, list[DeploymentRecommendation]]:
         """
-        Generate 5 ranked lists, each sorted independently by its criterion.
+        Generate 4 ranked lists, each sorted independently by its criterion.
 
         Args:
             configurations: List of scored DeploymentRecommendations
@@ -33,13 +33,12 @@ class Analyzer:
             max_cost: Maximum monthly cost filter (USD)
             top_n: Number of top configurations to return per list
             weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency, complexity
+                     Keys: accuracy, price, latency
             use_case: Use case identifier (unused, kept for API compatibility)
             preferred_models: User-specified models that bypass min_accuracy filter
 
         Returns:
-            Dict with keys: best_accuracy, lowest_cost, lowest_latency,
-                           simplest, balanced
+            Dict with keys: best_accuracy, lowest_cost, lowest_latency, balanced
         """
         filtered = self._apply_filters(configurations, min_accuracy, max_cost, preferred_models)
 
@@ -49,7 +48,6 @@ class Analyzer:
                 "best_accuracy": [],
                 "lowest_cost": [],
                 "lowest_latency": [],
-                "simplest": [],
                 "balanced": [],
             }
 
@@ -62,9 +60,6 @@ class Analyzer:
 
         def get_latency(x):
             return x.scores.latency_score if x.scores else 0
-
-        def get_complexity(x):
-            return x.scores.complexity_score if x.scores else 0
 
         def get_balanced(x):
             return x.scores.balanced_score if x.scores else 0.0
@@ -106,14 +101,6 @@ class Analyzer:
                 sorted(
                     filtered,
                     key=lambda x: (get_latency(x), get_accuracy(x), get_cost_inverted(x)),
-                    reverse=True,
-                ),
-                top_n,
-            ),
-            "simplest": deduplicate_by_model(
-                sorted(
-                    filtered,
-                    key=lambda x: (get_complexity(x), get_accuracy(x), get_cost_inverted(x)),
                     reverse=True,
                 ),
                 top_n,

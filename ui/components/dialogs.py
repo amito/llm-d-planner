@@ -35,9 +35,6 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
         "quality_score": backend_scores.get("accuracy_score", ui_breakdown.get("quality_score", 0)),
         "latency_score": backend_scores.get("latency_score", ui_breakdown.get("latency_score", 0)),
         "cost_score": backend_scores.get("price_score", ui_breakdown.get("cost_score", 0)),
-        "capacity_score": backend_scores.get(
-            "complexity_score", ui_breakdown.get("capacity_score", 0)
-        ),
     }
 
     # === FINAL RECOMMENDATION BOX ===
@@ -171,17 +168,14 @@ def _render_winner_details(winner: dict, priority: str, extraction: dict):
         q_score = breakdown.get("quality_score", 0)
         l_score = breakdown.get("latency_score", 0)
         c_score = breakdown.get("cost_score", 0)
-        cap_score = breakdown.get("capacity_score", 0)
 
         q_contrib = q_score * weights["accuracy"]
         l_contrib = l_score * weights["latency"]
         c_contrib = c_score * weights["cost"]
-        cap_contrib = 0  # Complexity weight is 0 in UI
 
         render_score_bar("Accuracy", "", q_score, "score-bar-accuracy", q_contrib)
         render_score_bar("Latency", "", l_score, "score-bar-latency", l_contrib)
         render_score_bar("Cost", "", c_score, "score-bar-cost", c_contrib)
-        render_score_bar("Capacity", "", cap_score, "score-bar-capacity", cap_contrib)
 
     with col2:
         st.subheader("Why This Model?")

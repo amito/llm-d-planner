@@ -259,9 +259,7 @@ def _render_priorities():
 
     def get_weight_for_priority(dimension: str, priority_level: str) -> int:
         pw = priority_weights_map.get(dimension, {})
-        default_weights = defaults_config.get(
-            "weights", {"accuracy": 5, "cost": 4, "latency": 2, "complexity": 2}
-        )
+        default_weights = defaults_config.get("weights", {"accuracy": 5, "cost": 4, "latency": 2})
         weight = pw.get(priority_level, default_weights.get(dimension, 5))
         logger.info(
             f"get_weight_for_priority({dimension}, {priority_level}): pw={pw}, weight={weight}"
