@@ -342,9 +342,7 @@ class Scorer:
         w = weights or self.DEFAULT_WEIGHTS
 
         balanced = (
-            quality_score * w["quality"]
-            + price_score * w["price"]
-            + latency_score * w["latency"]
+            quality_score * w["quality"] + price_score * w["price"] + latency_score * w["latency"]
         )
 
         logger.debug(
