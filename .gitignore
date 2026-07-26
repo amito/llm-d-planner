@@ -54,8 +54,7 @@ htmlcov/
 .env.local
 
 # Generated configs
-generated_configs/*.yaml
-generated_configs/*.yml
+generated_configs/*
 !generated_configs/.gitkeep
 
 # Rendered deploy manifests (generated at deploy time)
