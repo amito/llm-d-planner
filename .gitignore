@@ -28,6 +28,10 @@ wheels/
 uv.lock
 .python-version.bak
 
+# Claude Code
+.claude/settings.json
+.claude/settings.local.json
+
 # IDEs
 .vscode/
 .idea/
@@ -67,6 +71,11 @@ logs/
 
 # Ollama
 .ollama/
+
+# Quality scoring caches
+.model_cache/
+# Quality scoring runtime cache
+.quality_cache/
 
 # Streamlit
 .streamlit/secrets.toml
