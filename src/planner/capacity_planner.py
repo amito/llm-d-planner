@@ -833,25 +833,41 @@ def max_concurrent_requests(
     return max(0, math.floor(kv_cache_allocatable / per_request_kv_cache_req))
 
 
+# vLLM pads vocab_size to a multiple of 64 before sharding across TP ranks.
+# Ref: vllm/model_executor/layers/vocab_parallel_embedding.py (DEFAULT_VOCAB_PADDING_SIZE)
+_VLLM_VOCAB_PADDING = 64
+
+
+def _pad_vocab_size(vocab_size: int, pad_to: int = _VLLM_VOCAB_PADDING) -> int:
+    """Match vLLM's vocab padding logic (rounds up to nearest multiple of pad_to)."""
+    return ((vocab_size + pad_to - 1) // pad_to) * pad_to
+
+
 def find_possible_tp(model_config: AutoConfig) -> list[int]:
     """
-    Find possible tensor parallelism values for the model.
+    Find valid tensor parallelism values for the model.
 
-    TP must be a divisor of num_attention_heads to ensure each TP rank has
-    an integer number of heads. For example, 32 heads supports TP ∈ {1,2,4,8,16,32}.
+    A valid TP must satisfy all four constraints that vLLM enforces
+    during model construction:
+      1. num_attention_heads % tp == 0
+      2. num_kv_heads % tp == 0  OR  tp % num_kv_heads == 0  (GQA)
+      3. intermediate_size % tp == 0
+      4. padded_vocab_size % tp == 0
     """
     text_config = get_text_config(model_config)
     num_attention_heads = text_config.num_attention_heads
+    num_kv_heads = getattr(text_config, "num_key_value_heads", num_attention_heads)
+    intermediate_size = text_config.intermediate_size
+    padded_vocab_size = _pad_vocab_size(text_config.vocab_size)
 
-    factors_list: list[int] = sorted(
-        {
-            x
-            for i in range(1, int(num_attention_heads**0.5) + 1)
-            if num_attention_heads % i == 0
-            for x in [i, num_attention_heads // i]
-        }
+    return sorted(
+        i
+        for i in range(1, num_attention_heads + 1)
+        if num_attention_heads % i == 0
+        and (num_kv_heads % i == 0 or i % num_kv_heads == 0)
+        and intermediate_size % i == 0
+        and padded_vocab_size % i == 0
     )
-    return factors_list
 
 
 def available_gpu_memory(memory: int, gpu_utilization: float = 0.9) -> float:
