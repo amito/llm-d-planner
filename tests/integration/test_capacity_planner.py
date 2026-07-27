@@ -390,12 +390,14 @@ def test_total_kv_cache_blocks(monkeypatch):
 
 @pytest.mark.integration
 def test_find_possible_tp():
-    """
-    Tests the possible TP sizes are accurately calculated
+    """Validate TP values against real HuggingFace model configs.
+
+    Uses the four vLLM constraints (attention heads, kv heads,
+    intermediate size, padded vocab size) to determine valid TP.
     """
 
     model_config = get_model_config_from_hf(qwen_model)
-    assert find_possible_tp(model_config) == [1, 2, 7, 14]
+    assert find_possible_tp(model_config) == [1, 2]
 
     deepseek = "deepseek-ai/DeepSeek-R1"
     model_config = get_model_config_from_hf(deepseek)
