@@ -4,7 +4,7 @@ import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from planner.api.dependencies import get_deployment_generator, get_workflow
 from planner.configuration import DeploymentGenerator
@@ -25,9 +25,15 @@ class SimpleRecommendationRequest(BaseModel):
 class BalancedWeights(BaseModel):
     """Weights for balanced score calculation (0-10 scale)."""
 
-    quality: int = 4
-    price: int = 4
-    latency: int = 1
+    quality: int = Field(default=4, ge=0)
+    price: int = Field(default=4, ge=0)
+    latency: int = Field(default=1, ge=0)
+
+    @model_validator(mode="after")
+    def at_least_one_positive(self) -> "BalancedWeights":
+        if self.quality == 0 and self.price == 0 and self.latency == 0:
+            raise ValueError("At least one weight must be positive.")
+        return self
 
 
 class RankedRecommendationFromSpecRequest(BaseModel):

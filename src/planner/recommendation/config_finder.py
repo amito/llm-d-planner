@@ -479,19 +479,12 @@ class ConfigFinder:
                     price_score = scorer.score_price(rec.cost_per_month_usd, min_cost, max_cost)
                     rec.scores.price_score = price_score
 
-                    # Calculate base balanced score with user weights
-                    # Weights from UI are 0-10 integers, normalize to fractions
-                    normalized_weights = None
-                    if weights:
-                        total = sum(weights.values()) or 1  # Avoid division by zero
-                        normalized_weights = {k: v / total for k, v in weights.items()}
-
                     rec.scores.balanced_score = round(
                         scorer.score_balanced(
                             quality_score=rec.scores.quality_score,
                             price_score=price_score,
                             latency_score=rec.scores.latency_score,
-                            weights=normalized_weights,
+                            weights=weights,
                         ),
                         1,
                     )

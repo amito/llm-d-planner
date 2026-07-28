@@ -316,22 +316,24 @@ def render_use_case_input_tab(priority: str):
                 priority_config = fetch_priority_weights()
                 pw_map = priority_config.get("priority_weights", {}) if priority_config else {}
                 defaults_cfg = priority_config.get("defaults", {}) if priority_config else {}
-                default_weights = defaults_cfg.get(
-                    "weights", {"quality": 5, "cost": 4, "latency": 2}
-                )
+                default_priority = defaults_cfg.get("priority", "medium")
+                fallback = {"quality": 4, "cost": 4, "latency": 1}
 
                 st.session_state.quality_priority = extraction.get("quality_priority", "medium")
                 st.session_state.cost_priority = extraction.get("cost_priority", "medium")
                 st.session_state.latency_priority = extraction.get("latency_priority", "medium")
 
                 st.session_state.weight_quality = pw_map.get("quality", {}).get(
-                    st.session_state.quality_priority, default_weights["quality"]
+                    st.session_state.quality_priority,
+                    pw_map.get("quality", {}).get(default_priority, fallback["quality"]),
                 )
                 st.session_state.weight_cost = pw_map.get("cost", {}).get(
-                    st.session_state.cost_priority, default_weights["cost"]
+                    st.session_state.cost_priority,
+                    pw_map.get("cost", {}).get(default_priority, fallback["cost"]),
                 )
                 st.session_state.weight_latency = pw_map.get("latency", {}).get(
-                    st.session_state.latency_priority, default_weights["latency"]
+                    st.session_state.latency_priority,
+                    pw_map.get("latency", {}).get(default_priority, fallback["latency"]),
                 )
 
                 logger.info(

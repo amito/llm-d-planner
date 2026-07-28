@@ -232,8 +232,9 @@ def _render_priorities():
 
     def get_weight_for_priority(dimension: str, priority_level: str) -> int:
         pw = priority_weights_map.get(dimension, {})
-        default_weights = defaults_config.get("weights", {"quality": 5, "cost": 4, "latency": 2})
-        weight = pw.get(priority_level, default_weights.get(dimension, 5))
+        default_priority = defaults_config.get("priority", "medium")
+        fallback = {"quality": 4, "cost": 4, "latency": 1}
+        weight = pw.get(priority_level, pw.get(default_priority, fallback.get(dimension, 4)))
         logger.info(
             f"get_weight_for_priority({dimension}, {priority_level}): pw={pw}, weight={weight}"
         )
@@ -317,9 +318,9 @@ def _render_priorities():
             new_priority_val = priority_to_value[new_priority]
             if new_priority_val != current_priority:
                 st.session_state[f"{state_key}_priority"] = new_priority_val
-                st.session_state[f"weight_{state_key}"] = get_weight_for_priority(
-                    state_key, new_priority_val
-                )
+                new_weight_val = get_weight_for_priority(state_key, new_priority_val)
+                st.session_state[f"weight_{state_key}"] = new_weight_val
+                st.session_state[f"{state_key}_weight_input"] = new_weight_val
         with weight_col:
             current_weight = st.session_state.get(f"weight_{state_key}", 5)
             new_weight = st.number_input(

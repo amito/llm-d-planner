@@ -123,11 +123,14 @@ def compute_composite(
     category: str,
     arena_norm: NormalizedScore | None,
     aa_norm: NormalizedScore | None,
-    arena_weight: float = 0.5,
-    aa_weight: float = 0.5,
+    arena_weight: float = 1,
+    aa_weight: float = 1,
 ) -> CompositeScore:
     if arena_norm and aa_norm:
-        pct = arena_weight * arena_norm.percentile + aa_weight * aa_norm.percentile
+        total_w = arena_weight + aa_weight
+        pct = (arena_weight / total_w) * arena_norm.percentile + (
+            aa_weight / total_w
+        ) * aa_norm.percentile
     elif arena_norm:
         pct = arena_norm.percentile
     elif aa_norm:
@@ -188,8 +191,8 @@ def compute_scorecards(
     aa_models: list[dict[str, Any]],
     target_models: list[tuple[str, str | None, str | None]],
     categories: list[str],
-    arena_weight: float = 0.5,
-    aa_weight: float = 0.5,
+    arena_weight: float = 1,
+    aa_weight: float = 1,
 ) -> list[ModelScorecard]:
     arena_norms, aa_norms = compute_normalizations(arena_rows, aa_models, categories)
 

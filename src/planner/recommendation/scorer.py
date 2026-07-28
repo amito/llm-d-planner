@@ -43,11 +43,11 @@ class Scorer:
         480: 98,
     }
 
-    # Default weights for balanced score
+    # Default weights for balanced score (integers, normalized internally)
     DEFAULT_WEIGHTS = {
-        "quality": 0.45,
-        "price": 0.45,
-        "latency": 0.10,
+        "quality": 4,
+        "price": 4,
+        "latency": 1,
     }
 
     def __init__(self):
@@ -333,16 +333,23 @@ class Scorer:
             quality_score: Quality score (0-100)
             price_score: Price score (0-100)
             latency_score: Latency score (0-100)
-            weights: Optional custom weights (default: 45% quality, 45% price,
-                     10% latency)
+            weights: Optional custom weights (default: 4:4:1
+                     quality:price:latency, normalized internally)
 
         Returns:
             Weighted composite score (0-100)
         """
         w = weights or self.DEFAULT_WEIGHTS
+        if any(v < 0 for v in w.values()):
+            raise ValueError("Weights must be non-negative.")
+        total = sum(w.values())
+        if total == 0:
+            raise ValueError("At least one weight must be positive.")
 
-        balanced = (
-            quality_score * w["quality"] + price_score * w["price"] + latency_score * w["latency"]
+        balanced: float = (
+            quality_score * w["quality"] / total
+            + price_score * w["price"] / total
+            + latency_score * w["latency"] / total
         )
 
         logger.debug(

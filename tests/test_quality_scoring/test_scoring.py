@@ -274,7 +274,7 @@ class TestComputeComposite:
         aa = NormalizedScore(
             raw_score=60, percentile=0.0, tied_rank=1, population_size=100, source="aa"
         )
-        result = compute_composite("overall", arena, aa, arena_weight=0.7, aa_weight=0.3)
+        result = compute_composite("overall", arena, aa, arena_weight=7, aa_weight=3)
         assert result.percentile == 70.0
 
 
@@ -434,8 +434,8 @@ class TestComparisonResultNewFields:
         r = ComparisonResult(model_names=["a"])
         assert r.scorecards == []
         assert r.category_findings == []
-        assert r.arena_weight == 0.5
-        assert r.aa_weight == 0.5
+        assert r.arena_weight == 1
+        assert r.aa_weight == 1
 
 
 class TestGenerateCategoryFindings:

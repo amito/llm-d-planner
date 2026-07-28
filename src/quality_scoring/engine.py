@@ -40,8 +40,8 @@ class ScoringEngine:
         arena_rows: list[dict[str, Any]] | None = None,
         aa_models: list[dict[str, Any]] | None = None,
         categories: list[str] | None = None,
-        arena_weight: float = 0.5,
-        aa_weight: float = 0.5,
+        arena_weight: float = 1,
+        aa_weight: float = 1,
     ) -> None:
         if arena_weight < 0 or aa_weight < 0:
             raise ValueError("Weights must be non-negative.")

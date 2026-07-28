@@ -103,8 +103,8 @@ class ComparisonResult:
     overall_conclusions: list[str] = field(default_factory=list)
     scorecards: list[ModelScorecard] = field(default_factory=list)
     category_findings: list[CategoryFinding] = field(default_factory=list)
-    arena_weight: float = 0.5
-    aa_weight: float = 0.5
+    arena_weight: float = 1
+    aa_weight: float = 1
     composite_chart_path: Path | None = None
 
 

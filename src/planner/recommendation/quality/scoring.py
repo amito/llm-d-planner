@@ -112,7 +112,9 @@ def build_scoring_engine(
                 arena_client.sync(cache_dir=runtime_cache_dir)
                 arena_rows, arena_fetched_at = arena_client.load_cache(cache_dir=runtime_cache_dir)
             except Exception:
-                logger.warning("Arena sync failed, falling back to checked-in data")
+                arena_rows = arena_rows_cached
+                arena_fetched_at = arena_fetched
+                logger.warning("Arena sync failed, falling back to cached data")
         else:
             arena_rows = arena_rows_cached
             arena_fetched_at = arena_fetched
@@ -124,7 +126,9 @@ def build_scoring_engine(
                 aa_client.sync(api_key=aa_api_key, cache_dir=runtime_cache_dir)
                 aa_models, aa_fetched_at = aa_client.load_cache(cache_dir=runtime_cache_dir)
             except Exception:
-                logger.warning("AA sync failed, falling back to checked-in data")
+                aa_models = aa_cached
+                aa_fetched_at = aa_fetched
+                logger.warning("AA sync failed, falling back to cached data")
         elif aa_cached:
             aa_models = aa_cached
             aa_fetched_at = aa_fetched
@@ -132,22 +136,32 @@ def build_scoring_engine(
             if not aa_api_key:
                 logger.warning("AA_API_KEY not set — using checked-in AA data")
 
-    # Fall back to checked-in data for any source not yet loaded
-    if not arena_rows:
-        arena_path = checked_in_dir / "arena_models.json"
-        if arena_path.is_file():
-            with open(arena_path) as f:
-                data = json.load(f)
-                arena_rows = data.get("rows", [])
-                arena_fetched_at = arena_fetched_at or data.get("fetched_at")
+    # Fall back to checked-in data when no runtime data loaded,
+    # or when checked-in snapshots are newer than runtime cache.
+    # Note: fetched_at comparison is lexicographic (ISO 8601 with consistent tz format).
+    arena_path = checked_in_dir / "arena_models.json"
+    if arena_path.is_file():
+        with open(arena_path) as f:
+            checked_in = json.load(f)
+        checked_in_rows = checked_in.get("rows", [])
+        checked_in_fetched = checked_in.get("fetched_at")
+        if not arena_rows or (
+            checked_in_fetched and arena_fetched_at and checked_in_fetched > arena_fetched_at
+        ):
+            arena_rows = checked_in_rows
+            arena_fetched_at = checked_in_fetched
 
-    if not aa_models:
-        aa_path = checked_in_dir / "aa_models.json"
-        if aa_path.is_file():
-            with open(aa_path) as f:
-                data = json.load(f)
-                aa_models = data.get("models", [])
-                aa_fetched_at = aa_fetched_at or data.get("fetched_at")
+    aa_path = checked_in_dir / "aa_models.json"
+    if aa_path.is_file():
+        with open(aa_path) as f:
+            checked_in = json.load(f)
+        checked_in_models = checked_in.get("models", [])
+        checked_in_fetched = checked_in.get("fetched_at")
+        if not aa_models or (
+            checked_in_fetched and aa_fetched_at and checked_in_fetched > aa_fetched_at
+        ):
+            aa_models = checked_in_models
+            aa_fetched_at = checked_in_fetched
 
     logger.info(
         "Building ScoringEngine: %d arena rows, %d AA models", len(arena_rows), len(aa_models)

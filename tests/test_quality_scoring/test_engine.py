@@ -173,8 +173,8 @@ class TestWeights:
             arena_rows=_make_arena_rows(),
             aa_models=_make_aa_models(),
             categories=["overall"],
-            arena_weight=1.0,
-            aa_weight=0.0,
+            arena_weight=1,
+            aa_weight=0,
         )
         sc = engine.get_scores("Alpha")
         assert sc is not None
@@ -187,8 +187,8 @@ class TestWeights:
             arena_rows=_make_arena_rows(),
             aa_models=_make_aa_models(),
             categories=["overall"],
-            arena_weight=0.0,
-            aa_weight=1.0,
+            arena_weight=0,
+            aa_weight=1,
         )
         sc = engine.get_scores("Alpha")
         assert sc is not None
@@ -206,15 +206,15 @@ class TestWeights:
             arena_rows=_make_arena_rows(),
             aa_models=aa_models,
             categories=["overall"],
-            arena_weight=0.5,
-            aa_weight=0.5,
+            arena_weight=5,
+            aa_weight=5,
         )
         engine_arena_heavy = ScoringEngine(
             arena_rows=_make_arena_rows(),
             aa_models=aa_models,
             categories=["overall"],
-            arena_weight=0.8,
-            aa_weight=0.2,
+            arena_weight=8,
+            aa_weight=2,
         )
         sc_equal = engine_equal.get_scores("Alpha")
         sc_heavy = engine_arena_heavy.get_scores("Alpha")
@@ -334,7 +334,7 @@ class TestWeightValidation:
             ScoringEngine(
                 arena_rows=_make_arena_rows(),
                 aa_models=_make_aa_models(),
-                arena_weight=-1.0,
+                arena_weight=-1,
             )
 
     def test_both_zero_rejected(self):
@@ -342,6 +342,6 @@ class TestWeightValidation:
             ScoringEngine(
                 arena_rows=_make_arena_rows(),
                 aa_models=_make_aa_models(),
-                arena_weight=0.0,
-                aa_weight=0.0,
+                arena_weight=0,
+                aa_weight=0,
             )
