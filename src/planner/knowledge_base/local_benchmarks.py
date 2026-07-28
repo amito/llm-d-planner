@@ -11,6 +11,7 @@ import logging
 import sqlite3
 import uuid
 
+from planner.knowledge_base.benchmarks import BenchmarkData
 from planner.knowledge_base.loader import (
     generate_config_id,
     normalize_benchmark_fields,
@@ -172,3 +173,107 @@ class LocalBenchmarkRepository:
         inserted = after - before
         logger.info("Inserted %d of %d benchmarks (source=%s)", inserted, len(benchmarks), source)
         return inserted
+
+    def find_configurations_meeting_slo(
+        self,
+        prompt_tokens: int,
+        output_tokens: int,
+        ttft_p95_max_ms: int,
+        itl_p95_max_ms: int,
+        e2e_p95_max_ms: int,
+        min_qps: float = 0,
+        percentile: str = "p95",
+        gpu_types: list[str] | None = None,
+        exclude_estimated: bool = False,
+    ) -> list[BenchmarkData]:
+        """Find configurations meeting SLO requirements.
+
+        Same signature and semantics as BenchmarkRepository.
+        For each unique (model_hf_repo, hardware, hardware_count),
+        returns only the benchmark with the highest requests_per_second
+        that still meets SLO requirements.
+
+        Args:
+            prompt_tokens: Target prompt length
+            output_tokens: Target output length
+            ttft_p95_max_ms: Maximum acceptable TTFT (ms)
+            itl_p95_max_ms: Maximum acceptable ITL (ms/token)
+            e2e_p95_max_ms: Maximum acceptable E2E (ms)
+            min_qps: Minimum required QPS
+            percentile: Which percentile column to use (mean, p90, p95, p99)
+            gpu_types: Optional list of GPU types to filter by
+            exclude_estimated: If True, exclude rows with confidence_level='estimated'
+
+        Returns:
+            List of benchmarks meeting all criteria
+        """
+        percentile_columns = {
+            "mean": ("ttft_mean", "itl_mean", "e2e_mean"),
+            "p90": ("ttft_p90", "itl_p90", "e2e_p90"),
+            "p95": ("ttft_p95", "itl_p95", "e2e_p95"),
+            "p99": ("ttft_p99", "itl_p99", "e2e_p99"),
+        }
+        cols = percentile_columns.get(percentile)
+        if cols is None:
+            logger.warning("Invalid percentile '%s', defaulting to p95", percentile)
+            cols = percentile_columns["p95"]
+        ttft_col, itl_col, e2e_col = cols
+
+        # Build dynamic WHERE clauses
+        conditions = [
+            "prompt_tokens = ?",
+            "output_tokens = ?",
+            f"{ttft_col} <= ?",
+            f"{itl_col} <= ?",
+            f"{e2e_col} <= ?",
+            "requests_per_second >= ?",
+        ]
+        params: list = [
+            prompt_tokens,
+            output_tokens,
+            ttft_p95_max_ms,
+            itl_p95_max_ms,
+            e2e_p95_max_ms,
+            min_qps,
+        ]
+
+        if gpu_types:
+            placeholders = ", ".join("?" for _ in gpu_types)
+            conditions.append(f"hardware IN ({placeholders})")
+            params.extend(gpu_types)
+
+        if exclude_estimated:
+            conditions.append("confidence_level != 'estimated'")
+
+        where = " AND ".join(conditions)
+
+        query = f"""
+            WITH ranked_configs AS (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY model_hf_repo, hardware, hardware_count
+                           ORDER BY requests_per_second DESC, {e2e_col} ASC
+                       ) as rn
+                FROM exported_summaries
+                WHERE {where}
+            )
+            SELECT
+                id, config_id, model_hf_repo, provider, type,
+                ttft_mean, ttft_p90, ttft_p95, ttft_p99,
+                e2e_mean, e2e_p90, e2e_p95, e2e_p99,
+                itl_mean, itl_p90, itl_p95, itl_p99,
+                tps_mean, tps_p90, tps_p95, tps_p99,
+                hardware, hardware_count, framework, framework_version,
+                requests_per_second, tokens_per_second,
+                mean_input_tokens, mean_output_tokens,
+                prompt_tokens, output_tokens,
+                model_uri, source, confidence_level
+            FROM ranked_configs
+            WHERE rn = 1
+            ORDER BY model_hf_repo, hardware, hardware_count
+        """
+
+        cursor = self._conn.execute(query, params)
+        results = [BenchmarkData(dict(row)) for row in cursor.fetchall()]
+        logger.info("Found %d benchmarks meeting SLO criteria", len(results))
+        return results
