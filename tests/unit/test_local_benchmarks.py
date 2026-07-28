@@ -1,5 +1,8 @@
 """Unit tests for LocalBenchmarkRepository."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from planner.knowledge_base.benchmarks import BenchmarkData
@@ -181,3 +184,131 @@ class TestFindConfigurationsMeetingSlo:
         assert results[0].ttft_p95 == 26.297
         assert results[0].itl_p95 == 10.748
         assert results[0].tokens_per_second == 247.464
+
+
+@pytest.mark.unit
+class TestFromFiles:
+    def test_loads_json_file(self, tmp_path):
+        json_file = tmp_path / "benchmarks.json"
+        json_file.write_text(
+            json.dumps(
+                {
+                    "_metadata": {"source": "test", "confidence_level": "benchmarked"},
+                    "benchmarks": [SAMPLE_BENCHMARK],
+                }
+            )
+        )
+        repo = LocalBenchmarkRepository.from_files([json_file])
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 1
+        assert results[0].source == "test"
+        assert results[0].confidence_level == "benchmarked"
+
+    def test_loads_multiple_files(self, tmp_path):
+        for i, hw in enumerate(["H100", "A100"]):
+            f = tmp_path / f"bench_{i}.json"
+            bench = {**SAMPLE_BENCHMARK, "hardware": hw, "requests_per_second": float(i + 1)}
+            f.write_text(json.dumps({"benchmarks": [bench]}))
+        repo = LocalBenchmarkRepository.from_files(
+            [
+                tmp_path / "bench_0.json",
+                tmp_path / "bench_1.json",
+            ]
+        )
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 2
+
+    def test_uses_default_metadata_when_absent(self, tmp_path):
+        json_file = tmp_path / "benchmarks.json"
+        json_file.write_text(json.dumps({"benchmarks": [SAMPLE_BENCHMARK]}))
+        repo = LocalBenchmarkRepository.from_files([json_file])
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 1
+        assert results[0].source == "local"
+
+
+@pytest.mark.unit
+class TestFromBenchmarks:
+    def test_loads_dicts(self):
+        repo = LocalBenchmarkRepository.from_benchmarks([SAMPLE_BENCHMARK])
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 1
+
+
+@pytest.mark.unit
+class TestReplaceBenchmarks:
+    def test_replaces_source(self):
+        repo = LocalBenchmarkRepository()
+        repo.add_benchmarks(
+            [SAMPLE_BENCHMARK],
+            source="model_catalog",
+        )
+        new_bench = {**SAMPLE_BENCHMARK, "hardware": "A100", "requests_per_second": 2.0}
+        replaced = repo.replace_benchmarks("model_catalog", [new_bench])
+        assert replaced == 1
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 1
+        assert results[0].hardware == "A100"
+
+    def test_preserves_other_sources(self):
+        repo = LocalBenchmarkRepository()
+        repo.add_benchmarks([SAMPLE_BENCHMARK], source="blis")
+        catalog_bench = {**SAMPLE_BENCHMARK, "hardware": "A100", "requests_per_second": 2.0}
+        repo.add_benchmarks([catalog_bench], source="model_catalog")
+        # Replace only model_catalog rows
+        repo.replace_benchmarks("model_catalog", [])
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 1
+        assert results[0].source == "blis"
+
+
+@pytest.mark.unit
+class TestSaveBenchmarks:
+    def test_saves_benchmark_data_objects(self):
+        repo = LocalBenchmarkRepository()
+        bd = BenchmarkData(SAMPLE_BENCHMARK)
+        repo.save_benchmarks([bd])
+        results = repo.find_configurations_meeting_slo(
+            prompt_tokens=512,
+            output_tokens=256,
+            ttft_p95_max_ms=100,
+            itl_p95_max_ms=50,
+            e2e_p95_max_ms=5000,
+        )
+        assert len(results) == 1

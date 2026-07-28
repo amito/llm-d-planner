@@ -7,12 +7,15 @@ files or raw dicts into an in-memory SQLite database.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import uuid
+from pathlib import Path
 
 from planner.knowledge_base.benchmarks import BenchmarkData
 from planner.knowledge_base.loader import (
+    extract_metadata,
     generate_config_id,
     normalize_benchmark_fields,
 )
@@ -138,6 +141,50 @@ class LocalBenchmarkRepository:
         row["confidence_level"] = confidence_level
         return row
 
+    @classmethod
+    def from_files(cls, json_paths: list[Path]) -> LocalBenchmarkRepository:
+        """Load benchmarks from one or more JSON files.
+
+        Each JSON file must have a top-level "benchmarks" key containing
+        a list of benchmark dicts. Optionally, a "_metadata" key with
+        "source" and "confidence_level" fields.
+
+        Args:
+            json_paths: List of Path objects to JSON files.
+
+        Returns:
+            LocalBenchmarkRepository with loaded benchmarks.
+        """
+        repo = cls()
+        for path in json_paths:
+            with open(path) as f:
+                data = json.load(f)
+            benchmarks = data.get("benchmarks", [])
+            meta = extract_metadata(data)
+            source = meta.get("source") or "local"
+            confidence = meta.get("confidence_level") or "estimated"
+            repo.add_benchmarks(benchmarks, source=source, confidence_level=confidence)
+            logger.info("Loaded %d benchmarks from %s", len(benchmarks), path)
+        return repo
+
+    @classmethod
+    def from_benchmarks(cls, benchmarks: list[dict]) -> LocalBenchmarkRepository:
+        """Load benchmarks from pre-built dicts.
+
+        Dicts are raw benchmark records (same format as entries in the
+        JSON "benchmarks" array). Field normalization is applied
+        automatically.
+
+        Args:
+            benchmarks: List of benchmark dicts.
+
+        Returns:
+            LocalBenchmarkRepository with loaded benchmarks.
+        """
+        repo = cls()
+        repo.add_benchmarks(benchmarks)
+        return repo
+
     def add_benchmarks(
         self,
         benchmarks: list[dict],
@@ -173,6 +220,47 @@ class LocalBenchmarkRepository:
         inserted = after - before
         logger.info("Inserted %d of %d benchmarks (source=%s)", inserted, len(benchmarks), source)
         return inserted
+
+    def replace_benchmarks(self, source: str, benchmarks: list[dict]) -> int:
+        """Replace all benchmarks for a given source.
+
+        Deletes existing rows with matching source, then inserts the new
+        rows. This mirrors the catalog sync pattern.
+
+        Args:
+            source: Data source identifier to replace.
+            benchmarks: New benchmark dicts to insert.
+
+        Returns:
+            Number of rows inserted.
+        """
+        self._conn.execute("DELETE FROM exported_summaries WHERE source = ?", (source,))
+        self._conn.commit()
+        if not benchmarks:
+            return 0
+        return self.add_benchmarks(benchmarks, source=source)
+
+    def save_benchmarks(
+        self,
+        benchmarks: list[BenchmarkData],
+        source: str = "llm-optimizer",
+        confidence_level: str = "estimated",
+    ) -> None:
+        """Persist BenchmarkData objects to the in-memory database.
+
+        Used by the estimator to cache roofline estimates.
+        Same signature as BenchmarkRepository.save_benchmarks().
+
+        Args:
+            benchmarks: List of BenchmarkData objects.
+            source: Data source identifier (default 'llm-optimizer').
+            confidence_level: Trust level ('benchmarked' or 'estimated').
+        """
+        benchmark_dicts = [b.to_dict() for b in benchmarks]
+        for d in benchmark_dicts:
+            d.setdefault("prompt_tokens", d.get("mean_input_tokens"))
+            d.setdefault("output_tokens", d.get("mean_output_tokens"))
+        self.add_benchmarks(benchmark_dicts, source=source, confidence_level=confidence_level)
 
     def find_configurations_meeting_slo(
         self,
