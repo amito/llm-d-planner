@@ -1,0 +1,174 @@
+"""In-process benchmark storage backed by SQLite.
+
+Provides the same query interface as BenchmarkRepository (PostgreSQL)
+but requires no external database. Benchmark data is loaded from JSON
+files or raw dicts into an in-memory SQLite database.
+"""
+
+from __future__ import annotations
+
+import logging
+import sqlite3
+import uuid
+
+from planner.knowledge_base.loader import (
+    generate_config_id,
+    normalize_benchmark_fields,
+)
+
+logger = logging.getLogger(__name__)
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS exported_summaries (
+    id TEXT PRIMARY KEY,
+    config_id TEXT UNIQUE,
+    model_hf_repo TEXT NOT NULL,
+    provider TEXT,
+    type TEXT NOT NULL DEFAULT 'local',
+    ttft_mean REAL NOT NULL,
+    ttft_p90 REAL NOT NULL,
+    ttft_p95 REAL NOT NULL,
+    ttft_p99 REAL NOT NULL,
+    e2e_mean REAL NOT NULL,
+    e2e_p90 REAL NOT NULL,
+    e2e_p95 REAL NOT NULL,
+    e2e_p99 REAL NOT NULL,
+    itl_mean REAL,
+    itl_p90 REAL,
+    itl_p95 REAL,
+    itl_p99 REAL,
+    tps_mean REAL,
+    tps_p90 REAL,
+    tps_p95 REAL,
+    tps_p99 REAL,
+    hardware TEXT,
+    hardware_count INTEGER,
+    framework TEXT,
+    framework_version TEXT,
+    requests_per_second REAL NOT NULL,
+    tokens_per_second REAL NOT NULL,
+    mean_input_tokens REAL NOT NULL,
+    mean_output_tokens REAL NOT NULL,
+    prompt_tokens INTEGER,
+    output_tokens INTEGER,
+    model_uri TEXT,
+    source TEXT NOT NULL DEFAULT 'local',
+    confidence_level TEXT NOT NULL DEFAULT 'estimated'
+);
+CREATE INDEX IF NOT EXISTS idx_benchmark_lookup
+    ON exported_summaries(model_hf_repo, hardware, hardware_count, prompt_tokens, output_tokens);
+CREATE INDEX IF NOT EXISTS idx_traffic_patterns
+    ON exported_summaries(prompt_tokens, output_tokens);
+"""
+
+# Columns inserted by add_benchmarks / save_benchmarks
+_INSERT_COLUMNS = (
+    "id",
+    "config_id",
+    "model_hf_repo",
+    "provider",
+    "type",
+    "ttft_mean",
+    "ttft_p90",
+    "ttft_p95",
+    "ttft_p99",
+    "e2e_mean",
+    "e2e_p90",
+    "e2e_p95",
+    "e2e_p99",
+    "itl_mean",
+    "itl_p90",
+    "itl_p95",
+    "itl_p99",
+    "tps_mean",
+    "tps_p90",
+    "tps_p95",
+    "tps_p99",
+    "hardware",
+    "hardware_count",
+    "framework",
+    "framework_version",
+    "requests_per_second",
+    "tokens_per_second",
+    "mean_input_tokens",
+    "mean_output_tokens",
+    "prompt_tokens",
+    "output_tokens",
+    "model_uri",
+    "source",
+    "confidence_level",
+)
+
+
+class LocalBenchmarkRepository:
+    """In-process benchmark storage backed by SQLite.
+
+    Provides the same query interface as BenchmarkRepository (PostgreSQL)
+    but requires no external database. Loads benchmark data from JSON files
+    or pre-built dicts into an in-memory SQLite database.
+    """
+
+    def __init__(self) -> None:
+        """Create an empty repository with in-memory SQLite database."""
+        self._conn = sqlite3.connect(":memory:", check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.executescript(_SCHEMA)
+
+    def _prepare_row(
+        self,
+        benchmark: dict,
+        source: str = "local",
+        confidence_level: str = "estimated",
+    ) -> dict:
+        """Normalize a raw benchmark dict into a row ready for insertion."""
+        row = normalize_benchmark_fields(benchmark)
+        row["id"] = str(uuid.uuid4())
+        row["config_id"] = generate_config_id(row)
+        row.setdefault("type", "local")
+        row.setdefault("provider", None)
+        row.setdefault("framework", None)
+        row.setdefault("framework_version", None)
+        row.setdefault("tps_mean", None)
+        row.setdefault("tps_p90", None)
+        row.setdefault("tps_p95", None)
+        row.setdefault("tps_p99", None)
+        row.setdefault("model_uri", None)
+        row["source"] = source
+        row["confidence_level"] = confidence_level
+        return row
+
+    def add_benchmarks(
+        self,
+        benchmarks: list[dict],
+        source: str = "local",
+        confidence_level: str = "estimated",
+    ) -> int:
+        """Add benchmark rows to the repository.
+
+        Appends to existing data. Duplicates (same config_id) are
+        silently skipped.
+
+        Args:
+            benchmarks: Raw benchmark dicts (normalized automatically).
+            source: Data source identifier (e.g., 'blis', 'model_catalog').
+            confidence_level: Trust level ('benchmarked' or 'estimated').
+
+        Returns:
+            Number of rows inserted.
+        """
+        if not benchmarks:
+            return 0
+
+        cols = ", ".join(_INSERT_COLUMNS)
+        placeholders = ", ".join(f":{c}" for c in _INSERT_COLUMNS)
+        sql = f"INSERT OR IGNORE INTO exported_summaries ({cols}) VALUES ({placeholders})"
+
+        rows = [self._prepare_row(b, source, confidence_level) for b in benchmarks]
+        cursor = self._conn.cursor()
+        before = cursor.execute("SELECT COUNT(*) FROM exported_summaries").fetchone()[0]
+        cursor.executemany(sql, rows)
+        self._conn.commit()
+        after = cursor.execute("SELECT COUNT(*) FROM exported_summaries").fetchone()[0]
+        inserted = after - before
+        logger.info("Inserted %d of %d benchmarks (source=%s)", inserted, len(benchmarks), source)
+        return inserted
