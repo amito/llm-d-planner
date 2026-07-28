@@ -213,10 +213,12 @@ class LocalBenchmarkRepository:
 
         rows = [self._prepare_row(b, source, confidence_level) for b in benchmarks]
         cursor = self._conn.cursor()
-        before = cursor.execute("SELECT COUNT(*) FROM exported_summaries").fetchone()[0]
+        before_result = cursor.execute("SELECT COUNT(*) FROM exported_summaries").fetchone()
+        before = int(before_result[0]) if before_result else 0
         cursor.executemany(sql, rows)
         self._conn.commit()
-        after = cursor.execute("SELECT COUNT(*) FROM exported_summaries").fetchone()[0]
+        after_result = cursor.execute("SELECT COUNT(*) FROM exported_summaries").fetchone()
+        after = int(after_result[0]) if after_result else 0
         inserted = after - before
         logger.info("Inserted %d of %d benchmarks (source=%s)", inserted, len(benchmarks), source)
         return inserted

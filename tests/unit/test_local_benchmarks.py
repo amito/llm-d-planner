@@ -312,3 +312,56 @@ class TestSaveBenchmarks:
             e2e_p95_max_ms=5000,
         )
         assert len(results) == 1
+
+
+# Path to real benchmark data relative to the test file
+_BLIS_PATH = (
+    Path(__file__).parent.parent.parent
+    / "data"
+    / "benchmarks"
+    / "performance"
+    / "benchmarks_BLIS.json"
+)
+
+
+@pytest.mark.unit
+class TestConfigFinderIntegration:
+    """Wire LocalBenchmarkRepository into ConfigFinder and produce recommendations."""
+
+    @pytest.mark.skipif(not _BLIS_PATH.exists(), reason="BLIS benchmark file not found")
+    def test_end_to_end_recommendations(self):
+        from planner.recommendation.config_finder import ConfigFinder
+        from planner.shared.schemas.intent import DeploymentIntent
+        from planner.specification.traffic_profile import TrafficProfileGenerator
+
+        repo = LocalBenchmarkRepository.from_files([_BLIS_PATH])
+        finder = ConfigFinder(benchmark_repo=repo)  # type: ignore[arg-type]
+
+        intent = DeploymentIntent(
+            use_case="chatbot_conversational",
+            experience_class="conversational",
+            user_count=100,
+            accuracy_priority="medium",
+            cost_priority="medium",
+            latency_priority="medium",
+        )
+
+        gen = TrafficProfileGenerator()
+        traffic = gen.generate_profile(intent)
+        slo = gen.generate_slo_targets(intent)
+
+        results = finder.plan_all_capacities(
+            traffic_profile=traffic,
+            slo_targets=slo,
+            intent=intent,
+        )
+        # plan_all_capacities returns (ranked_configs, warnings)
+        ranked_configs, warnings = results
+
+        # Should produce at least one recommendation from BLIS data
+        total = (
+            sum(len(v) for v in ranked_configs.values())
+            if isinstance(ranked_configs, dict)
+            else len(ranked_configs)
+        )
+        assert total > 0, f"Expected recommendations but got none. Warnings: {warnings}"
