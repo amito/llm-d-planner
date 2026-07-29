@@ -11,6 +11,8 @@ Calculates minimum GPU requirements based on model architecture, parallelism
 configuration, and workload characteristics.
 """
 
+from __future__ import annotations
+
 import contextlib
 import io
 import json
@@ -23,11 +25,16 @@ from enum import StrEnum
 from functools import lru_cache
 from typing import Any, cast
 
-from huggingface_hub import HfApi
-from huggingface_hub.hf_api import ModelInfo, SafetensorsRepoMetadata
+try:
+    from huggingface_hub import HfApi
+    from huggingface_hub.hf_api import ModelInfo, SafetensorsRepoMetadata
 
-with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-    from transformers import AutoConfig
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        from transformers import AutoConfig
+
+    _HF_AVAILABLE = True
+except ImportError:
+    _HF_AVAILABLE = False
 
 _logger = logging.getLogger(__name__)
 
@@ -270,6 +277,11 @@ def get_model_info_from_hf(model_name: str, hf_token: str | None = None) -> Mode
     Fetches model info from HF, does not handle error.
     Results are cached to avoid repeated API calls for the same model.
     """
+    if not _HF_AVAILABLE:
+        raise ImportError(
+            "huggingface_hub is required for this function. "
+            "Install with: pip install planner[gpu-recommender]"
+        )
     api = HfApi(token=hf_token)
     model_info = api.model_info(model_name)
     return model_info
@@ -281,7 +293,11 @@ def get_model_config_from_hf(model_name: str, hf_token: str | None = None) -> An
     Returns LLM model config.
     Results are cached to avoid repeated API calls for the same model.
     """
-
+    if not _HF_AVAILABLE:
+        raise ImportError(
+            "transformers is required for this function. "
+            "Install with: pip install planner[gpu-recommender]"
+        )
     model_config = AutoConfig.from_pretrained(
         model_name,
         trust_remote_code=True,
@@ -296,6 +312,11 @@ def _get_safetensors_metadata_cached(
     model_name: str, hf_token: str | None = None
 ) -> SafetensorsRepoMetadata:
     """Cached internal function for fetching safetensors metadata."""
+    if not _HF_AVAILABLE:
+        raise ImportError(
+            "huggingface_hub is required for this function. "
+            "Install with: pip install planner[gpu-recommender]"
+        )
     api = HfApi(token=hf_token)
     return api.get_safetensors_metadata(model_name)
 

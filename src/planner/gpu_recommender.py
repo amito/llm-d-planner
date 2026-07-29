@@ -1,14 +1,22 @@
 """Cost management for GPU recommendations"""
 
+from __future__ import annotations
+
 import os
 from typing import Any
 
-from llm_optimizer.performance import (
-    PerformanceEstimationParams,
-    PerformanceEstimationResult,
-    run_performance_estimation,
-)
-from llm_optimizer.predefined.gpus import GPU_SPECS
+try:
+    from llm_optimizer.performance import (
+        PerformanceEstimationParams,
+        PerformanceEstimationResult,
+        run_performance_estimation,
+    )
+    from llm_optimizer.predefined.gpus import GPU_SPECS
+
+    _LLM_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _LLM_OPTIMIZER_AVAILABLE = False
+    GPU_SPECS = {}  # type: ignore[assignment]
 
 from planner.capacity_planner import (
     get_model_config_from_hf,
@@ -121,6 +129,11 @@ class GPURecommender:
             custom_gpu_costs: Optional dict mapping GPU names to custom costs
             catalog: Optional ModelCatalog instance (avoids reloading JSON files)
         """
+        if not _LLM_OPTIMIZER_AVAILABLE:
+            raise ImportError(
+                "llm-optimizer is required for GPURecommender. "
+                "Install with: pip install planner[gpu-recommender]"
+            )
 
         # Read HF Token from environment variable
         hf_token = os.getenv("HF_TOKEN", None)

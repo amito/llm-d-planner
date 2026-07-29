@@ -10,7 +10,13 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from llm_optimizer.predefined.gpus import GPU_SPECS
+try:
+    from llm_optimizer.predefined.gpus import GPU_SPECS
+
+    _LLM_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    GPU_SPECS = None  # type: ignore[assignment]
+    _LLM_OPTIMIZER_AVAILABLE = False
 
 from planner.capacity_planner import (
     KVCacheDetail,
@@ -424,6 +430,14 @@ def estimate_performance(args):
 
 def main():
     """Main CLI entry point"""
+    if not _LLM_OPTIMIZER_AVAILABLE:
+        print(
+            "Error: llm-optimizer is required for the CLI. "
+            "Install with: pip install planner[gpu-recommender]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(
         description="Planner CLI - Capacity planning and configuration tools for LLM deployment",
         formatter_class=argparse.RawDescriptionHelpFormatter,
