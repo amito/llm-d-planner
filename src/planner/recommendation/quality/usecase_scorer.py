@@ -14,16 +14,15 @@ import logging
 import os
 import re
 
+from planner.data._resolver import data_path
+
 logger = logging.getLogger(__name__)
 
 _SIZE_PATTERN = re.compile(r"\b(\d+(?:\.\d+)?[bB])\b")
 _QUANT_TOKENS = frozenset({"fp8", "dynamic", "nvfp4", "hf"})
 _DATE_SUFFIX_RE = re.compile(r"^2[0-9]{3}$")
 
-# Base path for weighted scores CSVs
-# Path: quality/usecase_scorer.py -> recommendation -> src -> backend -> project root -> data
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "data")
-WEIGHTED_SCORES_DIR = os.path.join(DATA_DIR, "benchmarks", "accuracy", "weighted_scores")
+WEIGHTED_SCORES_DIR = str(data_path("benchmarks/accuracy/weighted_scores"))
 
 
 class UseCaseQualityScorer:

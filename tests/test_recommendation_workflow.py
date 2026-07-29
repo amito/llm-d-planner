@@ -2,10 +2,10 @@
 
 import json
 import logging
-from pathlib import Path
 
 import pytest
 
+from planner.data._resolver import data_path
 from planner.orchestration.workflow import RecommendationWorkflow
 
 # Configure logging
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _load_scenarios():
     """Load demo scenarios from JSON file."""
-    scenarios_path = Path(__file__).parent.parent / "data" / "configuration" / "demo_scenarios.json"
+    scenarios_path = data_path("configuration/demo_scenarios.json")
     with open(scenarios_path) as f:
         data = json.load(f)
     return data["scenarios"]

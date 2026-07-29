@@ -3,22 +3,17 @@
 import csv
 import json
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from planner.api.dependencies import get_model_catalog, get_slo_repo
+from planner.data._resolver import data_path
 from planner.knowledge_base.model_catalog import ModelCatalog
 from planner.knowledge_base.slo_templates import SLOTemplateRepository
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["reference-data"])
-
-
-def _get_data_path() -> Path:
-    """Get the base data directory path."""
-    return Path(__file__).parent.parent.parent.parent.parent / "data"
 
 
 @router.get("/models")
@@ -65,7 +60,7 @@ async def get_priority_weights():
     when setting initial weights based on priority dropdowns.
     """
     try:
-        json_path = _get_data_path() / "configuration" / "priority_weights.json"
+        json_path = data_path("configuration/priority_weights.json")
 
         if not json_path.exists():
             logger.error(f"Priority weights config not found at: {json_path}")
@@ -110,7 +105,7 @@ async def get_weighted_scores(use_case: str):
                 detail=f"Invalid use case: {use_case}. Valid options: {list(use_case_to_file.keys())}",
             )
 
-        csv_path = _get_data_path() / "benchmarks" / "accuracy" / "weighted_scores" / filename
+        csv_path = data_path(f"benchmarks/accuracy/weighted_scores/{filename}")
 
         if not csv_path.exists():
             logger.error(f"Weighted scores CSV not found at: {csv_path}")
