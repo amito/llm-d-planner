@@ -9,11 +9,17 @@ import json
 import logging
 from pathlib import Path
 
-import psycopg2
 import pytest
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-from planner.knowledge_base.loader import insert_benchmarks
+try:
+    import psycopg2
+    from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+    from planner.knowledge_base.loader import insert_benchmarks
+
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +101,8 @@ def test_db_url():
 
     Yields the database URL, then drops the test database on teardown.
     """
+    if not PSYCOPG2_AVAILABLE:
+        pytest.skip("psycopg2 not installed (install planner[postgres])")
     _create_test_database()
     try:
         _apply_schema()

@@ -12,7 +12,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from psycopg2.extras import RealDictCursor, execute_batch
+try:
+    from psycopg2.extras import RealDictCursor, execute_batch
+
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

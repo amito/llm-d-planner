@@ -33,7 +33,6 @@ from planner.shared.schemas import (
 )
 from planner.shared.utils import normalize_gpu_types
 
-from .estimator import generate_estimated_configs
 from .scorer import Scorer
 
 logger = logging.getLogger(__name__)
@@ -275,21 +274,32 @@ class ConfigFinder:
 
         # Estimated performance flow: generate roofline estimates for
         # preferred models (and optionally catalog models) that lack benchmark data.
+        # The estimator depends on heavy GPU deps (transformers, llm-optimizer) that
+        # are optional; skip gracefully when not installed.
         if enable_estimated and preferred_models:
-            estimated_configs, estimation_warnings = generate_estimated_configs(
-                traffic_profile=traffic_profile,
-                slo_targets=slo_targets,
-                preferred_models=preferred_models,
-                existing_benchmarks=matching_configs,
-                gpu_types=normalized_gpus if normalized_gpus and not gpu_fallback else None,
-                catalog=self.catalog,
-                benchmark_repo=self.benchmark_repo,
-            )
-            all_warnings.extend(estimation_warnings)
-            if estimated_configs:
-                matching_configs.extend(estimated_configs)
+            try:
+                from .estimator import generate_estimated_configs
+
+                estimated_configs, estimation_warnings = generate_estimated_configs(
+                    traffic_profile=traffic_profile,
+                    slo_targets=slo_targets,
+                    preferred_models=preferred_models,
+                    existing_benchmarks=matching_configs,
+                    gpu_types=normalized_gpus if normalized_gpus and not gpu_fallback else None,
+                    catalog=self.catalog,
+                    benchmark_repo=self.benchmark_repo,
+                )
+                all_warnings.extend(estimation_warnings)
+                if estimated_configs:
+                    matching_configs.extend(estimated_configs)
+                    logger.info(
+                        "Added %d estimated configurations from roofline model",
+                        len(estimated_configs),
+                    )
+            except ImportError:
                 logger.info(
-                    f"Added {len(estimated_configs)} estimated configurations from roofline model"
+                    "GPU roofline estimator not available "
+                    "(install planner[gpu-recommender] for estimated configs)"
                 )
 
         # When the user specified preferred models, filter results to only
