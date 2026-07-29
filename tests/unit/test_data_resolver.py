@@ -13,7 +13,9 @@ class TestDataPath:
         assert path.name == "model_catalog.json"
 
     def test_resolves_csv_weighted_scores(self):
-        path = data_path("benchmarks/accuracy/weighted_scores/opensource_chatbot_conversational.csv")
+        path = data_path(
+            "benchmarks/accuracy/weighted_scores/opensource_chatbot_conversational.csv"
+        )
         assert path.exists()
         assert path.name == "opensource_chatbot_conversational.csv"
 
@@ -28,6 +30,7 @@ class TestDataPath:
 
     def test_returns_path_type(self):
         from pathlib import Path
+
         result = data_path("configuration/model_catalog.json")
         assert isinstance(result, Path)
 
