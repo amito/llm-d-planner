@@ -115,12 +115,9 @@ class ModelCatalog:
                               in the same directory as data_path)
         """
         if data_path is None:
-            data_path = (
-                Path(__file__).parent.parent.parent.parent
-                / "data"
-                / "configuration"
-                / "model_catalog.json"
-            )
+            from planner.data._resolver import data_path as _resolve
+
+            data_path = _resolve("configuration/model_catalog.json")
 
         self.data_path = data_path
         self.gpu_catalog_path = gpu_catalog_path or data_path.parent / "gpu_catalog.json"

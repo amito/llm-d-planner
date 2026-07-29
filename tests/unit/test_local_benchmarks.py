@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from planner.data._resolver import data_path
 from planner.knowledge_base.benchmarks import BenchmarkData
 from planner.knowledge_base.local_benchmarks import LocalBenchmarkRepository
 
@@ -314,14 +315,8 @@ class TestSaveBenchmarks:
         assert len(results) == 1
 
 
-# Path to real benchmark data relative to the test file
-_BLIS_PATH = (
-    Path(__file__).parent.parent.parent
-    / "data"
-    / "benchmarks"
-    / "performance"
-    / "benchmarks_BLIS.json"
-)
+# Path to real benchmark data via importlib.resources
+_BLIS_PATH = data_path("benchmarks/performance/benchmarks_BLIS.json")
 
 
 @pytest.mark.unit
