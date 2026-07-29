@@ -447,7 +447,7 @@ def estimate_vllm_activation_memory(config: AutoConfig, tp: int = 1) -> float:
     2048–32768 with identical results.
 
     Calibrated against vLLM v0.19.0 on H100-80GB (49 runs, 28 models).
-    Source: accuracy/results/v0.19.0/accuracy_report.md
+    Source: accuracy/results/v0.19.0/accuracy_report.md (vLLM memory estimation accuracy)
 
     Args:
         config: Model configuration (can be full config or text_config)

@@ -45,8 +45,8 @@ class DeploymentIntent(BaseModel):
     )
 
     # Priority hints extracted from natural language (used for weight calculation)
-    accuracy_priority: Literal["low", "medium", "high"] = Field(
-        default="medium", description="Accuracy/quality importance"
+    quality_priority: Literal["low", "medium", "high"] = Field(
+        default="medium", description="Quality importance"
     )
     cost_priority: Literal["low", "medium", "high"] = Field(
         default="medium", description="Cost sensitivity (high = very cost sensitive)"

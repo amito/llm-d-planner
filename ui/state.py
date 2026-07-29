@@ -40,12 +40,12 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "detected_use_case": "chatbot_conversational",
     # Top-5 lists per category
     "top5_balanced": [],
-    "top5_accuracy": [],
+    "top5_quality": [],
     "top5_latency": [],
     "top5_cost": [],
     # Category card navigation (index into top-5 lists)
     "cat_idx_balanced": 0,
-    "cat_idx_accuracy": 0,
+    "cat_idx_quality": 0,
     "cat_idx_latency": 0,
     "cat_idx_cost": 0,
     # Estimated performance

@@ -20,7 +20,7 @@ def _render_filter_summary():
         return
 
     all_passed = []
-    for cat in ["balanced", "best_accuracy", "lowest_cost", "lowest_latency"]:
+    for cat in ["balanced", "best_quality", "lowest_cost", "lowest_latency"]:
         all_passed.extend(ranked_response.get(cat, []))
     unique_models = len({r.get("model_name", "") for r in all_passed if r.get("model_name")})
 
@@ -100,7 +100,7 @@ def _render_category_card(title, recs_list, highlight_field, category_key, col):
 
     # Build scores line with highlight on the matching category
     score_items = [
-        ("accuracy", "Accuracy", scores["accuracy"]),
+        ("quality", "Quality", scores["quality"]),
         ("cost", "Cost", scores["cost"]),
         ("latency", "Latency", scores["latency"]),
         ("final", "Balanced", scores["final"]),
@@ -268,18 +268,18 @@ def render_top5_table(recommendations: list, priority: str):
 
     ranked_response = st.session_state.get("ranked_response", {})
     top5_balanced = ranked_response.get("balanced", [])[:5]
-    top5_accuracy = ranked_response.get("best_accuracy", [])[:5]
+    top5_quality = ranked_response.get("best_quality", [])[:5]
     top5_latency = ranked_response.get("lowest_latency", [])[:5]
     top5_cost = ranked_response.get("lowest_cost", [])[:5]
 
     st.session_state.top5_balanced = top5_balanced
-    st.session_state.top5_accuracy = top5_accuracy
+    st.session_state.top5_quality = top5_quality
     st.session_state.top5_latency = top5_latency
     st.session_state.top5_cost = top5_cost
     # Render 4 category cards in a 2x2 grid
     col1, col2 = st.columns(2)
     _render_category_card("Balanced", top5_balanced, "final", "balanced", col1)
-    _render_category_card("Best Accuracy", top5_accuracy, "accuracy", "accuracy", col2)
+    _render_category_card("Best Quality", top5_quality, "quality", "quality", col2)
 
     col3, col4 = st.columns(2)
     _render_category_card("Best Latency", top5_latency, "latency", "latency", col3)
@@ -314,7 +314,7 @@ def render_options_list_inline():
 
     categories = [
         ("balanced", "Balanced"),
-        ("best_accuracy", "Best Accuracy"),
+        ("best_quality", "Best Quality"),
         ("lowest_cost", "Lowest Cost"),
         ("lowest_latency", "Lowest Latency"),
     ]
@@ -328,7 +328,7 @@ def render_options_list_inline():
             ttft = rec.get("predicted_ttft_p95_ms", 0)
             cost = rec.get("cost_per_month_usd", 0)
             scores = rec.get("scores", {}) or {}
-            accuracy = scores.get("accuracy_score", 0)
+            quality = scores.get("quality_score", 0)
             balanced = scores.get("balanced_score", 0)
             meets_slo = rec.get("meets_slo", False)
             slo_value = 1 if meets_slo else 0
@@ -343,7 +343,7 @@ def render_options_list_inline():
                     "gpu_config": gpu_str,
                     "ttft": ttft,
                     "cost": cost,
-                    "accuracy": accuracy,
+                    "quality": quality,
                     "balanced": balanced,
                     "slo": "Yes" if meets_slo else "No",
                     "slo_value": slo_value,
@@ -361,7 +361,7 @@ def render_options_list_inline():
                     data-gpu="{row["gpu_config"]}"
                     data-ttft="{row["ttft"]}"
                     data-cost="{row["cost"]}"
-                    data-accuracy="{row["accuracy"]}"
+                    data-quality="{row["quality"]}"
                     data-balanced="{row["balanced"]}"
                     data-slo="{row["slo_value"]}">
                     <td style="padding: 0.75rem 0.5rem; ">{row["category"]}</td>
@@ -369,7 +369,7 @@ def render_options_list_inline():
                     <td style="padding: 0.75rem 0.5rem; font-size: 0.85rem;">{row["gpu_config"]}</td>
                     <td style="padding: 0.75rem 0.5rem; text-align: right; ">{row["ttft"]:.0f}ms</td>
                     <td style="padding: 0.75rem 0.5rem; text-align: right; ">${row["cost"]:,.0f}</td>
-                    <td style="padding: 0.75rem 0.5rem; text-align: center; ">{row["accuracy"]:.0f}</td>
+                    <td style="padding: 0.75rem 0.5rem; text-align: center; ">{row["quality"]:.0f}</td>
                     <td style="padding: 0.75rem 0.5rem; text-align: center; ">{row["balanced"]:.1f}</td>
                     <td style="padding: 0.75rem 0.5rem; text-align: center;">{row["slo"]}</td>
                 </tr>
@@ -419,7 +419,7 @@ def render_options_list_inline():
                     <th onclick="sortTableInline(2, 'string')" style="text-align: left; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">GPU Config</th>
                     <th onclick="sortTableInline(3, 'number')" style="text-align: right; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">TTFT</th>
                     <th onclick="sortTableInline(4, 'number')" style="text-align: right; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Cost/mo</th>
-                    <th onclick="sortTableInline(5, 'number')" style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Acc</th>
+                    <th onclick="sortTableInline(5, 'number')" style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Quality</th>
                     <th onclick="sortTableInline(6, 'number')" style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">Score</th>
                     <th onclick="sortTableInline(7, 'number')" style="text-align: center; padding: 0.75rem 0.5rem; font-size: 0.85rem; font-weight: 600;">SLO</th>
                 </tr>
@@ -451,7 +451,7 @@ def render_options_list_inline():
                     let aVal, bVal;
 
                     if (type === 'number') {{
-                        const attrs = ['category', 'model', 'gpu', 'ttft', 'cost', 'accuracy', 'balanced', 'slo'];
+                        const attrs = ['category', 'model', 'gpu', 'ttft', 'cost', 'quality', 'balanced', 'slo'];
                         const attr = 'data-' + attrs[columnIndex];
                         aVal = parseFloat(a.getAttribute(attr)) || 0;
                         bVal = parseFloat(b.getAttribute(attr)) || 0;
@@ -497,7 +497,7 @@ def render_recommendation_result(result: dict, priority: str, extraction: dict):
             winner = balanced_recs[0]
             recommendations = balanced_recs
         else:
-            for cat in ["best_accuracy", "lowest_cost", "lowest_latency"]:
+            for cat in ["best_quality", "lowest_cost", "lowest_latency"]:
                 if ranked_response.get(cat):
                     winner = ranked_response[cat][0]
                     recommendations = ranked_response[cat]
@@ -529,7 +529,7 @@ def render_recommendation_result(result: dict, priority: str, extraction: dict):
 
     # Get all recommendations for the cards
     all_recs: list[dict[str, Any]] = []
-    for cat in ["balanced", "best_accuracy", "lowest_cost", "lowest_latency"]:
+    for cat in ["balanced", "best_quality", "lowest_cost", "lowest_latency"]:
         cat_recs = (
             st.session_state.ranked_response.get(cat, [])
             if st.session_state.ranked_response

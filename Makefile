@@ -286,21 +286,21 @@ open-backend: ## Open backend API docs in browser
 
 image-build-backend: ## Build backend container image
 	@printf "$(BLUE)Building backend image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
 	@printf "$(GREEN)✓ Backend image built:$(NC)\n"
 	@printf "  - $(BACKEND_IMAGE):$(BACKEND_TAG)\n"
 	@printf "  - $(BACKEND_FULL_IMAGE)\n"
 
 image-build-ui: ## Build UI container image
 	@printf "$(BLUE)Building UI image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f ui/Dockerfile -t $(UI_IMAGE):$(UI_TAG) -t $(UI_FULL_IMAGE) .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -f ui/Dockerfile -t $(UI_IMAGE):$(UI_TAG) -t $(UI_FULL_IMAGE) .
 	@printf "$(GREEN)✓ UI image built:$(NC)\n"
 	@printf "  - $(UI_IMAGE):$(UI_TAG)\n"
 	@printf "  - $(UI_FULL_IMAGE)\n"
 
 image-build-simulator: ## Build vLLM simulator container image
 	@printf "$(BLUE)Building simulator image...$(NC)\n"
-	$(CONTAINER_TOOL) build -f $(SIMULATOR_DIR)/Dockerfile -t vllm-simulator:latest -t $(SIMULATOR_FULL_IMAGE) .
+	$(CONTAINER_TOOL) build --platform linux/amd64 -f $(SIMULATOR_DIR)/Dockerfile -t vllm-simulator:latest -t $(SIMULATOR_FULL_IMAGE) .
 	@printf "$(GREEN)✓ Simulator image built:$(NC)\n"
 	@printf "  - vllm-simulator:latest\n"
 	@printf "  - $(SIMULATOR_FULL_IMAGE)\n"
@@ -417,7 +417,7 @@ clean-deployments: ## Delete all InferenceServices from cluster
 	kubectl delete inferenceservices --all
 	@printf "$(GREEN)✓ All deployments deleted$(NC)\n"
 
-##@ PostgreSQL Database
+##@ Data
 
 db-start: ## Start PostgreSQL (initializes schema on first run)
 	@printf "$(BLUE)Starting PostgreSQL...$(NC)\n"
@@ -515,6 +515,19 @@ db-query-models: ## Query available models in database
 
 db-reset: db-remove db-start ## Reset PostgreSQL (remove and reinitialize)
 	@printf "$(GREEN)✓ PostgreSQL reset complete$(NC)\n"
+
+quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
+	@printf "$(BLUE)Syncing Arena leaderboard (no API key needed)...$(NC)\n"
+	@LLM_QUALITY_CACHE_DIR=data/quality uv run python -c "from quality_scoring.arena_client import sync; count, path = sync(); print(f'Arena: {count} rows')"
+	@printf "$(BLUE)Syncing AA models (requires AA_API_KEY)...$(NC)\n"
+	@if [ -n "$$AA_API_KEY" ]; then \
+		LLM_QUALITY_CACHE_DIR=data/quality uv run python -c "from quality_scoring.aa_client import sync; count, path = sync(api_key='$$AA_API_KEY'); print(f'AA: {count} models')"; \
+	else \
+		printf "$(YELLOW)⚠ AA_API_KEY not set — skipping AA sync$(NC)\n"; \
+	fi
+	@printf "$(BLUE)Formatting JSON files for readable diffs...$(NC)\n"
+	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['data/quality/arena_models.json', 'data/quality/aa_models.json', 'data/quality/arena_dist.json', 'data/quality/aa_dist.json'] if pathlib.Path(f).is_file()]"
+	@printf "$(GREEN)✓ Quality data synced to data/quality/$(NC)\n"
 
 ##@ Testing
 

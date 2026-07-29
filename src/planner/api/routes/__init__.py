@@ -6,6 +6,7 @@ from .database import router as database_router
 from .gpu_recommender import router as gpu_recommender_router
 from .health import router as health_router
 from .intent import router as intent_router
+from .quality import router as quality_router
 from .recommendation import router as recommendation_router
 from .reference_data import router as reference_data_router
 from .specification import router as specification_router

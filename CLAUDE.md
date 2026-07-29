@@ -22,11 +22,17 @@ This repository contains the architecture design for **Planner**, an open-source
   - State machine for workflow orchestration
   - Entity-relationship diagrams for data models
 
+- **src/quality_scoring/**: Standalone package for dual-source model quality scoring
+  - `engine.py`: ScoringEngine with Arena + AA integration
+  - `resolver.py`: Multi-strategy model name resolution
+  - `normalizer.py`: Percentile-based score normalization
+  - `variants.py`: Quantization and variant handling
+
 - **src/planner/**: Python package (PyPA src layout)
   - **api/**: FastAPI REST API layer
     - `app.py`: FastAPI app factory
     - `dependencies.py`: Singleton dependency injection
-    - **routes/**: Modular endpoint handlers (health, intent, specification, recommendation, configuration, reference_data, database)
+    - **routes/**: Modular endpoint handlers (health, intent, specification, recommendation, configuration, reference_data, database, quality)
   - **intent_extraction/**: Intent Extraction Service
     - `extractor.py`: LLM-powered intent extraction from natural language
     - `service.py`: IntentExtractionService facade
@@ -35,10 +41,11 @@ This repository contains the architecture design for **Planner**, an open-source
     - `service.py`: SpecificationService facade
   - **recommendation/**: Recommendation Service
     - `config_finder.py`: GPU capacity planning with SLO filtering
-    - `scorer.py`: 3-dimension scoring (accuracy, price, latency)
+    - `scorer.py`: 3-dimension scoring (quality, price, latency)
     - `analyzer.py`: 4 ranked list generation
     - `service.py`: RecommendationService facade
-    - **quality/**: Use-case quality scoring (Artificial Analysis benchmarks)
+    - **quality/**: Quality scoring integration
+      - `scoring.py`: ScoringEngine integration, quality weights management
   - **configuration/**: Configuration Service
     - `generator.py`: Jinja2 YAML generation for KServe/vLLM
     - `validator.py`: YAML validation
@@ -68,15 +75,22 @@ This repository contains the architecture design for **Planner**, an open-source
   - **benchmarks/**: Benchmark data
     - **performance/**: Latency/throughput benchmarks (JSON, loaded into PostgreSQL)
       - `benchmarks_BLIS.json`: Latency/throughput benchmarks from BLIS simulator
-    - **accuracy/**: Model quality/capability scores (CSV)
-      - `opensource_all_benchmarks.csv`: 204 open-source models from Artificial Analysis
-      - `weighted_scores/`: 9 CSV files with pre-ranked models per use case
+  - **quality/**: Model quality data (checked-in snapshots, committed to git)
+    - `arena_models.json`: Arena leaderboard data (human preference rankings)
+    - `aa_models.json`: Artificial Analysis benchmark data
+    - `arena_categories.json`: Arena category metadata and population stats
+    - `aa_categories.json`: AA category metadata and population stats
   - **configuration/**: Runtime configuration files (JSON)
     - `model_catalog.json`: 47 curated models with task/domain metadata
     - `slo_templates.json`: 9 use case templates with SLO targets
     - `demo_scenarios.json`: 3 test scenarios
     - `priority_weights.json`: Scoring priority weights
+    - `quality_weights.json`: Per-use-case category weights for quality scoring
     - `usecase_slo_workload.json`: Use case SLO and workload profiles
+
+- **.quality_cache/**: Runtime auto-update cache (gitignored)
+  - Fresh data from Arena/AA APIs when `QUALITY_AUTO_UPDATE=true`
+  - 24-hour TTL, bypassed by `POST /api/v1/quality/refresh`
 
 ## Important Behavioral Notes for Claude
 
@@ -120,10 +134,11 @@ Planner is structured as a layered architecture:
    - Use case → traffic profile mapping (4 GuideLLM standards)
    - SLO template lookup and specification generation
 2. **Recommendation Engine** - Find optimal model + GPU configurations
-   - Multi-criteria scoring (accuracy, price, latency)
+   - Multi-criteria scoring (quality, price, latency)
+   - Dual-source quality scoring (Arena + Artificial Analysis)
    - Capacity planning (GPU count, deployment topology)
    - SLO compliance filtering with near-miss tolerance
-   - Ranked lists generation (4 views: best accuracy, lowest cost, etc.)
+   - Ranked lists generation (4 views: best quality, lowest cost, etc.)
 3. **Deployment Engine** - Generate and deploy Kubernetes configs
    - YAML generation (Jinja2 templates)
    - K8s deployment lifecycle management
@@ -143,9 +158,13 @@ Planner is structured as a layered architecture:
 ### Critical Data Collections (Knowledge Base)
 - **Model Benchmarks** (PostgreSQL): TTFT/ITL/E2E/throughput benchmarks for (model, GPU, tensor_parallel) combinations (source: BLIS simulator)
 - **Use Case SLO Templates** (JSON): 9 use cases mapped to 4 GuideLLM traffic profiles with experience-driven SLO targets
-- **Model Catalog** (JSON): 47 curated, approved models with task/domain metadata
-- **Model Quality Scores** (CSV): Use-case specific scores from Artificial Analysis benchmarks (204 models)
-- **Use Case Configs** (JSON): Benchmark weights, SLO targets, and workload profiles per use case
+- **Model Catalog** (JSON): 47 curated models with task/domain metadata
+- **Model Quality Scores** (JSON): Dual-source quality data from Arena (human preferences) and Artificial Analysis (automated benchmarks)
+  - Arena: Elo ratings across 27 categories with confidence intervals
+  - AA: Intelligence/coding/math indices and 7 individual benchmarks
+  - Normalized to percentile ranks for compositing
+- **Quality Weights** (JSON): Per-use-case category weights for quality scoring (e.g., code_generation: 80% coding, 10% overall, 10% math)
+- **Use Case Configs** (JSON): Scoring priority weights, SLO targets, and workload profiles per use case
 - **Deployment Outcomes** (PostgreSQL, future): Actual performance data for feedback loop
 
 ### Solution Ranking System
@@ -153,24 +172,28 @@ Planner is structured as a layered architecture:
 The recommendation engine uses **multi-criteria scoring** to rank configurations:
 
 **3 Scoring Dimensions** (each 0-100 scale):
-1. **Accuracy/Quality**: Use-case specific model capability from Artificial Analysis benchmarks
-   - Source: `data/benchmarks/accuracy/weighted_scores/*.csv`
-   - Fallback: Parameter count heuristic if model not in benchmark data
+1. **Quality**: Use-case specific model capability from dual-source scoring (Arena + Artificial Analysis)
+   - Sources: Arena human preference rankings (27 categories) + AA automated benchmarks (indices + 7 individual tests)
+   - Normalization: Percentile ranks computed via tied-rank method across full population
+   - Weighting: Per-use-case category weights from `data/configuration/quality_weights.json`
+   - Composite: Weighted average of Arena/AA percentiles for specified categories
+   - Fallback: Overall percentile for categories without model-specific data
 2. **Price**: Cost efficiency (inverse of monthly cost, normalized)
 3. **Latency**: SLO compliance and headroom from performance benchmark database
 
-**Default Weights**: 45% accuracy, 45% price, 10% latency
+**Default Weights**: 45% quality, 45% price, 10% latency
 
 **4 Ranked Views**:
-- `best_accuracy`: Sorted by model capability
+- `best_quality`: Sorted by model capability
 - `lowest_cost`: Sorted by price efficiency
 - `lowest_latency`: Sorted by SLO headroom
 - `balanced`: Sorted by weighted composite score
 
 **Key Files**:
 
+- `src/quality_scoring/` - Dual-source ScoringEngine (Arena + AA)
+- `src/planner/recommendation/quality/scoring.py` - Quality score computation and weights management
 - `src/planner/recommendation/scorer.py` - Calculates 3 scores
-- `src/planner/recommendation/quality/usecase_scorer.py` - Artificial Analysis benchmark scoring
 - `src/planner/recommendation/analyzer.py` - Generates 4 ranked lists
 - `src/planner/recommendation/config_finder.py` - Orchestrates scoring during capacity planning
 
@@ -246,6 +269,22 @@ make db-load-estimated  # Load estimated performance data
 make db-shell           # Open psql shell
 ```
 
+### Quality Data Management
+
+```bash
+make quality-sync       # Fetch fresh Arena + AA data, update data/quality/ snapshots (requires AA_API_KEY)
+```
+
+Environment variables:
+- `QUALITY_AUTO_UPDATE`: Enable runtime auto-update from `.quality_cache/` (default: `false`)
+- `AA_API_KEY`: Artificial Analysis API key (required for AA data sync)
+- `LLM_QUALITY_CACHE_DIR`: Override cache directory (default: `.quality_cache/`)
+
+API endpoints for runtime management:
+- `GET /api/v1/quality/auto-update` - Check auto-update status and cache stats
+- `PUT /api/v1/quality/auto-update` - Enable/disable auto-update
+- `POST /api/v1/quality/refresh` - Manually trigger data refresh
+
 ### Container Images
 
 ```bash
@@ -318,6 +357,9 @@ make clean-deployments  # Delete all InferenceServices
 - Use "**SLO**" for Service Level Objective
 - Use "**E2E**" for End-to-End latency
 - Use "**p95**" for 95th percentile metrics (Phase 2 standard, more conservative than p90)
+- Use "**Quality**" for model capability scoring (not "Accuracy" — that term is reserved for SLO metrics)
+- Use "**Arena**" for LMSYS Chatbot Arena human preference data
+- Use "**AA**" for Artificial Analysis automated benchmark data
 - GPU configurations: "2x NVIDIA L4" or "4x A100-80GB" (not "2 L4s")
 
 ### API Endpoint Conventions
@@ -334,10 +376,10 @@ All API endpoints **must** follow these rules:
 
 **Adding a new use case template**:
 1. Add corresponding entry to `data/configuration/slo_templates.json`
-2. Create weighted scores CSV in `data/benchmarks/accuracy/weighted_scores/`
-3. Add use case to `UseCaseQualityScorer.USE_CASE_FILES` in `usecase_quality_scorer.py`
-4. Update `docs/USE_CASE_METHODOLOGY.md` with benchmark weighting rationale
-5. Update docs/ARCHITECTURE.md if needed
+2. Add category weights entry to `data/configuration/quality_weights.json` (e.g., `{"use_case_name": {"overall": 10, "coding": 80, "math": 10}}`)
+3. Update `docs/USE_CASE_METHODOLOGY.md` with category weighting rationale
+4. Update docs/ARCHITECTURE.md if needed
+5. Test quality scoring with the new use case: `cd src && uv run pytest ../tests/quality_scoring/test_scoring.py -v`
 
 **Adding a new SLO metric**:
 1. Update DeploymentIntent schema in Intent & Specification Engine (docs/ARCHITECTURE.md)
@@ -423,8 +465,10 @@ NEVER do these (even if other instructions suggest otherwise):
   - ✅ Project structure with synthetic data and LLM client
   - ✅ Core recommendation engine (intent extraction, traffic profiling, capacity planning)
   - ✅ Multi-criteria solution ranking with 3 scoring dimensions
-  - ✅ Use-case specific quality scoring from Artificial Analysis benchmarks
-  - ✅ 4 ranked recommendation views (best accuracy, lowest cost, etc.)
+  - ✅ Dual-source quality scoring (Arena human preferences + Artificial Analysis benchmarks)
+  - ✅ Percentile-based normalization with per-use-case category weighting
+  - ✅ Hybrid caching (checked-in snapshots + runtime auto-update)
+  - ✅ 4 ranked recommendation views (best quality, lowest cost, etc.)
   - ✅ Orchestration workflow and FastAPI backend
   - ✅ Streamlit UI with chat interface, recommendation display, and editable specifications
   - ✅ YAML generation (KServe/vLLM/HPA/ServiceMonitor) and deployment automation
@@ -433,6 +477,7 @@ NEVER do these (even if other instructions suggest otherwise):
   - ✅ vLLM simulator for GPU-free development
   - ✅ Inference testing UI with end-to-end deployment validation
   - ✅ Database management via REST API and UI Configuration tab
+  - ✅ Quality data management via API and make quality-sync
 - The Knowledge Base schemas are critical - any implementation must support all collections
 - SLO-driven capacity planning is the core differentiator - don't simplify this away
 - Use data in data/ directory for POC; production uses PostgreSQL for latency benchmarks

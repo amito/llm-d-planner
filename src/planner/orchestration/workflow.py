@@ -232,7 +232,7 @@ class RecommendationWorkflow:
         self,
         user_message: str,
         conversation_history: list[ConversationMessage] | None = None,
-        min_accuracy: int | None = None,
+        min_quality: float | None = None,
         max_cost: float | None = None,
         include_near_miss: bool = True,
         weights: dict[str, int] | None = None,
@@ -242,16 +242,16 @@ class RecommendationWorkflow:
 
         This is the enhanced workflow that returns multiple ranked views
         instead of a single best recommendation. Useful for exploring
-        trade-offs between accuracy, cost, and latency.
+        trade-offs between quality, cost, and latency.
 
         Args:
             user_message: User's deployment request
             conversation_history: Optional conversation context
-            min_accuracy: Minimum accuracy score filter (0-100)
+            min_quality: Minimum quality score filter (0-100)
             max_cost: Maximum monthly cost filter (USD)
             include_near_miss: Whether to include near-SLO configurations
             weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency
+                     Keys: quality, price, latency
 
         Returns:
             RankedRecommendationsResponse with 4 ranked lists
@@ -281,7 +281,7 @@ class RecommendationWorkflow:
         if not all_configs:
             logger.warning("No viable configurations found")
             return RankedRecommendationsResponse(
-                min_accuracy_threshold=min_accuracy,
+                min_quality_threshold=min_quality,
                 max_cost_ceiling=max_cost,
                 include_near_miss=include_near_miss,
                 specification=specification,
@@ -295,9 +295,9 @@ class RecommendationWorkflow:
         analyzer = Analyzer()
         ranked_lists = analyzer.generate_ranked_lists(
             configurations=all_configs,
-            min_accuracy=min_accuracy,
+            min_quality=min_quality,
             max_cost=max_cost,
-            top_n=5,  # Top 5 accuracy models only
+            top_n=5,  # Top 5 quality models only
             weights=weights,
             use_case=intent.use_case,  # Task bonuses for Balanced
             preferred_models=intent.preferred_models if intent.preferred_models else None,
@@ -312,11 +312,11 @@ class RecommendationWorkflow:
         )
 
         return RankedRecommendationsResponse(
-            min_accuracy_threshold=min_accuracy,
+            min_quality_threshold=min_quality,
             max_cost_ceiling=max_cost,
             include_near_miss=include_near_miss,
             specification=specification,
-            best_accuracy=ranked_lists["best_accuracy"],
+            best_quality=ranked_lists["best_quality"],
             lowest_cost=ranked_lists["lowest_cost"],
             lowest_latency=ranked_lists["lowest_latency"],
             balanced=ranked_lists["balanced"],
@@ -328,7 +328,7 @@ class RecommendationWorkflow:
     def generate_ranked_recommendations_from_spec(
         self,
         specifications: dict,
-        min_accuracy: int | None = None,
+        min_quality: float | None = None,
         max_cost: float | None = None,
         include_near_miss: bool = True,
         weights: dict[str, int] | None = None,
@@ -342,11 +342,11 @@ class RecommendationWorkflow:
 
         Args:
             specifications: Dict with keys: intent, traffic_profile, slo_targets
-            min_accuracy: Minimum accuracy score filter (0-100)
+            min_quality: Minimum quality score filter (0-100)
             max_cost: Maximum monthly cost filter (USD)
             include_near_miss: Whether to include near-SLO configurations
             weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency
+                     Keys: quality, price, latency
 
         Returns:
             RankedRecommendationsResponse with 4 ranked lists
@@ -419,7 +419,7 @@ class RecommendationWorkflow:
         if not all_configs:
             logger.warning("No viable configurations found")
             return RankedRecommendationsResponse(
-                min_accuracy_threshold=min_accuracy,
+                min_quality_threshold=min_quality,
                 max_cost_ceiling=max_cost,
                 include_near_miss=include_near_miss,
                 specification=specification,
@@ -433,9 +433,9 @@ class RecommendationWorkflow:
         analyzer = Analyzer()
         ranked_lists = analyzer.generate_ranked_lists(
             configurations=all_configs,
-            min_accuracy=min_accuracy,
+            min_quality=min_quality,
             max_cost=max_cost,
-            top_n=10,  # Top 10 accuracy models only
+            top_n=10,  # Top 10 quality models only
             weights=weights,
             use_case=intent.use_case,  # Task bonuses for Balanced
             preferred_models=intent.preferred_models if intent.preferred_models else None,
@@ -450,11 +450,11 @@ class RecommendationWorkflow:
         )
 
         return RankedRecommendationsResponse(
-            min_accuracy_threshold=min_accuracy,
+            min_quality_threshold=min_quality,
             max_cost_ceiling=max_cost,
             include_near_miss=include_near_miss,
             specification=specification,
-            best_accuracy=ranked_lists["best_accuracy"],
+            best_quality=ranked_lists["best_quality"],
             lowest_cost=ranked_lists["lowest_cost"],
             lowest_latency=ranked_lists["lowest_latency"],
             balanced=ranked_lists["balanced"],

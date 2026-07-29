@@ -1,9 +1,11 @@
 """SLO specification components for the Planner UI.
 
-SLO targets, workload profile, accuracy benchmarks, priorities, and approval.
+SLO targets, workload profile, quality benchmarks, priorities, and approval.
 """
 
+import json
 import logging
+from pathlib import Path
 
 import streamlit as st
 from api_client import (
@@ -15,54 +17,18 @@ from api_client import (
 
 logger = logging.getLogger(__name__)
 
-# Benchmark weights per use case (from USE_CASE_METHODOLOGY.md)
-TASK_DATASETS = {
-    "chatbot_conversational": [
-        ("τ²-Bench", 45, "Conversational AI agentic workflow (114 tasks)"),
-        ("MMLU-Pro", 35, "General knowledge (12,032 questions)"),
-        ("GPQA", 20, "Scientific reasoning (198 questions)"),
-    ],
-    "code_completion": [
-        ("LiveCodeBench", 45, "Code benchmark (315 questions)"),
-        ("τ²-Bench", 35, "Agentic code assistance (114 tasks)"),
-        ("MMLU-Pro", 20, "Knowledge for context"),
-    ],
-    "code_generation_detailed": [
-        ("LiveCodeBench", 40, "Code generation (315 questions)"),
-        ("τ²-Bench", 40, "Agentic reasoning (114 tasks)"),
-        ("GPQA", 20, "Scientific reasoning for explanations"),
-    ],
-    "translation": [
-        ("τ²-Bench", 45, "Language agentic tasks (114 tasks)"),
-        ("MMLU-Pro", 35, "Language understanding (12,032 questions)"),
-        ("GPQA", 20, "Reasoning"),
-    ],
-    "content_generation": [
-        ("τ²-Bench", 45, "Creative agentic workflow (114 tasks)"),
-        ("MMLU-Pro", 35, "General knowledge for facts"),
-        ("GPQA", 20, "Reasoning"),
-    ],
-    "summarization_short": [
-        ("τ²-Bench", 45, "Summarization agentic (114 tasks)"),
-        ("MMLU-Pro", 35, "Comprehension (12,032 questions)"),
-        ("GPQA", 20, "Reasoning"),
-    ],
-    "document_analysis_rag": [
-        ("τ²-Bench", 50, "RAG is agentic workflow - DOMINANT (114 tasks)"),
-        ("GPQA", 30, "Scientific reasoning for factual answers"),
-        ("MMLU-Pro", 20, "Knowledge retrieval"),
-    ],
-    "long_document_summarization": [
-        ("τ²-Bench", 50, "Long doc handling is agentic (114 tasks)"),
-        ("MMLU-Pro", 30, "Knowledge for understanding"),
-        ("GPQA", 20, "Reasoning"),
-    ],
-    "research_legal_analysis": [
-        ("τ²-Bench", 55, "Research analysis is agentic reasoning - CRITICAL"),
-        ("GPQA", 25, "Scientific reasoning (198 questions)"),
-        ("MMLU-Pro", 20, "Knowledge (12,032 questions)"),
-    ],
-}
+_WEIGHTS_PATH = (
+    Path(__file__).parent.parent.parent / "data" / "configuration" / "quality_weights.json"
+)
+
+
+def _load_quality_categories() -> dict:
+    """Load quality weight categories from config."""
+    if _WEIGHTS_PATH.is_file():
+        with open(_WEIGHTS_PATH) as f:
+            data = json.load(f)
+        return {k: v for k, v in data.items() if not k.startswith("_")}
+    return {}
 
 
 def get_workload_insights(use_case: str, qps: int, user_count: int) -> list:
@@ -222,28 +188,35 @@ def _render_workload_profile(use_case, workload_profile, estimated_qps, qps, use
         )
 
 
-def _render_accuracy_benchmarks(use_case):
-    """Render the accuracy benchmark weights for the current use case."""
-    st.write("**Accuracy Benchmarks**")
+def _render_quality_benchmarks(use_case: str) -> None:
+    """Render the quality benchmark weights for the current use case."""
+    st.write("**Quality Benchmark Weights**")
+    st.caption(
+        "Quality scores combine human preference ratings (LM Arena) and "
+        "automated benchmarks (Artificial Analysis) into percentile-based "
+        "composite scores."
+    )
 
-    datasets = TASK_DATASETS.get(use_case, TASK_DATASETS["chatbot_conversational"])
+    weights_data = _load_quality_categories()
+    use_case_key = use_case.lower().replace(" ", "_").replace("-", "_")
+    config = weights_data.get(use_case_key, {})
+    categories = config.get("categories", {})
 
-    datasets_html = '<div style="padding: 0.5rem;">'
-    for name, weight, tooltip in datasets:
-        datasets_html += f"""<div style="padding: 0.5rem 0; ">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.95rem; font-weight: 500;">{name}</span>
-                <span style="font-weight: 700; font-size: 0.95rem; padding: 3px 10px; border-radius: 4px;">{weight}%</span>
-        </div>
-            <div style="font-size: 0.75rem; margin-top: 0.25rem; padding-left: 0;">{tooltip}</div>
-        </div>"""
-    datasets_html += "</div>"
-    datasets_html += '<div style="font-size: 0.75rem; font-weight: 600; margin-top: 0.5rem;">Weights from Artificial Analysis Intelligence Index</div>'
-    st.markdown(datasets_html, unsafe_allow_html=True)
+    if not categories:
+        st.info(f"No quality weights configured for use case: {use_case}")
+        return
+
+    # Normalize weights to 0-1 range for progress bars
+    total_weight = sum(categories.values())
+    for cat_name, weight in sorted(categories.items(), key=lambda x: -x[1]):
+        normalized = weight / total_weight if total_weight > 0 else 0
+        display_name = cat_name.replace("_", " ").title()
+        pct_label = f"{int(normalized * 100)}%"
+        st.progress(normalized, text=f"{display_name} — {pct_label}")
 
 
 def _render_priorities():
-    """Render priority dropdowns and weight inputs for accuracy, cost, latency."""
+    """Render priority dropdowns and weight inputs for quality, cost, latency."""
     st.write("**Priorities**")
 
     priority_config = fetch_priority_weights()
@@ -259,8 +232,9 @@ def _render_priorities():
 
     def get_weight_for_priority(dimension: str, priority_level: str) -> int:
         pw = priority_weights_map.get(dimension, {})
-        default_weights = defaults_config.get("weights", {"accuracy": 5, "cost": 4, "latency": 2})
-        weight = pw.get(priority_level, default_weights.get(dimension, 5))
+        default_priority = defaults_config.get("priority", "medium")
+        fallback = {"quality": 4, "cost": 4, "latency": 1}
+        weight = pw.get(priority_level, pw.get(default_priority, fallback.get(dimension, 4)))
         logger.info(
             f"get_weight_for_priority({dimension}, {priority_level}): pw={pw}, weight={weight}"
         )
@@ -270,11 +244,11 @@ def _render_priorities():
 
     # Update priorities from new LLM extraction
     if st.session_state.get("new_extraction_available", False):
-        st.session_state.accuracy_priority = extraction.get("accuracy_priority", "medium")
+        st.session_state.quality_priority = extraction.get("quality_priority", "medium")
         st.session_state.cost_priority = extraction.get("cost_priority", "medium")
         st.session_state.latency_priority = extraction.get("latency_priority", "medium")
-        st.session_state.weight_accuracy = get_weight_for_priority(
-            "accuracy", st.session_state.accuracy_priority
+        st.session_state.weight_quality = get_weight_for_priority(
+            "quality", st.session_state.quality_priority
         )
         st.session_state.weight_cost = get_weight_for_priority(
             "cost", st.session_state.cost_priority
@@ -284,22 +258,22 @@ def _render_priorities():
         )
         st.session_state.new_extraction_available = False
         logger.info(
-            f"Updated priorities from new extraction: accuracy={st.session_state.accuracy_priority}, "
+            f"Updated priorities from new extraction: quality={st.session_state.quality_priority}, "
             f"cost={st.session_state.cost_priority}, latency={st.session_state.latency_priority}"
         )
 
     # Initialize session state for priorities if not set (first load)
-    if "accuracy_priority" not in st.session_state:
-        st.session_state.accuracy_priority = extraction.get("accuracy_priority", "medium")
+    if "quality_priority" not in st.session_state:
+        st.session_state.quality_priority = extraction.get("quality_priority", "medium")
     if "cost_priority" not in st.session_state:
         st.session_state.cost_priority = extraction.get("cost_priority", "medium")
     if "latency_priority" not in st.session_state:
         st.session_state.latency_priority = extraction.get("latency_priority", "medium")
 
     # Initialize weights based on priorities
-    if "weight_accuracy" not in st.session_state:
-        st.session_state.weight_accuracy = get_weight_for_priority(
-            "accuracy", st.session_state.accuracy_priority
+    if "weight_quality" not in st.session_state:
+        st.session_state.weight_quality = get_weight_for_priority(
+            "quality", st.session_state.quality_priority
         )
     if "weight_cost" not in st.session_state:
         st.session_state.weight_cost = get_weight_for_priority(
@@ -321,7 +295,7 @@ def _render_priorities():
 
     # Priority rows: label | dropdown | weight input
     for dimension, state_key in [
-        ("Accuracy", "accuracy"),
+        ("Quality", "quality"),
         ("Cost", "cost"),
         ("Latency", "latency"),
     ]:
@@ -344,9 +318,9 @@ def _render_priorities():
             new_priority_val = priority_to_value[new_priority]
             if new_priority_val != current_priority:
                 st.session_state[f"{state_key}_priority"] = new_priority_val
-                st.session_state[f"weight_{state_key}"] = get_weight_for_priority(
-                    state_key, new_priority_val
-                )
+                new_weight_val = get_weight_for_priority(state_key, new_priority_val)
+                st.session_state[f"weight_{state_key}"] = new_weight_val
+                st.session_state[f"{state_key}_weight_input"] = new_weight_val
         with weight_col:
             current_weight = st.session_state.get(f"weight_{state_key}", 5)
             new_weight = st.number_input(
@@ -400,7 +374,7 @@ def render_slo_cards(use_case: str, user_count: int):
     with col2:
         _render_workload_profile(use_case, workload_profile, estimated_qps, qps, user_count)
     with col3:
-        _render_accuracy_benchmarks(use_case)
+        _render_quality_benchmarks(use_case)
     with col4:
         _render_priorities()
 
@@ -489,6 +463,6 @@ def render_slo_with_approval(extraction: dict):
             st.session_state.recommendation_result = None
             st.session_state.pop("_last_spec_fingerprint", None)
             st.session_state._pending_tab = 2
-            for _cat in ("balanced", "accuracy", "latency", "cost"):
+            for _cat in ("balanced", "quality", "latency", "cost"):
                 st.session_state[f"cat_idx_{_cat}"] = 0
             st.rerun()

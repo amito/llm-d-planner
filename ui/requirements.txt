@@ -1,4 +1,4 @@
-# Minimal UI dependencies
+# Minimal UI dependencies (for Docker build)
 streamlit==1.60.0
 pandas==3.0.3
 plotly>=6.9.0

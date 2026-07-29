@@ -19,7 +19,6 @@ TODO (Phase 2+): Parametric Performance Models
 
 import logging
 import math
-from typing import Protocol
 
 from planner.knowledge_base.benchmarks import BenchmarkData, BenchmarkRepository
 from planner.knowledge_base.model_catalog import ModelCatalog, ModelInfo
@@ -32,17 +31,12 @@ from planner.shared.schemas import (
     TrafficProfile,
 )
 from planner.shared.utils import normalize_gpu_types
+from quality_scoring.engine import ScoringEngine
 
 from .estimator import generate_estimated_configs
 from .scorer import Scorer
 
 logger = logging.getLogger(__name__)
-
-
-class QualityScorer(Protocol):
-    """Protocol for quality scoring backends."""
-
-    def get_quality_score(self, model_name: str, use_case: str) -> float: ...
 
 
 class ConfigFinder:
@@ -52,7 +46,8 @@ class ConfigFinder:
         self,
         benchmark_repo: BenchmarkRepository | None = None,
         catalog: ModelCatalog | None = None,
-        quality_scorer: QualityScorer | None = None,
+        engine: ScoringEngine | None = None,
+        quality_weights: dict | None = None,
     ):
         """
         Initialize capacity planner.
@@ -60,12 +55,19 @@ class ConfigFinder:
         Args:
             benchmark_repo: PostgreSQL benchmark repository.
             catalog: Model catalog
-            quality_scorer: Optional scorer with get_quality_score(model_name, use_case) method.
-                           When provided, replaces the default UseCaseQualityScorer.
+            engine: ScoringEngine for quality scoring (from quality_scoring package)
+            quality_weights: Use-case category weights dict loaded from quality_weights.json
         """
         self.benchmark_repo = benchmark_repo or BenchmarkRepository()
         self.catalog = catalog or ModelCatalog()
-        self._quality_scorer = quality_scorer
+        self._engine = engine
+        self._quality_weights = quality_weights or {}
+
+    def update_engine(self, engine: ScoringEngine, quality_weights: dict | None = None) -> None:
+        """Replace the scoring engine and optionally the quality weights."""
+        self._engine = engine
+        if quality_weights is not None:
+            self._quality_weights = quality_weights
 
     def _calculate_required_replicas(self, qps_per_replica: float, required_qps: float) -> int:
         """
@@ -154,7 +156,7 @@ class ConfigFinder:
         Plan GPU capacity and return ALL viable configurations meeting SLO.
 
         Queries benchmarks for all (model, GPU) configurations meeting SLO targets,
-        then scores each on accuracy, price, and latency.
+        then scores each on quality, price, and latency.
 
         Args:
             traffic_profile: Traffic characteristics (prompt_tokens, output_tokens)
@@ -163,7 +165,7 @@ class ConfigFinder:
             include_near_miss: Whether to include configs within tolerance of SLO
             near_miss_tolerance: How much over SLO to allow (0.2 = 20%)
             weights: Custom weights for balanced score (0-10 scale)
-                     Keys: accuracy, price, latency
+                     Keys: quality, price, latency
             cluster_gpu_types: Detected GPU types from cluster (None = detection
                 not attempted, [] = no GPUs detected, non-empty = hard filter
                 intersected with user preferences)
@@ -324,7 +326,7 @@ class ConfigFinder:
             return [], all_warnings
 
         # Build model lookup from catalog for scoring
-        # Models not in catalog will get accuracy score = 0
+        # Models not in catalog will get quality score = 0
         all_models = self.catalog.get_all_models()
         model_lookup = {m.model_id.lower(): m for m in all_models}
 
@@ -380,28 +382,22 @@ class ConfigFinder:
             if slo_status == "exceeds" and not include_near_miss:
                 continue
 
-            # Calculate accuracy score - USE RAW BENCHMARK SCORE
-            # This is the actual model accuracy from benchmarks (AA or Model Catalog)
-            # NOT a composite score with latency/budget bonuses
-            # Use bench.model_hf_repo (e.g. "RedHatAI/Qwen2.5-7B-Instruct-quantized.w4a16")
-            # so quantization discounts are applied correctly.
-            model_name_for_scoring = bench.model_hf_repo
-            if self._quality_scorer is not None:
-                raw_accuracy = self._quality_scorer.get_quality_score(
-                    model_name_for_scoring, intent.use_case
-                )
-            else:
-                from .quality import score_model_quality
+            # Calculate quality score
+            quality_score_raw = 0.0
+            if self._engine is not None:
+                from .quality import compute_quality_score
 
-                raw_accuracy = score_model_quality(model_name_for_scoring, intent.use_case)
+                scorecard = self._engine.get_scores(bench.model_hf_repo, fuzzy=True)
+                if scorecard is not None:
+                    use_case_key = intent.use_case.lower().replace(" ", "_").replace("-", "_")
+                    cat_weights = self._quality_weights.get(use_case_key, {}).get("categories", {})
+                    quality_score_raw = compute_quality_score(scorecard, cat_weights)
 
-            accuracy_score = int(raw_accuracy)
-
-            # Fallback: for models without accuracy benchmarks (e.g., estimated models),
-            # use parameter-count-based heuristic so they aren't filtered by min_accuracy
-            if accuracy_score == 0 and getattr(bench, "confidence_level", None) == "estimated":
+            quality_score = quality_score_raw
+            is_estimated = getattr(bench, "confidence_level", None) == "estimated"
+            if quality_score == 0.0 and is_estimated:
                 model_size = model.size_parameters if model else bench.model_hf_repo
-                accuracy_score = scorer.score_accuracy_by_size(model_size)
+                quality_score = float(scorer.score_quality_by_size(model_size))
 
             # Determine model_id and model_name
             # Use catalog info if available, otherwise use benchmark model_hf_repo
@@ -457,7 +453,7 @@ class ConfigFinder:
                 benchmark_metrics=benchmark_metrics,  # All percentile data for UI
                 # Temporary scores without price (will be updated below)
                 scores=ConfigurationScores(
-                    accuracy_score=accuracy_score,
+                    quality_score=quality_score,
                     price_score=0,  # Placeholder
                     latency_score=latency_score,
                     balanced_score=0.0,  # Placeholder
@@ -483,19 +479,12 @@ class ConfigFinder:
                     price_score = scorer.score_price(rec.cost_per_month_usd, min_cost, max_cost)
                     rec.scores.price_score = price_score
 
-                    # Calculate base balanced score with user weights
-                    # Weights from UI are 0-10 integers, normalize to fractions
-                    normalized_weights = None
-                    if weights:
-                        total = sum(weights.values()) or 1  # Avoid division by zero
-                        normalized_weights = {k: v / total for k, v in weights.items()}
-
                     rec.scores.balanced_score = round(
                         scorer.score_balanced(
-                            accuracy_score=rec.scores.accuracy_score,
+                            quality_score=rec.scores.quality_score,
                             price_score=price_score,
                             latency_score=rec.scores.latency_score,
-                            weights=normalized_weights,
+                            weights=weights,
                         ),
                         1,
                     )

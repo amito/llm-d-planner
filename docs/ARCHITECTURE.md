@@ -39,7 +39,7 @@ through:
 2. **SLO-driven capacity planning** - Translate business needs into technical
    specifications automatically
 3. **Multi-criteria recommendation ranking** - Present optimal trade-offs
-   between accuracy, cost, and latency
+   between quality, cost, and latency
 4. **Ready-to-use configurations** - Generate production-ready Kubernetes
    manifests for immediate deployment
 
@@ -72,8 +72,8 @@ Planner consists of **five major components**:
                             ↕ Data Access Layer
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                    Knowledge Base (Data Layer)                            │
-│     Embedded DB: Performance Benchmarks, Accuracy Benchmarks              │
-│     JSON Files: SLO Templates, Model Catalog, Hardware Profiles           │
+│     Embedded DB: Performance Benchmarks, Quality Data (Arena + AA)        │
+│     JSON Files: SLO Templates, Model Catalog, Quality Weights             │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -115,8 +115,8 @@ integrated views:
 - Allows editing of multiple fields:
   - **SLO targets**: TTFT, ITL, E2E latency thresholds and percentile
     (p90/p95/p99)
-  - **Quality thresholds**: Minimum accuracy score, maximum cost
-  - **User priorities**: Weights for accuracy, cost, latency in
+  - **Quality thresholds**: Minimum quality score, maximum cost
+  - **User priorities**: Weights for quality, cost, latency in
     balanced ranking
   - **Future**: Editing of traffic profile parameters (prompt/output tokens,
     QPS), power/cooling budgets
@@ -125,10 +125,10 @@ integrated views:
 #### c. Recommendation Viewer/Selector
 
 - Displays ranked recommendations in multiple views:
-  - **List View**: Top recommendations in each category (Best Accuracy, Lowest
+  - **List View**: Top recommendations in each category (Best Quality, Lowest
     Cost, Lowest Latency, Balanced)
   - **Future**: Pareto frontier charts for two-dimensional trade-offs (e.g.,
-    cost vs. accuracy)
+    cost vs. quality)
   - **Future**: Multi-dimensional visualization (>2 dimensions)
 - Allows user to select preferred configuration
 - Provides detailed explanations for each recommendation
@@ -190,14 +190,14 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
 
 - Extract use case type (chatbot, code completion, summarization, etc.)
 - Identify user count and scale requirements
-- Determine user priorities (accuracy, cost, latency)
+- Determine user priorities (quality, cost, latency)
 - Capture domain specialization needs (e.g., medical, legal, financial)
 
 **Output**: Structured intent object with:
 
 - Use case classification
 - Expected user scale
-- Priority preferences (accuracy vs. cost vs. latency)
+- Priority preferences (quality vs. cost vs. latency)
 - Subject matter domain (optional)
 
 **Interface**: REST endpoint `/api/v1/extract`
@@ -216,12 +216,12 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
 │                      Specification Service                        │
 │                                                                   │
 │  ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐  │
-│  │ Traffic Profile │   │  SLO Target     │   │    Benchmark    │  │
-│  │   Generator     │   │    Mapper       │   │    Selector     │  │
+│  │ Traffic Profile │   │  SLO Target     │   │    Quality      │  │
+│  │   Generator     │   │    Mapper       │   │   Selector      │  │
 │  │                 │   │                 │   │                 │  │
 │  │ Use case →      │──▶│ Use case →      │──▶│ Use case →      │  │
-│  │ tokens, QPS     │   │ TTFT, ITL, E2E  │   │ accuracy metrics│  │
-│  │                 │   │ targets         │   │                 │  │
+│  │ tokens, QPS     │   │ TTFT, ITL, E2E  │   │ categories +    │  │
+│  │                 │   │ targets         │   │ weights         │  │
 │  └─────────────────┘   └─────────────────┘   └─────────────────┘  │
 │                                                                   │
 │  Structured Intent ───────────────────────▶ Complete Specification│
@@ -244,17 +244,17 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
   - E2E (End-to-End) target
   - Percentile selection (p90, p95, or p99)
   - Throughput (requests per second) requirement
-- **Accuracy Benchmark Selection**: Identify relevant quality metrics based on
-  use case and subject matter
+- **Quality Category Selection**: Identify relevant quality categories based on
+  use case and subject matter (e.g., coding, math, overall)
 
 **Output**: Complete deployment specification including:
 
 - **Performance Requirements**: TTFT, ITL, E2E latency targets, RPS throughput
 - **Workload Profile**: Mean input/output tokens, distribution characteristics
-- **Accuracy Benchmarks**: Use-case specific quality evaluation criteria (for
-  scoring)
-- **Quality Thresholds**: Minimum accuracy score, maximum cost (for filtering)
-- **User Priorities**: Weights for accuracy, cost, latency
+- **Quality Categories**: Use-case specific quality evaluation categories (from
+  Arena/AA data sources) with per-category weights
+- **Quality Thresholds**: Minimum quality score, maximum cost (for filtering)
+- **User Priorities**: Weights for quality, cost, latency
   trade-offs
 - **Future**: Power budget, cooling budget thresholds
 
@@ -277,7 +277,7 @@ SLO targets, priorities, and constraints before proceeding to recommendations
 │  │                 │   │                 │   │                 │  │
 │  │ Query benchmarks│──▶│ Score configs   │──▶│ Generate        │  │
 │  │ Filter by SLOs  │   │ on 3 dimensions:│   │ ranked views:   │  │
-│  │ Calculate       │   │ - Accuracy      │   │ - Best Accuracy │  │
+│  │ Calculate       │   │ - Quality       │   │ - Best Quality  │  │
 │  │ replicas        │   │ - Cost          │   │ - Lowest Cost   │  │
 │  │                 │   │ - Latency       │   │ - Lowest Latency│  │
 │  │                 │   │                 │   │ - Balanced      │  │
@@ -306,7 +306,7 @@ auto-generated version)
    - Filter by exact traffic profile match (prompt tokens → output tokens)
    - Enforce SLO compliance (TTFT p95 ≤ target, ITL p95 ≤ target, E2E p95 ≤
      target)
-   - Enforce quality thresholds (accuracy ≥ minimum, cost ≤ maximum)
+   - Enforce quality thresholds (quality score ≥ minimum, cost ≤ maximum)
    - Apply optional user constraints (included/excluded hardware, preferred
      models)
 2. Calculate replicas required to meet throughput:
@@ -328,10 +328,13 @@ without real benchmark data
 
 **Three Scoring Dimensions** (each 0-100 scale):
 
-1. **Accuracy** (Primary Factor)
-   - Use-case specific quality scores from benchmark databases
-   - Fallback: Parameter count heuristic (7B → 55, 70B → 85, 405B → 95)
-   - Source: Artificial Analysis benchmarks, weighted by use case
+1. **Quality** (Primary Factor)
+   - Use-case specific model capability scores from dual-source benchmarks
+   - Sources: Arena human preference rankings + Artificial Analysis automated benchmarks
+   - Normalization: Percentile ranks (0-100) via tied-rank method across full population
+   - Weighting: Per-use-case category weights (e.g., code_generation: 80% coding, 10% overall, 10% math)
+   - Composite: Weighted average of Arena/AA percentiles for specified categories
+   - Fallback: Overall percentile for missing categories; parameter count heuristic if model not in either source
 
 2. **Cost** (Primary Factor)
    - Monthly operational cost (GPU hourly rate × GPU count × 730 hours)
@@ -352,7 +355,8 @@ without real benchmark data
 
 - All three factors scored equally (0-100) in current implementation
 - **Balanced composite** uses weighted combination with higher weights on
-  primary factors (accuracy, cost)
+  primary factors (quality, cost)
+- Default weights: 40% quality, 40% cost, 10% latency, 10% complexity
 - Future may formalize Primary/Secondary distinction with explicit weight tiers
 
 #### c. Analyzer
@@ -362,7 +366,7 @@ without real benchmark data
 **Processing**:
 
 1. Generate **four ranked views** of recommendations:
-   - **Best Accuracy**: Sorted by quality/capability
+   - **Best Quality**: Sorted by quality/capability
    - **Lowest Cost**: Sorted by price efficiency
    - **Lowest Latency**: Sorted by SLO headroom
    - **Balanced**: Sorted by weighted composite score (user priorities)
@@ -465,8 +469,12 @@ components:
 
 - **Performance Benchmarks**: Performance metrics for (model, GPU, traffic
   profile) combinations
-- **Accuracy Benchmarks**: Accuracy metrics for multiple use cases
+- **Quality Data**: Model quality scores from dual sources (Arena human
+  preferences + Artificial Analysis automated benchmarks), cached in
+  `data/quality/` and `.quality_cache/`
 - **Use Case SLO Templates**: Default targets for 9 standard use cases
+- **Quality Weights**: Per-use-case category weights for quality scoring
+  (e.g., code_generation: 80% coding, 10% overall, 10% math)
 - **Model Catalog**: Curated models with task compatibility metadata
 - **Hardware Profiles**: GPU specifications and pricing
 - **Deployment Outcomes** (future): Actual performance data for continuous
@@ -488,7 +496,7 @@ components:
 3. Specification Service
    - Intent → traffic profile (prompt/output tokens, QPS)
    - Use case → SLO targets (TTFT, ITL, E2E)
-   - Select accuracy benchmarks
+   - Select quality categories (e.g., coding, math, overall)
      ↓
 4. UI Specification Editor
    - Display auto-generated specification
@@ -497,11 +505,11 @@ components:
      ↓
 5. Recommendation Service
    a. Config Finder: Query benchmarks, calculate replicas
-   b. Scorer: Evaluate on 3 dimensions (accuracy, cost, latency)
+   b. Scorer: Evaluate on 3 dimensions (quality, cost, latency)
    c. Analyzer: Generate 4 ranked views
      ↓
 6. UI Recommendation Viewer
-   - Display ranked options (Best Accuracy, Lowest Cost, etc.)
+   - Display ranked options (Best Quality, Lowest Cost, etc.)
    - Show trade-off analysis
    - User selects preferred configuration
      ↓
@@ -605,7 +613,7 @@ recommendation and deployment workflows.
 ### Knowledge Base
 
 - **Bring Your Own Data**: Allow users to upload custom performance and/or
-  accuracy benchmarks to support new models, hardware, and traffic profiles
+  quality benchmarks to support new models, hardware, and traffic profiles
 
 ---
 
@@ -624,7 +632,7 @@ for different environments and requirements.
 ### Configurable Data Sources
 
 - **Model Catalog**: User-provided or curated model lists
-- **Benchmarks**: Custom performance and accuracy data (see "Bring Your Own
+- **Benchmarks**: Custom performance and quality data (see "Bring Your Own
   Data" above)
 - **SLO Templates**: Custom use case definitions with organization-specific
   defaults
@@ -643,14 +651,14 @@ for different environments and requirements.
    forms or wizards)
 2. **Specification Editability**: Users can review and modify auto-generated
    specs before committing
-3. **Multi-Criteria Optimization**: Balanced recommendations across accuracy,
+3. **Multi-Criteria Optimization**: Balanced recommendations across quality,
    cost, and latency
 4. **SLO-Driven Planning**: Recommendations guaranteed to meet user's latency
    and throughput requirements
 5. **Explainability**: Clear rationale for why each recommendation was made,
    trade-off analysis
-6. **Threshold-Based Filtering**: Editable accuracy and cost thresholds ensure
-   all options meet minimum quality and budget requirements
+6. **Threshold-Based Filtering**: Editable quality and cost thresholds ensure
+   all options meet minimum capability and budget requirements
 7. **Ready-to-Deploy Configurations**: Generate complete configuration files,
    minimizing manual YAML editing
 

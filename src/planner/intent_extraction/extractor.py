@@ -287,7 +287,7 @@ class IntentExtractor:
         # Ensure priority fields have valid values (default to "medium" if invalid/missing)
         valid_priorities = ["low", "medium", "high"]
         for priority_field in [
-            "accuracy_priority",
+            "quality_priority",
             "cost_priority",
             "latency_priority",
         ]:
@@ -315,7 +315,7 @@ class IntentExtractor:
         # already handle use-case-appropriate targets.
         # Default to True (trust the priority) when the LLM omits *_mentioned
         # entirely, so a missing field doesn't silently discard valid priorities.
-        for prefix in ("accuracy", "cost", "latency"):
+        for prefix in ("quality", "cost", "latency"):
             mentioned_key = f"{prefix}_mentioned"
             priority_key = f"{prefix}_priority"
             mentioned_raw = cleaned.pop(mentioned_key, True)

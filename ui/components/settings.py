@@ -4,8 +4,10 @@ Contains benchmark database management controls;
 structured to support additional configuration sections.
 """
 
+import requests
 import streamlit as st
 from api_client import (
+    API_BASE_URL,
     fetch_db_status,
     fetch_deployment_mode,
     is_db_admin_required,
@@ -78,6 +80,77 @@ def render_configuration_tab():
         help="When enabled, the roofline model generates synthetic performance estimates "
         "for model/GPU combinations that lack benchmark data.",
     )
+
+    st.divider()
+
+    # --- Quality Benchmarks ---
+    st.subheader("Quality Benchmarks")
+    st.caption(
+        "Quality scores are computed from LM Arena and Artificial Analysis data. "
+        "Enable auto-update to fetch the latest data periodically."
+    )
+
+    # Fetch current status from backend API
+    try:
+        status = requests.get(f"{API_BASE_URL}/api/v1/quality/auto-update", timeout=5).json()
+        auto_update_enabled = status.get("enabled", False)
+        arena_updated = status.get("arena_last_updated")
+        aa_updated = status.get("aa_last_updated")
+        arena_count = status.get("arena_model_count", 0)
+        aa_count = status.get("aa_model_count", 0)
+    except Exception:
+        auto_update_enabled = False
+        arena_updated = aa_updated = None
+        arena_count = aa_count = 0
+
+    new_value = st.toggle(
+        "Auto-update quality benchmarks",
+        value=auto_update_enabled,
+        help="Automatically fetch the latest quality benchmark data when stale (>24h)",
+    )
+
+    if new_value != auto_update_enabled:
+        try:
+            requests.put(
+                f"{API_BASE_URL}/api/v1/quality/auto-update",
+                json={"enabled": new_value},
+                timeout=5,
+            )
+            st.success(f"Quality auto-update {'enabled' if new_value else 'disabled'}.")
+        except Exception:
+            st.error("Failed to update auto-update setting.")
+
+    # Show source status
+    if arena_updated or aa_updated:
+        status_parts = []
+        if arena_count:
+            status_parts.append(f"Arena: {arena_count:,} models")
+        if aa_count:
+            status_parts.append(f"AA: {aa_count:,} models")
+        st.text(" | ".join(status_parts))
+        if arena_updated:
+            st.caption(f"Arena last updated: {arena_updated}")
+        if aa_updated:
+            st.caption(f"AA last updated: {aa_updated}")
+
+    # Refresh Now button
+    if st.button("Refresh Quality Data Now"):
+        with st.spinner("Refreshing quality benchmarks..."):
+            try:
+                resp = requests.post(
+                    f"{API_BASE_URL}/api/v1/quality/refresh",
+                    timeout=120,
+                )
+                if resp.ok:
+                    result = resp.json()
+                    st.success(
+                        f"Refreshed: {result.get('arena_rows', 0):,} Arena rows, "
+                        f"{result.get('aa_models', 0):,} AA models"
+                    )
+                else:
+                    st.error("Refresh failed — check backend logs.")
+            except Exception as e:
+                st.error(f"Refresh failed: {e}")
 
     st.divider()
 

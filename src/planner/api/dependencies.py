@@ -49,7 +49,6 @@ def _sync_model_catalog_async(
     client: Any,
     database_url: str,
     model_catalog: ModelCatalog,
-    quality_scorer: Any,
 ) -> threading.Thread:
     """Run Model Catalog sync in a background thread.
 
@@ -70,7 +69,6 @@ def _sync_model_catalog_async(
                     client=client,
                     conn=conn,
                     model_catalog=model_catalog,
-                    quality_scorer=quality_scorer,
                 )
                 if result.errors:
                     logger.warning(
@@ -95,6 +93,15 @@ def _sync_model_catalog_async(
 
 def init_app_state(app: FastAPI) -> None:
     """Initialize all singletons on app.state during lifespan startup."""
+    from pathlib import Path
+
+    from planner.recommendation.config_finder import ConfigFinder
+    from planner.recommendation.quality.scoring import (
+        build_scoring_engine,
+        load_quality_weights,
+        validate_quality_weights,
+    )
+
     source_type = _get_benchmark_source_type()
 
     # Always create the same components — single code path
@@ -105,17 +112,31 @@ def init_app_state(app: FastAPI) -> None:
     app.state.yaml_validator = YAMLValidator()
     app.state.cluster_managers = {}  # dict[str, KubernetesClusterManager]
 
+    # Build quality scoring engine (shared across both code paths)
+    engine, quality_metadata = build_scoring_engine()
+    app.state.scoring_engine = engine
+    app.state.quality_metadata = quality_metadata
+    weights_path = (
+        Path(__file__).parent.parent.parent.parent
+        / "data"
+        / "configuration"
+        / "quality_weights.json"
+    )
+    quality_weights = load_quality_weights(weights_path)
+    validate_quality_weights(quality_weights)
+
     if source_type == "model_catalog":
         from planner.knowledge_base.model_catalog_client import ModelCatalogClient
-        from planner.recommendation.config_finder import ConfigFinder
-        from planner.recommendation.quality.usecase_scorer import UseCaseQualityScorer
 
         client = ModelCatalogClient()
         app.state.model_catalog_client = client
-        quality_scorer = UseCaseQualityScorer()
 
         # Wire shared instances so sync updates propagate to recommendations
-        config_finder = ConfigFinder(catalog=app.state.model_catalog, quality_scorer=quality_scorer)
+        config_finder = ConfigFinder(
+            catalog=app.state.model_catalog,
+            engine=engine,
+            quality_weights=quality_weights,
+        )
         app.state.workflow = RecommendationWorkflow(config_finder=config_finder)
 
         database_url = os.getenv(
@@ -125,14 +146,17 @@ def init_app_state(app: FastAPI) -> None:
 
         logger.info("Using Model Catalog as benchmark source (syncing to PostgreSQL)")
         app.state.model_catalog_sync_thread = _sync_model_catalog_async(
-            client, database_url, app.state.model_catalog, quality_scorer
+            client, database_url, app.state.model_catalog
         )
     else:
         app.state.model_catalog_client = None
         app.state.model_catalog_sync_thread = None
-        from planner.recommendation.config_finder import ConfigFinder
 
-        config_finder = ConfigFinder(catalog=app.state.model_catalog)
+        config_finder = ConfigFinder(
+            catalog=app.state.model_catalog,
+            engine=engine,
+            quality_weights=quality_weights,
+        )
         app.state.workflow = RecommendationWorkflow(config_finder=config_finder)
         logger.info("Using PostgreSQL as benchmark source")
 
