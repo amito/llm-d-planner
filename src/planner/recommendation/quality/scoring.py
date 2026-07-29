@@ -76,6 +76,7 @@ def validate_quality_weights(weights: dict) -> None:
 
 def build_scoring_engine(
     cache_dir: Path | None = None,
+    auto_update: bool | None = None,
 ) -> tuple[ScoringEngine, dict[str, Any]]:
     """Build a ScoringEngine, handling cache loading and optional auto-update.
 
@@ -84,6 +85,8 @@ def build_scoring_engine(
             When provided the clients read/write there instead of
             consulting ``LLM_QUALITY_CACHE_DIR``.  The environment
             variable is **never** mutated.
+        auto_update: Override for the QUALITY_AUTO_UPDATE env var.
+            When provided, this value is used instead of the env var.
 
     Returns:
         A ``(engine, metadata)`` tuple.  *metadata* contains counts
@@ -94,7 +97,12 @@ def build_scoring_engine(
     checked_in_dir = repo_root / "data" / "quality"
     runtime_cache_dir = cache_dir or repo_root / ".quality_cache"
 
-    auto_update = os.environ.get("QUALITY_AUTO_UPDATE", "false").lower() in ("true", "1", "yes")
+    if auto_update is None:
+        auto_update = os.environ.get("QUALITY_AUTO_UPDATE", "false").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
     aa_api_key = os.environ.get("AA_API_KEY")
 
     arena_rows: list = []

@@ -34,6 +34,7 @@ def mock_request():
 class TestGetAutoUpdateStatus:
     def test_returns_disabled_when_not_set(self, client):
         _app.state.quality_metadata = {}
+        _app.state.quality_auto_update = None  # Reset so it re-reads env
         with patch.dict("os.environ", {}, clear=False):
             resp = client.get("/api/v1/quality/auto-update")
         assert resp.status_code == 200
@@ -51,6 +52,7 @@ class TestGetAutoUpdateStatus:
             "aa_count": 1,
             "aa_fetched": "2026-07-01T13:00:00Z",
         }
+        _app.state.quality_auto_update = None  # Reset so it re-reads env
         with patch.dict("os.environ", {"QUALITY_AUTO_UPDATE": "true"}, clear=False):
             resp = client.get("/api/v1/quality/auto-update")
         assert resp.status_code == 200
@@ -64,6 +66,7 @@ class TestGetAutoUpdateStatus:
     def test_handles_various_true_values(self, client):
         _app.state.quality_metadata = {}
         for val in ["true", "True", "TRUE", "1", "yes", "YES"]:
+            _app.state.quality_auto_update = None  # Reset so it re-reads env
             with patch.dict("os.environ", {"QUALITY_AUTO_UPDATE": val}, clear=False):
                 resp = client.get("/api/v1/quality/auto-update")
             assert resp.status_code == 200
@@ -77,26 +80,26 @@ class TestGetAutoUpdateStatus:
 class TestSetAutoUpdate:
     def test_enables_auto_update(self, client):
         _app.state.quality_metadata = {}
-        with patch.dict("os.environ", {}, clear=False):
-            resp = client.put("/api/v1/quality/auto-update", json={"enabled": True})
+        _app.state.quality_auto_update = False
+        resp = client.put("/api/v1/quality/auto-update", json={"enabled": True})
         assert resp.status_code == 200
         body = resp.json()
         assert body["enabled"] is True
+        assert _app.state.quality_auto_update is True
 
     def test_disables_auto_update(self, client):
         _app.state.quality_metadata = {}
-        with patch.dict("os.environ", {"QUALITY_AUTO_UPDATE": "true"}, clear=False):
-            resp = client.put("/api/v1/quality/auto-update", json={"enabled": False})
+        _app.state.quality_auto_update = True
+        resp = client.put("/api/v1/quality/auto-update", json={"enabled": False})
         assert resp.status_code == 200
         body = resp.json()
         assert body["enabled"] is False
+        assert _app.state.quality_auto_update is False
 
     def test_logs_state_change(self, client):
         _app.state.quality_metadata = {}
-        with (
-            patch.dict("os.environ", {}, clear=False),
-            patch("planner.api.routes.quality.logger") as mock_logger,
-        ):
+        _app.state.quality_auto_update = False
+        with patch("planner.api.routes.quality.logger") as mock_logger:
             client.put("/api/v1/quality/auto-update", json={"enabled": True})
         mock_logger.info.assert_called_once()
         # Check format string and args
@@ -155,6 +158,7 @@ class TestRefreshQualityData:
         assert body["aa_models"] == 50
         assert body["arena_last_updated"] == "2026-07-12T10:00:00Z"
         assert body["aa_last_updated"] == "2026-07-12T10:30:00Z"
+        assert body["errors"] == []
 
     def test_skips_aa_when_no_key(self, client):
         import os
@@ -219,8 +223,8 @@ class TestRefreshQualityData:
         assert resp.status_code == 200
         body = resp.json()
         assert body["arena_rows"] == 0
+        assert any("Arena sync failed" in e for e in body["errors"])
         mock_logger.exception.assert_called()
-        assert "Arena sync failed" in mock_logger.exception.call_args[0][0]
 
     def test_handles_aa_sync_failure(self, client):
         mock_engine = MagicMock()
@@ -256,9 +260,8 @@ class TestRefreshQualityData:
         body = resp.json()
         assert body["arena_rows"] == 100
         assert body["aa_models"] == 0
-        # Check that exception was called with "AA sync failed"
-        exception_calls = list(mock_logger.exception.call_args_list)
-        assert any("AA sync failed" in str(call) for call in exception_calls)
+        assert any("AA sync failed" in e for e in body["errors"])
+        mock_logger.exception.assert_called()
 
     def test_rebuilds_and_swaps_engine(self, client):
         mock_new_engine = MagicMock()

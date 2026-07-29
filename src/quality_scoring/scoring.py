@@ -63,7 +63,7 @@ def normalize_arena_category(
     rows: list[dict[str, Any]],
     category: str,
 ) -> dict[str, NormalizedScore]:
-    cat_rows = [r for r in rows if r.get("category", category) == category]
+    cat_rows = [r for r in rows if r.get("category") == category]
     if not cat_rows:
         return {}
 
