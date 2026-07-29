@@ -59,12 +59,12 @@ def main():
     parser = argparse.ArgumentParser(description="Convert exported summaries to GuideLLM format")
     parser.add_argument(
         "-i", "--input",
-        default="data/benchmarks/performance/benchmarks-exported-summaries.json",
+        default="src/planner/data/benchmarks/performance/benchmarks-exported-summaries.json",
         help="Input file path",
     )
     parser.add_argument(
         "-o", "--output",
-        default="data/benchmarks/performance/benchmarks_GuideLLM.json",
+        default="src/planner/data/benchmarks/performance/benchmarks_GuideLLM.json",
         help="Output file path",
     )
     args = parser.parse_args()
