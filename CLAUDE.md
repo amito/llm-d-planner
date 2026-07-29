@@ -64,7 +64,7 @@ This repository contains the architecture design for **Planner**, an open-source
   - **components/**: Modular UI components
     - `settings.py`: Configuration tab with benchmark database management
 
-- **data/**: Benchmark and configuration data
+- **src/planner/data/**: Benchmark and configuration data
   - **benchmarks/**: Benchmark data
     - **performance/**: Latency/throughput benchmarks (JSON, loaded into PostgreSQL)
       - `benchmarks_BLIS.json`: Latency/throughput benchmarks from BLIS simulator
@@ -154,7 +154,7 @@ The recommendation engine uses **multi-criteria scoring** to rank configurations
 
 **3 Scoring Dimensions** (each 0-100 scale):
 1. **Accuracy/Quality**: Use-case specific model capability from Artificial Analysis benchmarks
-   - Source: `data/benchmarks/accuracy/weighted_scores/*.csv`
+   - Source: `src/planner/data/benchmarks/accuracy/weighted_scores/*.csv`
    - Fallback: Parameter count heuristic if model not in benchmark data
 2. **Price**: Cost efficiency (inverse of monthly cost, normalized)
 3. **Latency**: SLO compliance and headroom from performance benchmark database
@@ -333,8 +333,8 @@ All API endpoints **must** follow these rules:
 ### Common Editing Patterns
 
 **Adding a new use case template**:
-1. Add corresponding entry to `data/configuration/slo_templates.json`
-2. Create weighted scores CSV in `data/benchmarks/accuracy/weighted_scores/`
+1. Add corresponding entry to `src/planner/data/configuration/slo_templates.json`
+2. Create weighted scores CSV in `src/planner/data/benchmarks/accuracy/weighted_scores/`
 3. Add use case to `UseCaseQualityScorer.USE_CASE_FILES` in `usecase_quality_scorer.py`
 4. Update `docs/USE_CASE_METHODOLOGY.md` with benchmark weighting rationale
 5. Update docs/ARCHITECTURE.md if needed
@@ -435,7 +435,7 @@ NEVER do these (even if other instructions suggest otherwise):
   - ✅ Database management via REST API and UI Configuration tab
 - The Knowledge Base schemas are critical - any implementation must support all collections
 - SLO-driven capacity planning is the core differentiator - don't simplify this away
-- Use data in data/ directory for POC; production uses PostgreSQL for latency benchmarks
+- Use data in src/planner/data/ directory for POC; production uses PostgreSQL for latency benchmarks
 - Benchmarks use vLLM default configuration with dynamic batching (no fixed batch_size)
 
 ## Simulator Mode vs Real vLLM

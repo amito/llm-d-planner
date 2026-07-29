@@ -40,7 +40,7 @@ def load_benchmarks_json(json_file=None):
 
     Args:
         json_file: Optional path to JSON file relative to project root.
-                  Defaults to "data/benchmarks/performance/benchmarks_BLIS.json" if not specified.
+                  Defaults to "src/planner/data/benchmarks/performance/benchmarks_BLIS.json" if not specified.
 
     Returns:
         Full parsed JSON dict (with metadata and benchmarks).
