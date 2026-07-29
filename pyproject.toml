@@ -48,7 +48,7 @@ dev = [
     "httpx==0.28.1",
     "ruff==0.15.22",
     "mypy>=2.1.0",
-    "types-PyYAML>=6.0.12.20260518",
+    "types-PyYAML>=6.0.12.20260724",
     "types-requests>=2.33.0.20260518",
 ]
 
