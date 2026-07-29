@@ -24,10 +24,13 @@ testing, or future UI features that may need to display available options.
 import logging
 import os
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
 
-from planner.knowledge_base.loader import insert_benchmarks
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +141,15 @@ class BenchmarkRepository:
 
         Args:
             database_url: PostgreSQL connection string (defaults to DATABASE_URL env var)
+
+        Raises:
+            ImportError: If psycopg2 is not installed.
         """
+        if not PSYCOPG2_AVAILABLE:
+            raise ImportError(
+                "psycopg2 is required for PostgreSQL benchmark storage. "
+                "Install it with: pip install planner[postgres]"
+            )
         self.database_url = database_url or os.getenv(
             "DATABASE_URL", "postgresql://postgres:planner@localhost:5432/planner"
         )
@@ -181,6 +192,8 @@ class BenchmarkRepository:
         for d in benchmark_dicts:
             d.setdefault("prompt_tokens", d.get("mean_input_tokens"))
             d.setdefault("output_tokens", d.get("mean_output_tokens"))
+
+        from planner.knowledge_base.loader import insert_benchmarks
 
         conn = self._get_connection()
         try:

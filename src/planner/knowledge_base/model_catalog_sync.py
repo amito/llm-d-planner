@@ -12,8 +12,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from psycopg2.extensions import connection as pg_connection
-from psycopg2.extras import execute_batch
+try:
+    from psycopg2.extensions import connection as pg_connection
+    from psycopg2.extras import execute_batch
+except ImportError:
+    pg_connection = None  # type: ignore[assignment,misc]
+    execute_batch = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from planner.knowledge_base.model_catalog import ModelCatalog, ModelInfo

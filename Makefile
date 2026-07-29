@@ -57,8 +57,8 @@ SIMULATOR_FULL_IMAGE := $(REGISTRY)/$(REGISTRY_ORG)/$(SIMULATOR_IMAGE):$(SIMULAT
 OLLAMA_MODEL ?= qwen2.5:7b
 KIND_CLUSTER_NAME ?= planner
 
-PGDUMP_INPUT ?= data/benchmarks/performance/integ-oct-29.sql
-PGDUMP_OUTPUT ?= data/benchmarks/performance/benchmarks_GuideLLM.json
+PGDUMP_INPUT ?= src/planner/data/benchmarks/performance/integ-oct-29.sql
+PGDUMP_OUTPUT ?= src/planner/data/benchmarks/performance/benchmarks_GuideLLM.json
 
 SRC_DIR := src
 UI_DIR := ui
@@ -130,7 +130,7 @@ check-prereqs: ## Check if required tools are installed
 
 setup-backend: ## Set up Python environment (all dependencies including optional providers)
 	@printf "$(BLUE)Setting up Python environment...$(NC)\n"
-	uv sync --extra ui --extra dev --extra vertex --extra openai
+	uv sync --extra postgres --extra server --extra gpu-recommender --extra llm --extra ui --extra dev --extra vertex --extra openai
 	@printf "$(GREEN)✓ Python environment ready (includes all dependencies)$(NC)\n"
 
 setup-vertex: ## Install Vertex AI dependencies (only needed for LLM_PROVIDER=vertex)
@@ -462,27 +462,27 @@ db-remove: db-stop ## Stop and remove PostgreSQL container
 
 db-load-blis: db-start ## Load BLIS benchmark data (appends)
 	@printf "$(BLUE)Loading BLIS benchmark data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json
+	@uv run python scripts/load_benchmarks.py src/planner/data/benchmarks/performance/benchmarks_BLIS.json
 	@printf "$(GREEN)✓ BLIS data loaded$(NC)\n"
 
 db-load-estimated: db-start ## Load estimated performance benchmarks (appends)
 	@printf "$(BLUE)Loading estimated performance data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_estimated_performance.json
+	@uv run python scripts/load_benchmarks.py src/planner/data/benchmarks/performance/benchmarks_estimated_performance.json
 	@printf "$(GREEN)✓ Estimated data loaded$(NC)\n"
 
 db-load-interpolated: db-start ## Load interpolated benchmark data (appends)
 	@printf "$(BLUE)Loading interpolated benchmark data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_interpolated_v2.json
+	@uv run python scripts/load_benchmarks.py src/planner/data/benchmarks/performance/benchmarks_interpolated_v2.json
 	@printf "$(GREEN)✓ Interpolated data loaded$(NC)\n"
 
 db-load-guidellm: db-start ## Load GuideLLM benchmark data (appends)
 	@printf "$(BLUE)Loading GuideLLM benchmark data...$(NC)\n"
-	@if [ ! -f data/benchmarks/performance/benchmarks_GuideLLM.json ]; then \
-		printf "$(RED)✗ data/benchmarks/performance/benchmarks_GuideLLM.json not found$(NC)\n"; \
+	@if [ ! -f src/planner/data/benchmarks/performance/benchmarks_GuideLLM.json ]; then \
+		printf "$(RED)✗ src/planner/data/benchmarks/performance/benchmarks_GuideLLM.json not found$(NC)\n"; \
 		printf "$(YELLOW)Run 'make db-convert-pgdump' first to create it from a pg_dump file$(NC)\n"; \
 		exit 1; \
 	fi
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_GuideLLM.json
+	@uv run python scripts/load_benchmarks.py src/planner/data/benchmarks/performance/benchmarks_GuideLLM.json
 	@printf "$(GREEN)✓ GuideLLM data loaded$(NC)\n"
 
 db-convert-pgdump: db-start ## Convert PostgreSQL dump to JSON format
