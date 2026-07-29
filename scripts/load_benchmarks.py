@@ -50,6 +50,8 @@ def load_benchmarks_json(json_file=None):
     else:
         json_path = (
             Path(__file__).parent.parent
+            / "src"
+            / "planner"
             / "data"
             / "benchmarks"
             / "performance"
