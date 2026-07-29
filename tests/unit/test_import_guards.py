@@ -165,3 +165,35 @@ class TestCLIGuard:
             assert exc_info.value.code == 1
         finally:
             cli._LLM_OPTIMIZER_AVAILABLE = original
+
+
+@pytest.mark.unit
+class TestPyprojectDependencyGroups:
+    """Verify pyproject.toml dependency groups are complete."""
+
+    def test_httpx_in_server_group(self):
+        """httpx must be in the server optional group (used by model_catalog_client.py)."""
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        with open(pyproject, "rb") as f:
+            data = tomllib.load(f)
+
+        server_deps = data["project"]["optional-dependencies"]["server"]
+        assert any("httpx" in dep for dep in server_deps), (
+            "httpx should be in [project.optional-dependencies.server]"
+        )
+
+    def test_all_extra_exists(self):
+        """A convenience 'all' extra must exist."""
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        with open(pyproject, "rb") as f:
+            data = tomllib.load(f)
+
+        assert "all" in data["project"]["optional-dependencies"], (
+            "'all' extra should exist in [project.optional-dependencies]"
+        )

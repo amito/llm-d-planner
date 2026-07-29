@@ -20,6 +20,7 @@ server = [
     "fastapi>=0.139.2",
     "uvicorn[standard]>=0.51.0",
     "python-multipart>=0.0.32",
+    "httpx>=0.28.1",
 ]
 gpu-recommender = [
     "huggingface_hub>=1.24.0",
@@ -43,6 +44,14 @@ vertex = [
 ]
 openai = [
     "openai>=2.46.0",
+]
+all = [
+    "planner[server]",
+    "planner[postgres]",
+    "planner[gpu-recommender]",
+    "planner[llm]",
+    "planner[cluster]",
+    "planner[ui]",
 ]
 dev = [
     "pytest>=9.1.1",
