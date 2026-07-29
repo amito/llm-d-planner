@@ -40,7 +40,7 @@ class TestPlannerRecommend:
 
         planner = Planner()
         with pytest.raises(ValidationError):
-            planner.recommend(use_case="bogus")
+            planner.recommend(use_case="bogus")  # type: ignore[arg-type]
 
     @pytest.mark.skipif(not _BLIS_PATH.exists(), reason="BLIS benchmark file not found")
     def test_custom_benchmark_repo_injection(self):
@@ -65,3 +65,39 @@ class TestPlannerRecommend:
         )
 
         assert result.total_configs_evaluated > 0
+
+
+@pytest.mark.unit
+class TestPlannerGenerateConfig:
+    @pytest.mark.skipif(not _BLIS_PATH.exists(), reason="BLIS benchmark file not found")
+    def test_generate_config_produces_yaml(self, tmp_path):
+        from planner.planner import Planner
+
+        planner = Planner()
+        result = planner.recommend(use_case="chatbot_conversational")
+
+        # Pick the first recommendation from any non-empty list
+        rec = None
+        for lst in [result.best_accuracy, result.balanced, result.lowest_cost]:
+            if lst:
+                rec = lst[0]
+                break
+        assert rec is not None, "No recommendations to generate config from"
+
+        contents = planner.generate_config(
+            recommendation=rec,
+            output_dir=str(tmp_path),
+        )
+
+        assert "inferenceservice" in contents
+        assert "apiVersion" in contents["inferenceservice"]
+
+
+@pytest.mark.unit
+class TestPlannerPackageExports:
+    def test_planner_import_from_package(self):
+        from planner import DeploymentRecommendation, Planner, RankedRecommendationsResponse
+
+        assert Planner is not None
+        assert RankedRecommendationsResponse is not None
+        assert DeploymentRecommendation is not None

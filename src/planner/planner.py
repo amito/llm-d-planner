@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Literal
 
 from planner.data._resolver import data_path
 from planner.knowledge_base.local_benchmarks import LocalBenchmarkRepository
@@ -26,6 +27,7 @@ from planner.recommendation.config_finder import ConfigFinder
 from planner.recommendation.quality.usecase_scorer import UseCaseQualityScorer
 from planner.shared.schemas import (
     DeploymentIntent,
+    DeploymentRecommendation,
     DeploymentSpecification,
     RankedRecommendationsResponse,
 )
@@ -33,8 +35,10 @@ from planner.specification.traffic_profile import TrafficProfileGenerator
 
 logger = logging.getLogger(__name__)
 
+_ExperienceClass = Literal["instant", "conversational", "interactive", "deferred", "batch"]
+
 # use_case -> experience_class mapping (mirrors workflow.py:363-384)
-_EXPERIENCE_CLASS: dict[str, str] = {
+_EXPERIENCE_CLASS: dict[str, _ExperienceClass] = {
     "code_completion": "instant",
     "chatbot_conversational": "conversational",
     "code_generation_detailed": "conversational",
@@ -65,9 +69,7 @@ class Planner:
         if benchmark_repo is not None:
             repo = benchmark_repo
         elif benchmark_paths is not None:
-            repo = LocalBenchmarkRepository.from_files(
-                [Path(p) for p in benchmark_paths]
-            )
+            repo = LocalBenchmarkRepository.from_files([Path(p) for p in benchmark_paths])
         else:
             repo = LocalBenchmarkRepository.from_files([data_path(_DEFAULT_BLIS)])
 
@@ -75,7 +77,7 @@ class Planner:
         quality_scorer = UseCaseQualityScorer()
 
         self._config_finder = ConfigFinder(
-            benchmark_repo=repo,
+            benchmark_repo=repo,  # type: ignore[arg-type]  # duck-type compatible
             catalog=catalog,
             quality_scorer=quality_scorer,
         )
@@ -83,12 +85,22 @@ class Planner:
 
     def recommend(
         self,
-        use_case: str,
+        use_case: Literal[
+            "chatbot_conversational",
+            "code_completion",
+            "code_generation_detailed",
+            "translation",
+            "content_generation",
+            "summarization_short",
+            "document_analysis_rag",
+            "long_document_summarization",
+            "research_legal_analysis",
+        ],
         model: str | None = None,
         user_count: int = 100,
-        accuracy_priority: str = "medium",
-        cost_priority: str = "medium",
-        latency_priority: str = "medium",
+        accuracy_priority: Literal["low", "medium", "high"] = "medium",
+        cost_priority: Literal["low", "medium", "high"] = "medium",
+        latency_priority: Literal["low", "medium", "high"] = "medium",
         gpu_types: list[str] | None = None,
         include_near_miss: bool = True,
         min_accuracy: int | None = None,
@@ -113,7 +125,7 @@ class Planner:
             Ranked recommendations with 4 views: best_accuracy,
             lowest_cost, lowest_latency, balanced.
         """
-        experience_class = _EXPERIENCE_CLASS.get(use_case, "conversational")
+        experience_class: _ExperienceClass = _EXPERIENCE_CLASS.get(use_case, "conversational")
 
         intent = DeploymentIntent(
             use_case=use_case,
@@ -179,3 +191,28 @@ class Planner:
             configs_after_filters=configs_after_filters,
             warnings=estimation_warnings,
         )
+
+    def generate_config(
+        self,
+        recommendation: DeploymentRecommendation,
+        output_dir: str | None = None,
+        namespace: str = "default",
+    ) -> dict[str, str]:
+        """Generate KServe/vLLM deployment YAML from a recommendation.
+
+        Args:
+            recommendation: A single ``DeploymentRecommendation`` from
+                the ``recommend()`` response lists.
+            output_dir: Directory to write YAML files. Uses a temp
+                directory if not specified.
+            namespace: Kubernetes namespace for the deployment.
+
+        Returns:
+            Dict mapping config type (``"inferenceservice"``,
+            ``"autoscaling"``, ``"servicemonitor"``) to rendered YAML.
+        """
+        from planner.configuration.generator import DeploymentGenerator
+
+        generator = DeploymentGenerator(output_dir=output_dir)
+        result = generator.generate_all(recommendation, namespace=namespace)
+        return result["contents"]  # type: ignore[no-any-return]
