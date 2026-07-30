@@ -58,7 +58,7 @@ def repo():
 class TestSaveBenchmarksRollback:
     """A6: save_benchmarks() rolls back on insert failure."""
 
-    @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
+    @patch("planner.knowledge_base.loader.insert_benchmarks")
     def test_rollback_called_on_insert_failure(self, mock_insert, repo):
         """Connection should be rolled back when insert_benchmarks raises."""
         mock_conn = MagicMock()
@@ -71,7 +71,7 @@ class TestSaveBenchmarksRollback:
             mock_conn.rollback.assert_called_once()
             mock_conn.close.assert_called_once()
 
-    @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
+    @patch("planner.knowledge_base.loader.insert_benchmarks")
     def test_no_rollback_on_success(self, mock_insert, repo):
         """Connection should NOT be rolled back on successful insert."""
         mock_conn = MagicMock()
@@ -81,7 +81,7 @@ class TestSaveBenchmarksRollback:
             mock_conn.rollback.assert_not_called()
             mock_conn.close.assert_called_once()
 
-    @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
+    @patch("planner.knowledge_base.loader.insert_benchmarks")
     def test_connection_closed_even_on_failure(self, mock_insert, repo):
         """Connection must always be closed, even after rollback."""
         mock_conn = MagicMock()
@@ -98,7 +98,7 @@ class TestSaveBenchmarksRollback:
 class TestSaveBenchmarksValidationBeforeConnection:
     """A5: Data preparation happens before DB connection is opened."""
 
-    @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
+    @patch("planner.knowledge_base.loader.insert_benchmarks")
     def test_to_dict_failure_does_not_open_connection(self, mock_insert, repo):
         """If to_dict() raises, _get_connection() should never be called."""
         bad_bench = MagicMock(spec=BenchmarkData)
@@ -111,7 +111,7 @@ class TestSaveBenchmarksValidationBeforeConnection:
             mock_get_conn.assert_not_called()
             mock_insert.assert_not_called()
 
-    @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
+    @patch("planner.knowledge_base.loader.insert_benchmarks")
     def test_data_prepared_before_connection(self, mock_insert, repo):
         """Verify insert receives prepared dicts with prompt_tokens/output_tokens filled."""
         bench = _make_benchmark(prompt_tokens=1024, output_tokens=512)
@@ -130,7 +130,7 @@ class TestSaveBenchmarksValidationBeforeConnection:
         assert args[1]["source"] == "test-src"
         assert args[1]["confidence_level"] == "benchmarked"
 
-    @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
+    @patch("planner.knowledge_base.loader.insert_benchmarks")
     def test_setdefault_fills_missing_prompt_output_tokens(self, mock_insert, repo):
         """setdefault should fill prompt_tokens/output_tokens from mean_input/output_tokens."""
         bench = _make_benchmark()
