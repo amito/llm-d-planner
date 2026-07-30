@@ -27,7 +27,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     # Quality scoring (dual-source: Arena + AA)
     "httpx>=0.27",
-    "datasets>=3.0",
+    "datasets>=5.0.1",
 ]
 
 [project.optional-dependencies]
