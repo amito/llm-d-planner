@@ -6,8 +6,8 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+      all-dependencies:
+        update-types: ["major", "minor", "patch"]
 
   # Python dependencies (UI Dockerfile)
   - package-ecosystem: "pip"
@@ -15,8 +15,8 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+      all-dependencies:
+        update-types: ["major", "minor", "patch"]
 
   # Python dependencies (simulator Dockerfile)
   - package-ecosystem: "pip"
@@ -24,27 +24,39 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+      all-dependencies:
+        update-types: ["major", "minor", "patch"]
 
   # Docker base images
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      docker-images:
+        update-types: ["major", "minor", "patch"]
 
   - package-ecosystem: "docker"
     directory: "/ui"
     schedule:
       interval: "weekly"
+    groups:
+      docker-images:
+        update-types: ["major", "minor", "patch"]
 
   - package-ecosystem: "docker"
     directory: "/simulator"
     schedule:
       interval: "weekly"
+    groups:
+      docker-images:
+        update-types: ["major", "minor", "patch"]
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      actions:
+        update-types: ["major", "minor", "patch"]
