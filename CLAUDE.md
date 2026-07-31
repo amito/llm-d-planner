@@ -73,7 +73,7 @@ This repository contains the architecture design for **Planner**, an open-source
 
 - **data/**: Benchmark and configuration data
   - **benchmarks/**: Benchmark data
-    - **performance/**: Latency/throughput benchmarks (JSON, loaded into PostgreSQL)
+    - **performance/**: Latency/throughput benchmarks (JSON, loaded into database)
       - `benchmarks_BLIS.json`: Latency/throughput benchmarks from BLIS simulator
   - **quality/**: Model quality data (checked-in snapshots, committed to git)
     - `arena_models.json`: Arena leaderboard data (human preference rankings)
@@ -149,14 +149,14 @@ Planner is structured as a layered architecture:
 **Infrastructure** (Not numbered as core engines):
 - **API Gateway** (FastAPI) - Coordinates workflow between UI and engines
 - **Knowledge Base** (Data Layer) - Hybrid storage:
-  - PostgreSQL: Benchmarks, deployment outcomes
+  - Database: Benchmarks, deployment outcomes
   - JSON files: SLO templates, model catalog, hardware profiles
 
 **Development Tools:**
 - **vLLM Simulator** - GPU-free development and testing
 
 ### Critical Data Collections (Knowledge Base)
-- **Model Benchmarks** (PostgreSQL): TTFT/ITL/E2E/throughput benchmarks for (model, GPU, tensor_parallel) combinations (source: BLIS simulator)
+- **Model Benchmarks** (Database): TTFT/ITL/E2E/throughput benchmarks for (model, GPU, tensor_parallel) combinations (source: BLIS simulator)
 - **Use Case SLO Templates** (JSON): 9 use cases mapped to 4 GuideLLM traffic profiles with experience-driven SLO targets
 - **Model Catalog** (JSON): 47 curated models with task/domain metadata
 - **Model Quality Scores** (JSON): Dual-source quality data from Arena (human preferences) and Artificial Analysis (automated benchmarks)
@@ -165,7 +165,7 @@ Planner is structured as a layered architecture:
   - Normalized to percentile ranks for compositing
 - **Quality Weights** (JSON): Per-use-case category weights for quality scoring (e.g., code_generation: 80% coding, 10% overall, 10% math)
 - **Use Case Configs** (JSON): Scoring priority weights, SLO targets, and workload profiles per use case
-- **Deployment Outcomes** (PostgreSQL, future): Actual performance data for feedback loop
+- **Deployment Outcomes** (Database, future): Actual performance data for feedback loop
 
 ### Solution Ranking System
 
@@ -199,7 +199,7 @@ The recommendation engine uses **multi-criteria scoring** to rank configurations
 
 ## Development Environment
 
-**Requirements**: Python 3.11+ (3.13 recommended on macOS), uv, Docker or Podman, kubectl, kind. Ollama required when `LLM_PROVIDER=ollama` (default). For `vertex` or `openai` providers, see docs/DEPLOYMENT_GUIDE.md.
+**Requirements**: Python 3.11+ (3.13 recommended on macOS), uv, kubectl, kind. Docker or Podman required for container builds and KIND. Ollama required when `LLM_PROVIDER=ollama` (default). For `vertex` or `openai` providers, see docs/DEPLOYMENT_GUIDE.md.
 
 This project uses **uv** (by Astral) for Python package management. **Do not use `pip` or `pip install`.**
 
@@ -229,14 +229,13 @@ make stop-all           # Stop everything
 make health             # Check all service health
 ```
 
-Service URLs: UI `http://localhost:8501`, Backend `http://localhost:8000` (Swagger at `/docs`), Ollama `http://localhost:11434`, DB `postgresql://postgres:planner@localhost:5432/planner`
+Service URLs: UI `http://localhost:8501`, Backend `http://localhost:8000` (Swagger at `/docs`), Ollama `http://localhost:11434`, DB `data/planner.db`
 
 ### Testing
 
 ```bash
-make test-unit                    # Unit tests only (no DB or Ollama needed)
-make test-db                      # Database tests (requires PostgreSQL with data)
-make test-integration             # Integration tests (requires Ollama + DB)
+make test-unit                    # Unit tests only (no Ollama needed)
+make test-integration             # Integration tests (requires Ollama)
 make test                         # All tests
 
 # Run a single test file or test function:
@@ -244,7 +243,7 @@ cd src && uv run pytest ../tests/path/to/test_file.py -v
 cd src && uv run pytest ../tests/path/to/test_file.py::test_function_name -v
 ```
 
-Test markers: `@pytest.mark.unit`, `@pytest.mark.database`, `@pytest.mark.integration`. Tests run from the `src/` directory (`cd src && uv run pytest ../tests/`).
+Test markers: `@pytest.mark.unit`, `@pytest.mark.integration`. Tests run from the `src/` directory (`cd src && uv run pytest ../tests/`).
 
 ### Code Quality (also run in CI)
 
@@ -261,12 +260,11 @@ CI runs on PRs to `main`: ruff check + format check on `src/` and `tests/`, mypy
 ### Database Management
 
 ```bash
-make db-start           # Start PostgreSQL container (auto-creates schema)
-make db-stop            # Stop PostgreSQL
-make db-reset           # Remove and reinitialize
+make db-start           # Initialize database (creates file and applies schema)
+make db-reset           # Clear all benchmark data (safe while backend is running)
 make db-load-blis       # Load BLIS benchmark data
 make db-load-estimated  # Load estimated performance data
-make db-shell           # Open psql shell
+make db-shell           # Open sqlite3 shell
 ```
 
 ### Quality Data Management
@@ -384,7 +382,7 @@ All API endpoints **must** follow these rules:
 **Adding a new SLO metric**:
 1. Update DeploymentIntent schema in Intent & Specification Engine (docs/ARCHITECTURE.md)
 2. Update MODEL_BENCHMARKS schema in Knowledge Base (docs/ARCHITECTURE.md)
-3. Update PostgreSQL schema in scripts/schema.sql
+3. Update database schema in scripts/schema.sql
 4. Update data loader script if needed
 4. Update Inference Observability section
 5. Update dashboard example if applicable
@@ -480,7 +478,6 @@ NEVER do these (even if other instructions suggest otherwise):
   - ✅ Quality data management via API and make quality-sync
 - The Knowledge Base schemas are critical - any implementation must support all collections
 - SLO-driven capacity planning is the core differentiator - don't simplify this away
-- Use data in data/ directory for POC; production uses PostgreSQL for latency benchmarks
 - Benchmarks use vLLM default configuration with dynamic batching (no fixed batch_size)
 
 ## Simulator Mode vs Real vLLM

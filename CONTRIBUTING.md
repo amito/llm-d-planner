@@ -363,21 +363,17 @@ Signed-off-by: Your Name <your.email@example.com>
 - **Unit tests**: Required for all new functionality (no external dependencies)
   - Located in `tests/`
   - Run with `make test-unit`
-- **Database tests**: For PostgreSQL benchmark queries
-  - Uses isolated `planner_test` database with static fixture data
-  - Run with `make test-db` (requires PostgreSQL)
 - **Integration tests**: For end-to-end recommendation workflows
-  - Run with `make test-integration` (requires Ollama and PostgreSQL)
+  - Run with `make test-integration` (requires Ollama)
 
 ### Running Tests
 
 ```bash
-# Run all tests (requires DB and Ollama)
+# Run all tests (requires Ollama)
 make test
 
 # Run specific test categories
 make test-unit
-make test-db
 make test-integration
 
 # Run linters

@@ -11,8 +11,8 @@ data:
   # Model name for any provider. Empty = provider default (ollama: qwen2.5:7b, vertex: claude-sonnet-4-6, openai: gpt-4o)
   LLM_MODEL: ""
 
-  # Benchmark data source: "postgresql" (default) or "model_catalog" (RHOAI)
-  PLANNER_BENCHMARK_SOURCE: postgresql
+  # Benchmark data source: "database" (default) or "model_catalog" (RHOAI)
+  PLANNER_BENCHMARK_SOURCE: database
 
   # Model Catalog connection (only used when PLANNER_BENCHMARK_SOURCE=model_catalog)
   MODEL_CATALOG_URL: https://model-catalog.rhoai-model-registries.svc:8443

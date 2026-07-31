@@ -10,7 +10,7 @@
 
 ## 1. Problem Statement
 
-The Planner recommendation pipeline currently relies exclusively on performance benchmarks stored in PostgreSQL. The benchmark database covers a limited matrix of (model, GPU, traffic profile) combinations. When a user requests a model or GPU that lacks benchmark data, the system returns zero results.
+The Planner recommendation pipeline currently relies exclusively on performance benchmarks stored in the database. The benchmark database covers a limited matrix of (model, GPU, traffic profile) combinations. When a user requests a model or GPU that lacks benchmark data, the system returns zero results.
 
 Two existing in-process components can fill this gap:
 
@@ -58,7 +58,7 @@ User Input
   --> TrafficProfile + SLOTargets
   --> ConfigFinder.plan_all_capacities()
         [1] normalize_gpu_types()
-        [2] find_configurations_meeting_slo() --> PostgreSQL
+        [2] find_configurations_meeting_slo() --> Database
         [3] If no results AND GPU filter was from cluster detection:
             retry without GPU filter
         [4] If still no results: return []          <-- dead end
@@ -76,7 +76,7 @@ User Input
   --> TrafficProfile + SLOTargets
   --> ConfigFinder.plan_all_capacities()
         [1] normalize_gpu_types()
-        [2] find_configurations_meeting_slo() --> PostgreSQL
+        [2] find_configurations_meeting_slo() --> Database
         [3] If no results AND GPU filter was from cluster detection:
             retry without GPU filter
         [4] NEW: _generate_estimated_configs()                     <-- NEW

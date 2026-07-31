@@ -152,12 +152,10 @@ Source YAML files are never modified — all changes happen in the temporary ren
 
 | Component | Manifest | Description |
 |-----------|----------|-------------|
-| PostgreSQL | `postgres.yaml` | Benchmark database |
 | Backend | `backend.yaml` | FastAPI API server |
 | UI | `ui.yaml` | Streamlit web interface |
 | Ollama | `ollama.yaml` | Local LLM server (only when `LLM_PROVIDER=ollama`) |
 | Route | `route.yaml` | OpenShift Route for external access |
-| DB Init Job | `db-init-job.yaml` | Schema initialization (only when `DB_INIT=true`) |
 
 ## Loading Benchmark Data
 

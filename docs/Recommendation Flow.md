@@ -13,7 +13,7 @@ Intent Extraction (LLM)
     ↓
 Traffic Profile + SLO Targets (from templates)
     ↓
-Query PostgreSQL for SLO-compliant configurations
+Query database for SLO-compliant configurations
     ↓
 Score each configuration (accuracy, price, latency)
     ↓
@@ -98,11 +98,11 @@ slo_targets = traffic_generator.generate_slo_targets(intent)
 
 ---
 
-### Step 3: Benchmark Query (PostgreSQL)
+### Step 3: Benchmark Query (Database)
 
 **File**: [src/planner/knowledge_base/benchmarks.py](../src/planner/knowledge_base/benchmarks.py)
 
-The `BenchmarkRepository` queries PostgreSQL for all (model, GPU, tensor_parallel) configurations that meet SLO targets for the traffic profile.
+The `BenchmarkRepository` queries the database for all (model, GPU, tensor_parallel) configurations that meet SLO targets for the traffic profile.
 
 **Input**: Traffic profile and SLO targets
 
@@ -114,7 +114,7 @@ The `BenchmarkRepository` queries PostgreSQL for all (model, GPU, tensor_paralle
 - Uses window functions to select highest QPS per configuration
 - Returns one benchmark per unique (model, hardware, hardware_count) combination
 
-**Data Source**: `exported_summaries` table in PostgreSQL (loaded from [data/benchmarks/performance/benchmarks_BLIS.json](../data/benchmarks/performance/benchmarks_BLIS.json))
+**Data Source**: `exported_summaries` table in the database (loaded from [data/benchmarks/performance/benchmarks_BLIS.json](../data/benchmarks/performance/benchmarks_BLIS.json))
 
 **Near-Miss Tolerance**: When `include_near_miss=True`, SLO thresholds are relaxed by 20% to include configurations that nearly meet targets.
 
@@ -284,7 +284,7 @@ The `RecommendationWorkflow` orchestrates all steps and returns the appropriate 
 |------|-------------|---------|
 | [data/configuration/slo_templates.json](../data/configuration/slo_templates.json) | 9 use case templates with SLO targets | TrafficProfileGenerator |
 | [data/configuration/model_catalog.json](../data/configuration/model_catalog.json) | 47 curated models with metadata | ModelCatalog, ModelEvaluator |
-| [data/benchmarks/performance/benchmarks_BLIS.json](../data/benchmarks/performance/benchmarks_BLIS.json) | Latency benchmarks (loaded to PostgreSQL) | BenchmarkRepository |
+| [data/benchmarks/performance/benchmarks_BLIS.json](../data/benchmarks/performance/benchmarks_BLIS.json) | Latency benchmarks (loaded to database) | BenchmarkRepository |
 | [data/benchmarks/accuracy/weighted_scores/*.csv](../data/benchmarks/accuracy/weighted_scores/) | 9 use-case quality score files | UseCaseQualityScorer |
 
 ---
@@ -296,7 +296,7 @@ The `RecommendationWorkflow` orchestrates all steps and returns the appropriate 
 | `RecommendationWorkflow` | orchestration/workflow.py | Orchestrate end-to-end flow |
 | `IntentExtractor` | intent_extraction/extractor.py | Parse user message to intent |
 | `TrafficProfileGenerator` | specification/traffic_profile.py | Generate traffic profile and SLO targets |
-| `BenchmarkRepository` | knowledge_base/benchmarks.py | Query PostgreSQL for benchmarks |
+| `BenchmarkRepository` | knowledge_base/benchmarks.py | Query database for benchmarks |
 | `ConfigFinder` | recommendation/config_finder.py | Find viable configs, calculate scores |
 | `Scorer` | recommendation/scorer.py | Calculate 3 scores |
 | `UseCaseQualityScorer` | recommendation/quality/usecase_scorer.py | Benchmark-based quality scores |
@@ -337,7 +337,7 @@ User Request
 └──────────┬──────────┘
            │
            ├──► BenchmarkRepository.find_configurations_meeting_slo()
-           │         └──► PostgreSQL (exported_summaries table)
+           │         └──► Database (exported_summaries table)
            │
            ├──► For each config:
            │       ├──► ModelCatalog.get_model() (lookup metadata)
