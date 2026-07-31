@@ -261,7 +261,7 @@ class TestSyncModelCatalog:
     """Tests for the sync_model_catalog ETL function."""
 
     def _build_mocks(self):
-        """Build mock client, connection, model_catalog, and quality_scorer."""
+        """Build mock client, benchmark_repo, and model_catalog."""
         client = MagicMock()
         client.list_models.return_value = [
             _model_dict(name="RedHatAI/granite-3.1-8b-instruct"),
@@ -271,76 +271,53 @@ class TestSyncModelCatalog:
             _accuracy_artifact(overall_average=72.5),
         ]
 
-        conn = MagicMock()
-        cursor = MagicMock()
-        conn.cursor.return_value = cursor
+        benchmark_repo = MagicMock()
+        benchmark_repo.replace_benchmarks.return_value = {}
 
         model_catalog = MagicMock()
         model_catalog.merge_external_models.return_value = 1
 
-        quality_scorer = MagicMock()
+        return client, benchmark_repo, model_catalog
 
-        return client, conn, cursor, model_catalog, quality_scorer
-
-    @patch("planner.knowledge_base.model_catalog_sync.execute_batch")
-    def test_full_flow(self, mock_execute_batch):
+    def test_full_flow(self):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
+        client, benchmark_repo, model_catalog = self._build_mocks()
 
-        result = sync_model_catalog(client, conn, model_catalog)
+        result = sync_model_catalog(client, benchmark_repo, model_catalog)
 
-        # DELETE was called for model_catalog source
-        delete_calls = [c for c in cursor.execute.call_args_list if "DELETE" in str(c)]
-        assert len(delete_calls) == 1
-        assert "model_catalog" in str(delete_calls[0])
-
-        # Benchmark rows were inserted via execute_batch
-        mock_execute_batch.assert_called_once()
-        inserted_rows = mock_execute_batch.call_args[0][2]
+        benchmark_repo.replace_benchmarks.assert_called_once()
+        call_args = benchmark_repo.replace_benchmarks.call_args
+        assert call_args[0][0] == "model_catalog"
+        inserted_rows = call_args[0][1]
         assert len(inserted_rows) == 1
         assert inserted_rows[0]["model_hf_repo"] == "RedHatAI/granite-3.1-8b-instruct"
 
-        # merge_external_models was called with ModelInfo list
         model_catalog.merge_external_models.assert_called_once()
         merged_models = model_catalog.merge_external_models.call_args[0][0]
         assert len(merged_models) == 1
         assert merged_models[0].model_id == "RedHatAI/granite-3.1-8b-instruct"
 
-        # SyncResult fields
         assert result.benchmarks_inserted == 1
         assert result.models_merged == 1
         assert result.errors == []
 
-    @patch("planner.knowledge_base.model_catalog_sync.execute_batch")
-    def test_transaction_committed(self, mock_execute_batch):
+    def test_db_error_recorded(self):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
-        sync_model_catalog(client, conn, model_catalog)
+        client, benchmark_repo, model_catalog = self._build_mocks()
+        benchmark_repo.replace_benchmarks.side_effect = Exception("DB error")
 
-        conn.commit.assert_called()
+        result = sync_model_catalog(client, benchmark_repo, model_catalog)
 
-    @patch("planner.knowledge_base.model_catalog_sync.execute_batch")
-    def test_db_error_rolls_back(self, mock_execute_batch):
-        from planner.knowledge_base.model_catalog_sync import sync_model_catalog
-
-        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
-        mock_execute_batch.side_effect = Exception("DB error")
-
-        result = sync_model_catalog(client, conn, model_catalog)
-
-        conn.rollback.assert_called_once()
         assert result.benchmarks_inserted == 0
         assert len(result.errors) > 0
 
-    @patch("planner.knowledge_base.model_catalog_sync.execute_batch")
-    def test_skips_malformed_artifacts(self, mock_execute_batch):
+    def test_skips_malformed_artifacts(self):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
+        client, benchmark_repo, model_catalog = self._build_mocks()
 
-        # Add a malformed artifact (missing model_id)
         bad_artifact = _perf_artifact()
         del bad_artifact["customProperties"]["model_id"]
 
@@ -350,21 +327,18 @@ class TestSyncModelCatalog:
             _accuracy_artifact(overall_average=72.5),
         ]
 
-        result = sync_model_catalog(client, conn, model_catalog)
-        # Only the valid artifact should be inserted
+        result = sync_model_catalog(client, benchmark_repo, model_catalog)
         assert result.benchmarks_inserted == 1
 
-    @patch("planner.knowledge_base.model_catalog_sync.execute_batch")
-    def test_client_list_failure(self, mock_execute_batch):
+    def test_client_list_failure(self):
         from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-        client, conn, cursor, model_catalog, _quality_scorer = self._build_mocks()
+        client, benchmark_repo, model_catalog = self._build_mocks()
         client.list_models.side_effect = Exception("Network error")
 
-        result = sync_model_catalog(client, conn, model_catalog)
+        result = sync_model_catalog(client, benchmark_repo, model_catalog)
 
         assert result.benchmarks_inserted == 0
         assert result.models_merged == 0
         assert len(result.errors) > 0
-        # No DB writes should happen
-        mock_execute_batch.assert_not_called()
+        benchmark_repo.replace_benchmarks.assert_not_called()

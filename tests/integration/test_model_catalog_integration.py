@@ -5,13 +5,11 @@ Run manually with:
     MODEL_CATALOG_URL=https://localhost:9443 \
     MODEL_CATALOG_TOKEN=$(oc whoami -t) \
     MODEL_CATALOG_VERIFY_SSL=false \
-    DATABASE_URL=postgresql://postgres:planner@localhost:5432/planner \
     uv run pytest tests/integration/test_model_catalog_integration.py -v
 """
 
 import os
 
-import psycopg2
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -37,29 +35,23 @@ def test_list_models(client):
     assert all("name" in m for m in models)
 
 
-def test_sync_writes_to_postgresql(client):
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        pytest.skip("DATABASE_URL required")
-
+def test_sync_writes_to_database(client):
+    from planner.knowledge_base.benchmarks import BenchmarkRepository
     from planner.knowledge_base.model_catalog import ModelCatalog
     from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-    conn = psycopg2.connect(db_url)
-    try:
-        catalog = ModelCatalog()
-        result = sync_model_catalog(
-            client=client,
-            conn=conn,
-            model_catalog=catalog,
-        )
-        assert len(result.errors) == 0
-        if result.benchmarks_inserted == 0:
-            pytest.skip("No performance artifacts returned from catalog")
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM exported_summaries WHERE source = 'model_catalog'")
-        db_count = cursor.fetchone()[0]
-        cursor.close()
-        assert db_count == result.benchmarks_inserted
-    finally:
-        conn.close()
+    repo = BenchmarkRepository()
+    catalog = ModelCatalog()
+    result = sync_model_catalog(
+        client=client,
+        benchmark_repo=repo,
+        model_catalog=catalog,
+    )
+    assert len(result.errors) == 0
+    if result.benchmarks_inserted == 0:
+        pytest.skip("No performance artifacts returned from catalog")
+    cursor = repo._conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM exported_summaries WHERE source = 'model_catalog'")
+    db_count = cursor.fetchone()[0]
+    cursor.close()
+    assert db_count == result.benchmarks_inserted

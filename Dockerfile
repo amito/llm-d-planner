@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     curl \
     gcc \
     git \
-    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
@@ -28,15 +27,15 @@ COPY src/quality_scoring ./src/quality_scoring
 # Copy data files (Knowledge Base)
 COPY data ./data
 
-# Copy scripts (schema init, benchmark loading — used by db-init Job)
+# Copy scripts (schema init, benchmark loading)
 COPY scripts ./scripts
 
 # Create non-root user and directories for generated files
 RUN groupadd --gid 1001 appuser && \
     useradd --uid 1001 --gid 0 --no-create-home appuser && \
-    mkdir -p /app/generated_configs /app/logs/prompts /app/.cache && \
+    mkdir -p /app/generated_configs /app/logs/prompts /app/.cache /app/db && \
     chown -R appuser:0 /app && \
-    chmod -R g=u /app/generated_configs /app/logs /app/.cache
+    chmod -R g=u /app/generated_configs /app/logs /app/.cache /app/db
 
 # Set environment variables
 ENV PYTHONPATH=/app/src

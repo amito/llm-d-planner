@@ -179,14 +179,14 @@ def main():
             "description": "Synthetic benchmark data for development and testing",
             "version": "3.0-realistic",
             "schema_changes": [
-                "Generated from real PostgreSQL benchmarks with ±15% random variation",
+                "Generated from real benchmarks with ±15% random variation",
                 "Hardware names match real data (H100, H200, NVIDIA-A100-40GB, etc.)",
                 "Performance values realistic and vary by model/GPU/tensor_parallel",
                 "E2E calculated as: TTFT + (ITL × output_tokens)",
                 "QPS varies realistically (not all 10.0)"
             ],
             "generation_method": "scripts/regenerate_from_psv.py",
-            "source": "PostgreSQL exported_summaries table (via data/real_benchmarks.psv)",
+            "source": "exported_summaries table (via data/real_benchmarks.psv)",
             "variation": "±15% random variation applied to TTFT and ITL",
             "random_seed": 42
         },
@@ -204,7 +204,7 @@ def main():
     print("=" * 70)
     print()
     print("Next steps:")
-    print("  scripts/load_benchmarks.py  # Load into PostgreSQL")
+    print("  scripts/load_benchmarks.py  # Load into database")
     print("  make backend-start           # Start backend")
     print("  make ui-start                # Start UI and test")
 

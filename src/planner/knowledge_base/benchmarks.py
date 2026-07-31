@@ -1,5 +1,5 @@
 """
-Data access layer for model benchmark data using PostgreSQL.
+Data access layer for model benchmark data.
 
 NOTE ON UNUSED METHODS:
 This repository contains several query methods that are currently unused in production
@@ -21,13 +21,17 @@ These methods are kept for potential Phase 2 API endpoints, debugging, interacti
 testing, or future UI features that may need to display available options.
 """
 
+import json
 import logging
-import os
+from pathlib import Path
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
-
-from planner.knowledge_base.loader import insert_benchmarks
+from planner.knowledge_base.db import create_connection
+from planner.knowledge_base.loader import (
+    extract_metadata,
+    get_db_stats,
+    insert_benchmarks,
+    reset_benchmarks,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,34 +134,112 @@ class BenchmarkData:
 
 
 class BenchmarkRepository:
-    """Repository for querying model benchmark data from PostgreSQL."""
+    """Repository for querying model benchmark data."""
 
-    def __init__(self, database_url: str | None = None):
+    def __init__(self, db_path: str | None = None):
         """
         Initialize benchmark repository.
 
         Args:
-            database_url: PostgreSQL connection string (defaults to DATABASE_URL env var)
+            db_path: Database file path (defaults to PLANNER_DB_PATH or data/planner.db)
         """
-        self.database_url = database_url or os.getenv(
-            "DATABASE_URL", "postgresql://postgres:planner@localhost:5432/planner"
-        )
-        self._test_connection()
+        self._conn = create_connection(db_path)
+        logger.info("Initialized benchmark repository")
 
-    def _test_connection(self):
-        """Test database connection on initialization."""
-        try:
-            conn = self._get_connection()
-            conn.close()
-            logger.info("Successfully connected to PostgreSQL benchmark database")
-        except Exception as e:
-            logger.error(f"Failed to connect to PostgreSQL: {e}")
-            logger.error(f"Database URL: {self.database_url}")
-            raise
+    @classmethod
+    def from_files(
+        cls, *json_paths: str | Path, db_path: str | None = None
+    ) -> "BenchmarkRepository":
+        """Create a repository pre-loaded with benchmark data from JSON files.
+
+        Args:
+            *json_paths: Paths to benchmark JSON files (each with a "benchmarks" array)
+            db_path: Database file path (defaults to PLANNER_DB_PATH or data/planner.db)
+
+        Returns:
+            A BenchmarkRepository with the data loaded.
+        """
+        repo = cls(db_path=db_path)
+        for path in json_paths:
+            with open(path) as f:
+                data = json.load(f)
+            benchmarks = data.get("benchmarks", [])
+            if not benchmarks:
+                continue
+            meta = extract_metadata(data)
+            source = meta["source"] or "local"
+            confidence_level = meta["confidence_level"] or "estimated"
+            insert_benchmarks(
+                repo._conn, benchmarks, source=source, confidence_level=confidence_level
+            )
+        return repo
 
     def _get_connection(self):
-        """Get a database connection."""
-        return psycopg2.connect(self.database_url, cursor_factory=RealDictCursor)
+        """Get the database connection."""
+        return self._conn
+
+    def get_stats(self) -> dict:
+        """Get current database statistics."""
+        return get_db_stats(self._conn)
+
+    def reset(self) -> None:
+        """Delete all benchmark data. Schema is preserved."""
+        reset_benchmarks(self._conn)
+
+    def load_benchmarks(
+        self,
+        benchmarks: list[dict],
+        source: str = "local",
+        confidence_level: str = "estimated",
+    ) -> dict:
+        """Insert benchmarks into the database (append mode).
+
+        Duplicates (same config_id) are silently skipped.
+
+        Args:
+            benchmarks: List of benchmark dicts
+            source: Data source identifier
+            confidence_level: Trust level for the data
+
+        Returns:
+            Dict with database stats after the operation.
+        """
+        return insert_benchmarks(
+            self._conn, benchmarks, source=source, confidence_level=confidence_level
+        )
+
+    def replace_benchmarks(
+        self,
+        source: str,
+        benchmarks: list[dict],
+        confidence_level: str = "benchmarked",
+    ) -> dict:
+        """Replace all benchmarks for a given source.
+
+        Deletes existing rows matching the source, then inserts the new
+        benchmarks. Used by Model Catalog sync to refresh data without
+        affecting benchmarks from other sources.
+
+        Args:
+            source: Source identifier (e.g. "model_catalog")
+            benchmarks: List of benchmark dicts to insert
+            confidence_level: Trust level for the new data
+
+        Returns:
+            Dict with database stats after the operation.
+        """
+        conn = self._conn
+        try:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM exported_summaries WHERE source = ?", (source,))
+            cursor.close()
+            stats = insert_benchmarks(
+                conn, benchmarks, source=source, confidence_level=confidence_level
+            )
+            return stats
+        except Exception:
+            conn.rollback()
+            raise
 
     def save_benchmarks(
         self,
@@ -190,8 +272,6 @@ class BenchmarkRepository:
         except Exception:
             conn.rollback()
             raise
-        finally:
-            conn.close()
 
     def get_benchmark(
         self,
@@ -222,28 +302,25 @@ class BenchmarkRepository:
         """
         query = """
             SELECT * FROM exported_summaries
-            WHERE model_hf_repo = %s
-              AND hardware = %s
-              AND hardware_count = %s
-              AND prompt_tokens = %s
-              AND output_tokens = %s
+            WHERE model_hf_repo = ?
+              AND hardware = ?
+              AND hardware_count = ?
+              AND prompt_tokens = ?
+              AND output_tokens = ?
             LIMIT 1
         """
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                query, (model_hf_repo, hardware, hardware_count, prompt_tokens, output_tokens)
-            )
-            row = cursor.fetchone()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(
+            query, (model_hf_repo, hardware, hardware_count, prompt_tokens, output_tokens)
+        )
+        row = cursor.fetchone()
+        cursor.close()
 
-            if row:
-                return BenchmarkData(dict(row))
-            return None
-        finally:
-            conn.close()
+        if row:
+            return BenchmarkData(dict(row))
+        return None
 
     def get_benchmarks_for_traffic_profile(
         self,
@@ -271,25 +348,22 @@ class BenchmarkRepository:
         """
         query = """
             SELECT * FROM exported_summaries
-            WHERE model_hf_repo = %s
-              AND hardware = %s
-              AND hardware_count = %s
-              AND prompt_tokens = %s
-              AND output_tokens = %s
+            WHERE model_hf_repo = ?
+              AND hardware = ?
+              AND hardware_count = ?
+              AND prompt_tokens = ?
+              AND output_tokens = ?
         """
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                query, (model_hf_repo, hardware, hardware_count, prompt_tokens, output_tokens)
-            )
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(
+            query, (model_hf_repo, hardware, hardware_count, prompt_tokens, output_tokens)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [BenchmarkData(dict(row)) for row in rows]
-        finally:
-            conn.close()
+        return [BenchmarkData(dict(row)) for row in rows]
 
     def get_benchmarks_for_model(self, model_hf_repo: str) -> list[BenchmarkData]:
         """
@@ -303,20 +377,17 @@ class BenchmarkRepository:
         """
         query = """
             SELECT * FROM exported_summaries
-            WHERE model_hf_repo = %s
+            WHERE model_hf_repo = ?
             ORDER BY hardware, hardware_count, prompt_tokens, output_tokens
         """
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query, (model_hf_repo,))
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query, (model_hf_repo,))
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [BenchmarkData(dict(row)) for row in rows]
-        finally:
-            conn.close()
+        return [BenchmarkData(dict(row)) for row in rows]
 
     def get_benchmarks_for_hardware(self, hardware: str) -> list[BenchmarkData]:
         """
@@ -330,20 +401,17 @@ class BenchmarkRepository:
         """
         query = """
             SELECT * FROM exported_summaries
-            WHERE hardware = %s
+            WHERE hardware = ?
             ORDER BY model_hf_repo, hardware_count, prompt_tokens, output_tokens
         """
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query, (hardware,))
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query, (hardware,))
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [BenchmarkData(dict(row)) for row in rows]
-        finally:
-            conn.close()
+        return [BenchmarkData(dict(row)) for row in rows]
 
     def find_configurations_meeting_slo(
         self,
@@ -380,21 +448,19 @@ class BenchmarkRepository:
         Returns:
             List of benchmarks meeting all criteria (one per system configuration)
         """
-        # Map percentile to column suffix
         valid_percentiles = {"mean", "p90", "p95", "p99"}
         if percentile not in valid_percentiles:
             logger.warning(f"Invalid percentile '{percentile}', defaulting to p95")
             percentile = "p95"
 
-        # Build column names based on percentile
         ttft_col = f"ttft_{percentile}"
         itl_col = f"itl_{percentile}"
         e2e_col = f"e2e_{percentile}"
 
-        # Build optional filter clauses
         gpu_filter = ""
         if gpu_types:
-            gpu_filter = "AND hardware = ANY(%s)"
+            placeholders = ", ".join("?" for _ in gpu_types)
+            gpu_filter = f"AND hardware IN ({placeholders})"
             logger.info(f"Filtering by GPU types: {gpu_types}")
 
         estimated_filter = ""
@@ -402,13 +468,10 @@ class BenchmarkRepository:
             estimated_filter = "AND confidence_level != 'estimated'"
 
         logger.info(
-            f"Querying benchmarks with percentile={percentile} (columns: {ttft_col}, {itl_col}, {e2e_col})"
+            f"Querying benchmarks with percentile={percentile} "
+            f"(columns: {ttft_col}, {itl_col}, {e2e_col})"
         )
 
-        # Use window function to rank benchmarks by requests_per_second within each
-        # system configuration, then select only the highest QPS that meets SLO.
-        # When multiple benchmarks exist at the same QPS, prefer the one with lowest E2E latency.
-        # NOTE: Using string formatting for column names is safe here since we validate percentile above
         query = f"""
             WITH ranked_configs AS (
                 SELECT *,
@@ -417,12 +480,12 @@ class BenchmarkRepository:
                            ORDER BY requests_per_second DESC, {e2e_col} ASC
                        ) as rn
                 FROM exported_summaries
-                WHERE prompt_tokens = %s
-                  AND output_tokens = %s
-                  AND {ttft_col} <= %s
-                  AND {itl_col} <= %s
-                  AND {e2e_col} <= %s
-                  AND requests_per_second >= %s
+                WHERE prompt_tokens = ?
+                  AND output_tokens = ?
+                  AND {ttft_col} <= ?
+                  AND {itl_col} <= ?
+                  AND {e2e_col} <= ?
+                  AND requests_per_second >= ?
                   {gpu_filter}
                   {estimated_filter}
             )
@@ -441,7 +504,6 @@ class BenchmarkRepository:
             ORDER BY model_hf_repo, hardware, hardware_count
         """
 
-        # Build query parameters
         params: list = [
             prompt_tokens,
             output_tokens,
@@ -451,19 +513,15 @@ class BenchmarkRepository:
             min_qps,
         ]
         if gpu_types:
-            params.append(gpu_types)
+            params.extend(gpu_types)
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        cursor.close()
 
-            results = [BenchmarkData(dict(row)) for row in rows]
-        finally:
-            conn.close()
-
+        results = [BenchmarkData(dict(row)) for row in rows]
         logger.info(f"Found {len(results)} benchmarks meeting SLO criteria")
         return results
 
@@ -472,30 +530,24 @@ class BenchmarkRepository:
         query = "SELECT DISTINCT model_hf_repo FROM exported_summaries ORDER BY model_hf_repo"
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [row["model_hf_repo"] for row in rows]
-        finally:
-            conn.close()
+        return [row["model_hf_repo"] for row in rows]
 
     def get_available_hardware_types(self) -> list[str]:
         """Get list of all available hardware types in the database."""
         query = "SELECT DISTINCT hardware FROM exported_summaries ORDER BY hardware"
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [row["hardware"] for row in rows]
-        finally:
-            conn.close()
+        return [row["hardware"] for row in rows]
 
     def get_traffic_profiles(self) -> list[tuple[int, int]]:
         """Get list of all available traffic profiles (prompt_tokens, output_tokens)."""
@@ -506,15 +558,12 @@ class BenchmarkRepository:
         """
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [(row["prompt_tokens"], row["output_tokens"]) for row in rows]
-        finally:
-            conn.close()
+        return [(row["prompt_tokens"], row["output_tokens"]) for row in rows]
 
     def get_all_benchmarks(self) -> list[BenchmarkData]:
         """
@@ -528,12 +577,9 @@ class BenchmarkRepository:
         """
 
         conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
+        cursor = conn.cursor()
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        cursor.close()
 
-            return [BenchmarkData(dict(row)) for row in rows]
-        finally:
-            conn.close()
+        return [BenchmarkData(dict(row)) for row in rows]

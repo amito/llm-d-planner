@@ -11,25 +11,14 @@ import json
 import logging
 import os
 
-import psycopg2
-from fastapi import APIRouter, File, Header, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Header, HTTPException, Request, UploadFile, status
 
-from planner.knowledge_base.loader import (
-    extract_metadata,
-    get_db_stats,
-    insert_benchmarks,
-    reset_benchmarks,
-)
+from planner.api.dependencies import get_benchmark_repo
+from planner.knowledge_base.loader import extract_metadata
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["database"])
-
-_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:planner@localhost:5432/planner",
-)
-
 
 _DB_ADMIN_PASSWORD = os.getenv("DB_ADMIN_PASSWORD")
 
@@ -43,11 +32,6 @@ def _check_admin_password(password: str | None) -> None:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing admin password",
         )
-
-
-def _get_connection():
-    """Get a database connection for DB management operations."""
-    return psycopg2.connect(_DATABASE_URL)
 
 
 @router.get("/db/admin-required")
@@ -64,18 +48,12 @@ async def verify_admin(x_admin_password: str | None = Header(None)):
 
 
 @router.get("/db/status")
-async def db_status():
+async def db_status(request: Request):
     """Get current benchmark database statistics."""
     try:
-        conn = _get_connection()
-        try:
-            stats = get_db_stats(conn)
-            return {
-                "success": True,
-                **stats,
-            }
-        finally:
-            conn.close()
+        repo = get_benchmark_repo(request)
+        stats = repo.get_stats()
+        return {"success": True, **stats}
     except Exception as e:
         logger.error(f"Failed to get DB status: {e}")
         raise HTTPException(
@@ -85,6 +63,7 @@ async def db_status():
 
 @router.post("/db/upload-benchmarks")
 async def upload_benchmarks(
+    request: Request,
     file: UploadFile = File(...),
     x_admin_password: str | None = Header(None),
 ):
@@ -124,26 +103,22 @@ async def upload_benchmarks(
     confidence_level = meta["confidence_level"] or "estimated"
 
     try:
-        conn = _get_connection()
-        try:
-            stats = insert_benchmarks(
-                conn,
-                benchmarks,
-                source=source,
-                confidence_level=confidence_level,
-            )
-            logger.info(
-                f"Uploaded {len(benchmarks)} benchmarks from {file.filename}, "
-                f"DB now has {stats['total_benchmarks']} total"
-            )
-            return {
-                "success": True,
-                "filename": file.filename,
-                "records_in_file": len(benchmarks),
-                **stats,
-            }
-        finally:
-            conn.close()
+        repo = get_benchmark_repo(request)
+        stats = repo.load_benchmarks(
+            benchmarks,
+            source=source,
+            confidence_level=confidence_level,
+        )
+        logger.info(
+            f"Uploaded {len(benchmarks)} benchmarks from {file.filename}, "
+            f"DB now has {stats['total_benchmarks']} total"
+        )
+        return {
+            "success": True,
+            "filename": file.filename,
+            "records_in_file": len(benchmarks),
+            **stats,
+        }
     except Exception as e:
         logger.error(f"Failed to load benchmarks: {e}")
         raise HTTPException(
@@ -153,10 +128,10 @@ async def upload_benchmarks(
 
 
 @router.post("/db/reset")
-async def reset_database(x_admin_password: str | None = Header(None)):
+async def reset_database(request: Request, x_admin_password: str | None = Header(None)):
     """Reset the benchmark database by removing all benchmark data.
 
-    This truncates the exported_summaries table (cascading to related tables).
+    Deletes all rows from the exported_summaries table.
     The schema is preserved — only data is removed.
 
     Usage:
@@ -165,18 +140,15 @@ async def reset_database(x_admin_password: str | None = Header(None)):
     _check_admin_password(x_admin_password)
 
     try:
-        conn = _get_connection()
-        try:
-            reset_benchmarks(conn)
-            stats = get_db_stats(conn)
-            logger.info("Benchmark database reset via API")
-            return {
-                "success": True,
-                "message": "Benchmark database has been reset",
-                **stats,
-            }
-        finally:
-            conn.close()
+        repo = get_benchmark_repo(request)
+        repo.reset()
+        stats = repo.get_stats()
+        logger.info("Benchmark database reset via API")
+        return {
+            "success": True,
+            "message": "Benchmark database has been reset",
+            **stats,
+        }
     except Exception as e:
         logger.error(f"Failed to reset database: {e}")
         raise HTTPException(

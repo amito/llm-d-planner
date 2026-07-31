@@ -10,19 +10,19 @@ import planner.api.dependencies as deps
 
 @pytest.mark.unit
 @patch.dict("os.environ", {}, clear=False)
-def test_default_source_is_postgresql():
-    """When PLANNER_BENCHMARK_SOURCE is not set, default to postgresql."""
+def test_default_source_is_database():
+    """When PLANNER_BENCHMARK_SOURCE is not set, default to database."""
     import os
 
     os.environ.pop("PLANNER_BENCHMARK_SOURCE", None)
-    assert deps._get_benchmark_source_type() == "postgresql"
+    assert deps._get_benchmark_source_type() == "database"
 
 
 @pytest.mark.unit
-@patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "postgresql"}, clear=False)
-def test_explicit_postgresql_source():
-    """When PLANNER_BENCHMARK_SOURCE=postgresql, return postgresql."""
-    assert deps._get_benchmark_source_type() == "postgresql"
+@patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "database"}, clear=False)
+def test_explicit_database_source():
+    """When PLANNER_BENCHMARK_SOURCE=database, return database."""
+    assert deps._get_benchmark_source_type() == "database"
 
 
 @pytest.mark.unit
@@ -41,9 +41,9 @@ def test_benchmark_source_normalization():
 
 @pytest.mark.unit
 @patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "invalid_source"}, clear=False)
-def test_unknown_benchmark_source_defaults_to_postgresql():
-    """Unknown PLANNER_BENCHMARK_SOURCE values default to postgresql."""
-    assert deps._get_benchmark_source_type() == "postgresql"
+def test_unknown_benchmark_source_defaults_to_database():
+    """Unknown PLANNER_BENCHMARK_SOURCE values default to database."""
+    assert deps._get_benchmark_source_type() == "database"
 
 
 def _make_mock_app():
@@ -77,21 +77,20 @@ def test_model_catalog_mode_creates_client_and_syncs():
         ),
         patch("planner.recommendation.quality.scoring.validate_quality_weights"),
         patch("planner.recommendation.config_finder.ConfigFinder") as mock_cf_cls,
+        patch("planner.knowledge_base.benchmarks.BenchmarkRepository") as mock_repo_cls,
     ):
         deps.init_app_state(app)
 
-        # Client created
         mock_client_cls.assert_called_once()
 
-        # Workflow wired with ConfigFinder using engine and quality weights
         mock_cf_cls.assert_called_once_with(
+            benchmark_repo=mock_repo_cls.return_value,
             catalog=mock_mc.return_value,
             engine=mock_engine,
             quality_weights=mock_weights,
         )
         mock_wf_cls.assert_called_once_with(config_finder=mock_cf_cls.return_value)
 
-        # Sync started, thread stored
         mock_sync.assert_called_once()
         assert app.state.model_catalog_sync_thread == mock_sync.return_value
         assert app.state.model_catalog == mock_mc.return_value
@@ -99,9 +98,9 @@ def test_model_catalog_mode_creates_client_and_syncs():
 
 
 @pytest.mark.unit
-@patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "postgresql"}, clear=False)
-def test_postgresql_workflow_uses_defaults():
-    """When source is postgresql, init_app_state() creates RecommendationWorkflow with shared catalog."""
+@patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "database"}, clear=False)
+def test_database_workflow_uses_defaults():
+    """When source is database, init_app_state() creates RecommendationWorkflow with shared catalog."""
     app = _make_mock_app()
     mock_engine = MagicMock()
     mock_weights = {"chatbot": {"categories": {"overall": 5}}}
@@ -120,9 +119,11 @@ def test_postgresql_workflow_uses_defaults():
         ),
         patch("planner.recommendation.quality.scoring.validate_quality_weights"),
         patch("planner.recommendation.config_finder.ConfigFinder") as mock_cf_cls,
+        patch("planner.knowledge_base.benchmarks.BenchmarkRepository") as mock_repo_cls,
     ):
         deps.init_app_state(app)
         mock_cf_cls.assert_called_once_with(
+            benchmark_repo=mock_repo_cls.return_value,
             catalog=mock_mc.return_value,
             engine=mock_engine,
             quality_weights=mock_weights,
@@ -133,7 +134,7 @@ def test_postgresql_workflow_uses_defaults():
 
 
 @pytest.mark.unit
-@patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "postgresql"}, clear=False)
+@patch.dict("os.environ", {"PLANNER_BENCHMARK_SOURCE": "database"}, clear=False)
 def test_init_app_state_sets_all_singletons():
     """init_app_state() populates all expected attributes on app.state."""
     app = _make_mock_app()
@@ -150,6 +151,7 @@ def test_init_app_state_sets_all_singletons():
         patch("planner.recommendation.quality.scoring.load_quality_weights", return_value={}),
         patch("planner.recommendation.quality.scoring.validate_quality_weights"),
         patch("planner.recommendation.config_finder.ConfigFinder"),
+        patch("planner.knowledge_base.benchmarks.BenchmarkRepository"),
     ):
         deps.init_app_state(app)
 

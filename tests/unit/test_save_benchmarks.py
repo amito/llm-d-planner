@@ -50,8 +50,7 @@ def _make_benchmark(
 @pytest.fixture
 def repo():
     """Create a BenchmarkRepository with mocked DB connection."""
-    with patch.object(BenchmarkRepository, "_test_connection"):
-        return BenchmarkRepository(database_url="postgresql://fake")
+    return BenchmarkRepository(db_path=":memory:")
 
 
 @pytest.mark.unit
@@ -69,7 +68,6 @@ class TestSaveBenchmarksRollback:
                 repo.save_benchmarks([_make_benchmark()])
 
             mock_conn.rollback.assert_called_once()
-            mock_conn.close.assert_called_once()
 
     @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
     def test_no_rollback_on_success(self, mock_insert, repo):
@@ -79,11 +77,10 @@ class TestSaveBenchmarksRollback:
             repo.save_benchmarks([_make_benchmark()])
 
             mock_conn.rollback.assert_not_called()
-            mock_conn.close.assert_called_once()
 
     @patch("planner.knowledge_base.benchmarks.insert_benchmarks")
-    def test_connection_closed_even_on_failure(self, mock_insert, repo):
-        """Connection must always be closed, even after rollback."""
+    def test_rollback_on_failure(self, mock_insert, repo):
+        """Connection must be rolled back on any failure."""
         mock_conn = MagicMock()
         with patch.object(repo, "_get_connection", return_value=mock_conn):
             mock_insert.side_effect = Exception("unexpected")
@@ -91,7 +88,7 @@ class TestSaveBenchmarksRollback:
             with pytest.raises(Exception, match="unexpected"):
                 repo.save_benchmarks([_make_benchmark()])
 
-            mock_conn.close.assert_called_once()
+            mock_conn.rollback.assert_called_once()
 
 
 @pytest.mark.unit

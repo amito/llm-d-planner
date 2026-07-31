@@ -16,6 +16,10 @@ _app.include_router(router)
 
 @pytest.fixture
 def client():
+    mock_repo = MagicMock()
+    mock_repo.get_stats.return_value = _sample_stats()
+    mock_repo.load_benchmarks.return_value = _sample_stats()
+    _app.state.benchmark_repo = mock_repo
     return TestClient(_app)
 
 
@@ -86,13 +90,7 @@ class TestVerifyAdmin:
 @pytest.mark.unit
 class TestDbStatus:
     def test_returns_stats(self, client):
-        mock_conn = MagicMock()
-        stats = _sample_stats()
-        with (
-            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
-            patch("planner.api.routes.database.get_db_stats", return_value=stats),
-        ):
-            resp = client.get("/api/v1/db/status")
+        resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
@@ -101,42 +99,35 @@ class TestDbStatus:
             {"source": "blis", "confidence_level": "benchmarked", "count": 80},
             {"source": "estimated", "confidence_level": "estimated", "count": 20},
         ]
-        mock_conn.close.assert_called_once()
 
     def test_benchmark_sources_empty_db(self, client):
-        mock_conn = MagicMock()
-        stats = _sample_stats(total_benchmarks=0, benchmark_sources=[])
-        with (
-            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
-            patch("planner.api.routes.database.get_db_stats", return_value=stats),
-        ):
-            resp = client.get("/api/v1/db/status")
+        _app.state.benchmark_repo.get_stats.return_value = _sample_stats(
+            total_benchmarks=0, benchmark_sources=[]
+        )
+        resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
         assert resp.json()["benchmark_sources"] == []
+        _app.state.benchmark_repo.get_stats.return_value = _sample_stats()
 
     def test_benchmark_sources_multiple_origins(self, client):
-        mock_conn = MagicMock()
         sources = [
             {"source": "model_catalog", "confidence_level": "benchmarked", "count": 2800},
             {"source": "guidellm", "confidence_level": "benchmarked", "count": 463},
             {"source": "estimated", "confidence_level": "estimated", "count": 200},
         ]
-        stats = _sample_stats(total_benchmarks=3463, benchmark_sources=sources)
-        with (
-            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
-            patch("planner.api.routes.database.get_db_stats", return_value=stats),
-        ):
-            resp = client.get("/api/v1/db/status")
+        _app.state.benchmark_repo.get_stats.return_value = _sample_stats(
+            total_benchmarks=3463, benchmark_sources=sources
+        )
+        resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
         assert resp.json()["benchmark_sources"] == sources
+        _app.state.benchmark_repo.get_stats.return_value = _sample_stats()
 
     def test_returns_503_on_db_error(self, client):
-        with patch(
-            "planner.api.routes.database._get_connection",
-            side_effect=Exception("connection refused"),
-        ):
-            resp = client.get("/api/v1/db/status")
+        _app.state.benchmark_repo.get_stats.side_effect = Exception("connection refused")
+        resp = client.get("/api/v1/db/status")
         assert resp.status_code == 503
+        _app.state.benchmark_repo.get_stats.side_effect = None
 
 
 # --- POST /api/v1/db/upload-benchmarks ---
@@ -153,24 +144,17 @@ class TestUploadBenchmarks:
         )
 
     def test_successful_upload(self, client):
-        mock_conn = MagicMock()
-        stats = _sample_stats()
         payload = {
             "_metadata": {"source": "blis", "confidence_level": "benchmarked"},
             "benchmarks": [{"model_hf_repo": "m", "hardware": "H100"}],
         }
-        with (
-            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
-            patch("planner.api.routes.database.insert_benchmarks", return_value=stats),
-            patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None),
-        ):
+        with patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None):
             resp = self._upload(client, "bench.json", payload)
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
         assert body["records_in_file"] == 1
         assert body["filename"] == "bench.json"
-        mock_conn.close.assert_called_once()
 
     def test_rejects_non_json_file(self, client):
         with patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None):
@@ -207,14 +191,8 @@ class TestUploadBenchmarks:
         assert resp.status_code == 401
 
     def test_accepts_with_correct_password(self, client):
-        mock_conn = MagicMock()
-        stats = _sample_stats()
         payload = {"benchmarks": [{"model_hf_repo": "m", "hardware": "H100"}]}
-        with (
-            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
-            patch("planner.api.routes.database.insert_benchmarks", return_value=stats),
-            patch("planner.api.routes.database._DB_ADMIN_PASSWORD", "secret"),
-        ):
+        with patch("planner.api.routes.database._DB_ADMIN_PASSWORD", "secret"):
             resp = self._upload(client, "b.json", payload, headers={"x-admin-password": "secret"})
         assert resp.status_code == 200
 
@@ -225,21 +203,16 @@ class TestUploadBenchmarks:
 @pytest.mark.unit
 class TestResetDatabase:
     def test_successful_reset(self, client):
-        mock_conn = MagicMock()
         stats = _sample_stats()
         stats["total_benchmarks"] = 0
-        with (
-            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
-            patch("planner.api.routes.database.reset_benchmarks"),
-            patch("planner.api.routes.database.get_db_stats", return_value=stats),
-            patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None),
-        ):
+        _app.state.benchmark_repo.get_stats.return_value = stats
+        with patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None):
             resp = client.post("/api/v1/db/reset")
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
         assert body["total_benchmarks"] == 0
-        mock_conn.close.assert_called_once()
+        _app.state.benchmark_repo.reset.assert_called()
 
     def test_requires_admin_password(self, client):
         with patch("planner.api.routes.database._DB_ADMIN_PASSWORD", "secret"):
@@ -247,12 +220,8 @@ class TestResetDatabase:
         assert resp.status_code == 401
 
     def test_returns_500_on_db_error(self, client):
-        with (
-            patch(
-                "planner.api.routes.database._get_connection",
-                side_effect=Exception("db down"),
-            ),
-            patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None),
-        ):
+        _app.state.benchmark_repo.reset.side_effect = Exception("db down")
+        with patch("planner.api.routes.database._DB_ADMIN_PASSWORD", None):
             resp = client.post("/api/v1/db/reset")
         assert resp.status_code == 500
+        _app.state.benchmark_repo.reset.side_effect = None

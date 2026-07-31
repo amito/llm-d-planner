@@ -154,7 +154,7 @@ def main():
             "description": "Model benchmark data for capacity planning",
             "version": "2.0-sql-aligned",
             "schema_changes": [
-                "Aligned with PostgreSQL exported_summaries table schema",
+                "Aligned with exported_summaries table schema",
                 "Renamed: model_id → model_hf_repo",
                 "Renamed: gpu_type → hardware",
                 "Renamed: tensor_parallel → hardware_count",
@@ -187,7 +187,7 @@ def main():
                 "phase_2_enhancements": [
                     "Parametric models for continuous traffic prediction",
                     "Multi-dimensional benchmarks (concurrency, burstiness)",
-                    "PostgreSQL backend support",
+                    "External database backend support",
                     "Real-time benchmark updates"
                 ]
             }

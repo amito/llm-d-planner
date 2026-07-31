@@ -32,7 +32,7 @@ def _make_specs():
 class TestWorkflowGPUDetection:
     """Verify all three workflow methods call detect_cluster_gpus.
 
-    Uses module-level patching of ConfigFinder to avoid PostgreSQL
+    Uses module-level patching of ConfigFinder to avoid database
     connection attempts during instantiation.
     """
 

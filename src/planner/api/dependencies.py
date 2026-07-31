@@ -30,24 +30,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_VALID_BENCHMARK_SOURCES = {"postgresql", "model_catalog"}
+_VALID_BENCHMARK_SOURCES = {"database", "model_catalog"}
 
 
 def _get_benchmark_source_type() -> str:
     """Get configured benchmark source type."""
-    source = os.getenv("PLANNER_BENCHMARK_SOURCE", "postgresql").strip().lower()
+    source = os.getenv("PLANNER_BENCHMARK_SOURCE", "database").strip().lower()
     if source not in _VALID_BENCHMARK_SOURCES:
         logger.warning(
-            "Unknown PLANNER_BENCHMARK_SOURCE='%s'; defaulting to 'postgresql'",
+            "Unknown PLANNER_BENCHMARK_SOURCE='%s'; defaulting to 'database'",
             source,
         )
-        return "postgresql"
+        return "database"
     return source
 
 
 def _sync_model_catalog_async(
     client: Any,
-    database_url: str,
+    benchmark_repo: Any,
     model_catalog: ModelCatalog,
 ) -> threading.Thread:
     """Run Model Catalog sync in a background thread.
@@ -58,26 +58,18 @@ def _sync_model_catalog_async(
 
     def _sync() -> None:
         try:
-            import psycopg2
-
             from planner.knowledge_base.model_catalog_sync import sync_model_catalog
 
-            logger.info("Background sync: loading Model Catalog data into PostgreSQL...")
-            conn = psycopg2.connect(database_url)
-            try:
-                result = sync_model_catalog(
-                    client=client,
-                    conn=conn,
-                    model_catalog=model_catalog,
-                )
-                if result.errors:
-                    logger.warning(
-                        "Model Catalog sync completed with %d errors", len(result.errors)
-                    )
-                else:
-                    logger.info("Background sync: Model Catalog data ready")
-            finally:
-                conn.close()
+            logger.info("Background sync: loading Model Catalog data into database...")
+            result = sync_model_catalog(
+                client=client,
+                benchmark_repo=benchmark_repo,
+                model_catalog=model_catalog,
+            )
+            if result.errors:
+                logger.warning("Model Catalog sync completed with %d errors", len(result.errors))
+            else:
+                logger.info("Background sync: Model Catalog data ready")
         except Exception:
             logger.exception("Background Model Catalog sync failed")
 
@@ -95,6 +87,7 @@ def init_app_state(app: FastAPI) -> None:
     """Initialize all singletons on app.state during lifespan startup."""
     from pathlib import Path
 
+    from planner.knowledge_base.benchmarks import BenchmarkRepository
     from planner.recommendation.config_finder import ConfigFinder
     from planner.recommendation.quality.scoring import (
         build_scoring_engine,
@@ -105,6 +98,7 @@ def init_app_state(app: FastAPI) -> None:
     source_type = _get_benchmark_source_type()
 
     # Always create the same components — single code path
+    app.state.benchmark_repo = BenchmarkRepository()
     app.state.model_catalog = ModelCatalog()
     app.state.slo_repo = SLOTemplateRepository()
     app.state.deployment_generator = DeploymentGenerator(simulator_mode=False)
@@ -125,45 +119,38 @@ def init_app_state(app: FastAPI) -> None:
     quality_weights = load_quality_weights(weights_path)
     validate_quality_weights(quality_weights)
 
+    config_finder = ConfigFinder(
+        benchmark_repo=app.state.benchmark_repo,
+        catalog=app.state.model_catalog,
+        engine=engine,
+        quality_weights=quality_weights,
+    )
+    app.state.workflow = RecommendationWorkflow(config_finder=config_finder)
+
     if source_type == "model_catalog":
         from planner.knowledge_base.model_catalog_client import ModelCatalogClient
 
         client = ModelCatalogClient()
         app.state.model_catalog_client = client
 
-        # Wire shared instances so sync updates propagate to recommendations
-        config_finder = ConfigFinder(
-            catalog=app.state.model_catalog,
-            engine=engine,
-            quality_weights=quality_weights,
-        )
-        app.state.workflow = RecommendationWorkflow(config_finder=config_finder)
-
-        database_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql://postgres:planner@localhost:5432/planner",
-        )
-
-        logger.info("Using Model Catalog as benchmark source (syncing to PostgreSQL)")
+        logger.info("Using Model Catalog as benchmark source (syncing to database)")
         app.state.model_catalog_sync_thread = _sync_model_catalog_async(
-            client, database_url, app.state.model_catalog
+            client, app.state.benchmark_repo, app.state.model_catalog
         )
     else:
         app.state.model_catalog_client = None
         app.state.model_catalog_sync_thread = None
-
-        config_finder = ConfigFinder(
-            catalog=app.state.model_catalog,
-            engine=engine,
-            quality_weights=quality_weights,
-        )
-        app.state.workflow = RecommendationWorkflow(config_finder=config_finder)
-        logger.info("Using PostgreSQL as benchmark source")
+        logger.info("Using database as benchmark source")
 
 
 # ---------------------------------------------------------------------------
 # Depends() providers — read from request.app.state
 # ---------------------------------------------------------------------------
+
+
+def get_benchmark_repo(request: Request):
+    """Get the benchmark repository singleton."""
+    return request.app.state.benchmark_repo
 
 
 def get_workflow(request: Request) -> RecommendationWorkflow:

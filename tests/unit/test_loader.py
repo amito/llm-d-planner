@@ -233,9 +233,9 @@ class TestEnsureSchema:
         with patch("planner.knowledge_base.loader._SCHEMA_PATH", schema_file):
             ensure_schema(mock_conn)
 
-        mock_cursor.execute.assert_called_once_with("CREATE TABLE IF NOT EXISTS test (id INT);")
-        mock_conn.commit.assert_called_once()
-        mock_cursor.close.assert_called_once()
+        mock_cursor.executescript.assert_called_once_with(
+            "CREATE TABLE IF NOT EXISTS test (id INT);"
+        )
 
     def test_skips_when_file_missing(self):
         mock_conn = MagicMock()
