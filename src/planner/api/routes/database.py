@@ -70,7 +70,10 @@ async def db_status():
         conn = _get_connection()
         try:
             stats = get_db_stats(conn)
-            return {"success": True, **stats}
+            return {
+                "success": True,
+                **stats,
+            }
         finally:
             conn.close()
     except Exception as e:

@@ -15,6 +15,7 @@ Tests cover:
 import pytest
 
 from planner.knowledge_base.benchmarks import BenchmarkData, BenchmarkRepository
+from planner.knowledge_base.loader import get_db_stats
 from planner.knowledge_base.slo_templates import SLOTemplateRepository
 
 
@@ -31,6 +32,22 @@ class TestBenchmarkRepository:
         """Test that we can connect to PostgreSQL."""
         assert repo is not None
         assert repo.database_url is not None
+
+    def test_db_stats_include_benchmark_sources(self, repo):
+        """Test that get_db_stats returns benchmark_sources from real data."""
+        conn = repo._get_connection()
+        try:
+            stats = get_db_stats(conn)
+        finally:
+            conn.close()
+
+        sources = stats["benchmark_sources"]
+        assert len(sources) > 0
+        for entry in sources:
+            assert entry["source"]
+            assert entry["confidence_level"]
+            assert entry["count"] > 0
+        assert sum(e["count"] for e in sources) == stats["total_benchmarks"]
 
     def test_get_benchmark_exact_match(self, repo):
         """Test retrieving a benchmark with exact traffic profile match."""

@@ -289,6 +289,18 @@ def get_db_stats(conn) -> dict:
         for r in cursor.fetchall()
     ]
 
+    # Get benchmark source breakdown
+    cursor.execute("""
+        SELECT source, confidence_level, COUNT(*) as count
+        FROM exported_summaries
+        GROUP BY source, confidence_level
+        ORDER BY count DESC;
+    """)
+    stats["benchmark_sources"] = [
+        {"source": r["source"], "confidence_level": r["confidence_level"], "count": r["count"]}
+        for r in cursor.fetchall()
+    ]
+
     cursor.close()
     return stats
 
