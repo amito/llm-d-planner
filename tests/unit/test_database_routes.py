@@ -19,14 +19,20 @@ def client():
     return TestClient(_app)
 
 
-def _sample_stats():
-    return {
+def _sample_stats(**overrides):
+    base = {
         "num_models": 3,
         "num_hardware_types": 2,
         "num_traffic_profiles": 4,
         "total_benchmarks": 100,
         "traffic_distribution": [],
+        "benchmark_sources": [
+            {"source": "blis", "confidence_level": "benchmarked", "count": 80},
+            {"source": "estimated", "confidence_level": "estimated", "count": 20},
+        ],
     }
+    base.update(overrides)
+    return base
 
 
 # --- GET /api/v1/db/admin-required ---
@@ -85,34 +91,44 @@ class TestDbStatus:
         with (
             patch("planner.api.routes.database._get_connection", return_value=mock_conn),
             patch("planner.api.routes.database.get_db_stats", return_value=stats),
-            patch(
-                "planner.api.routes.database._get_benchmark_source_type", return_value="postgresql"
-            ),
         ):
             resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
         assert body["total_benchmarks"] == 100
-        assert body["benchmark_source"] == {"type": "postgresql"}
+        assert body["benchmark_sources"] == [
+            {"source": "blis", "confidence_level": "benchmarked", "count": 80},
+            {"source": "estimated", "confidence_level": "estimated", "count": 20},
+        ]
         mock_conn.close.assert_called_once()
 
-    def test_includes_benchmark_source_model_catalog(self, client):
+    def test_benchmark_sources_empty_db(self, client):
         mock_conn = MagicMock()
-        stats = _sample_stats()
+        stats = _sample_stats(total_benchmarks=0, benchmark_sources=[])
         with (
             patch("planner.api.routes.database._get_connection", return_value=mock_conn),
             patch("planner.api.routes.database.get_db_stats", return_value=stats),
-            patch(
-                "planner.api.routes.database._get_benchmark_source_type",
-                return_value="model_catalog",
-            ),
-            patch.dict("os.environ", {"MODEL_CATALOG_SOURCE_ID": "my_catalog"}),
         ):
             resp = client.get("/api/v1/db/status")
         assert resp.status_code == 200
-        source = resp.json()["benchmark_source"]
-        assert source == {"type": "model_catalog", "model_catalog_source_id": "my_catalog"}
+        assert resp.json()["benchmark_sources"] == []
+
+    def test_benchmark_sources_multiple_origins(self, client):
+        mock_conn = MagicMock()
+        sources = [
+            {"source": "model_catalog", "confidence_level": "benchmarked", "count": 2800},
+            {"source": "guidellm", "confidence_level": "benchmarked", "count": 463},
+            {"source": "estimated", "confidence_level": "estimated", "count": 200},
+        ]
+        stats = _sample_stats(total_benchmarks=3463, benchmark_sources=sources)
+        with (
+            patch("planner.api.routes.database._get_connection", return_value=mock_conn),
+            patch("planner.api.routes.database.get_db_stats", return_value=stats),
+        ):
+            resp = client.get("/api/v1/db/status")
+        assert resp.status_code == 200
+        assert resp.json()["benchmark_sources"] == sources
 
     def test_returns_503_on_db_error(self, client):
         with patch(
