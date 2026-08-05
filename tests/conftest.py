@@ -18,7 +18,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(scope="session")
-def test_db_url():
+def test_db_path():
     """Create and populate a temporary SQLite database for the test session.
 
     Yields the database file path, then cleans up.

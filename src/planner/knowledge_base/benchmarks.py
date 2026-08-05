@@ -27,9 +27,9 @@ from pathlib import Path
 
 from planner.knowledge_base.db import create_connection
 from planner.knowledge_base.loader import (
+    _insert_benchmarks,
     extract_metadata,
     get_db_stats,
-    insert_benchmarks,
     reset_benchmarks,
 )
 
@@ -146,6 +146,16 @@ class BenchmarkRepository:
         self._conn = create_connection(db_path)
         logger.info("Initialized benchmark repository")
 
+    def close(self) -> None:
+        """Close the underlying database connection."""
+        self._conn.close()
+
+    def __enter__(self) -> "BenchmarkRepository":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
     @classmethod
     def from_files(
         cls, *json_paths: str | Path, db_path: str | None = None
@@ -169,9 +179,10 @@ class BenchmarkRepository:
             meta = extract_metadata(data)
             source = meta["source"] or "local"
             confidence_level = meta["confidence_level"] or "estimated"
-            insert_benchmarks(
+            _insert_benchmarks(
                 repo._conn, benchmarks, source=source, confidence_level=confidence_level
             )
+        repo._conn.commit()
         return repo
 
     def _get_connection(self):
@@ -204,9 +215,15 @@ class BenchmarkRepository:
         Returns:
             Dict with database stats after the operation.
         """
-        return insert_benchmarks(
-            self._conn, benchmarks, source=source, confidence_level=confidence_level
-        )
+        try:
+            stats = _insert_benchmarks(
+                self._conn, benchmarks, source=source, confidence_level=confidence_level
+            )
+            self._conn.commit()
+            return stats
+        except Exception:
+            self._conn.rollback()
+            raise
 
     def replace_benchmarks(
         self,
@@ -233,9 +250,10 @@ class BenchmarkRepository:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM exported_summaries WHERE source = ?", (source,))
             cursor.close()
-            stats = insert_benchmarks(
+            stats = _insert_benchmarks(
                 conn, benchmarks, source=source, confidence_level=confidence_level
             )
+            conn.commit()
             return stats
         except Exception:
             conn.rollback()
@@ -266,9 +284,10 @@ class BenchmarkRepository:
 
         conn = self._get_connection()
         try:
-            insert_benchmarks(
+            _insert_benchmarks(
                 conn, benchmark_dicts, source=source, confidence_level=confidence_level
             )
+            conn.commit()
         except Exception:
             conn.rollback()
             raise

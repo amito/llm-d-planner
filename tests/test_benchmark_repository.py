@@ -22,9 +22,9 @@ class TestBenchmarkRepository:
     """Tests for BenchmarkRepository with database backend."""
 
     @pytest.fixture
-    def repo(self, test_db_url):
+    def repo(self, test_db_path):
         """Create a BenchmarkRepository connected to the test database."""
-        return BenchmarkRepository(db_path=test_db_url)
+        return BenchmarkRepository(db_path=test_db_path)
 
     def test_connection(self, repo):
         """Test that we can connect to the database."""
@@ -264,9 +264,9 @@ class TestTrafficProfileMatching:
     """Tests for traffic profile exact matching logic."""
 
     @pytest.fixture
-    def repo(self, test_db_url):
+    def repo(self, test_db_path):
         """Create a BenchmarkRepository connected to the test database."""
-        return BenchmarkRepository(db_path=test_db_url)
+        return BenchmarkRepository(db_path=test_db_path)
 
     def test_exact_match_512_256(self, repo):
         """Test exact match for (512, 256) traffic profile."""
@@ -314,9 +314,9 @@ class TestE2ELatencyCalculation:
     """Tests for E2E latency (pre-calculated vs dynamic)."""
 
     @pytest.fixture
-    def repo(self, test_db_url):
+    def repo(self, test_db_path):
         """Create a BenchmarkRepository connected to the test database."""
-        return BenchmarkRepository(db_path=test_db_url)
+        return BenchmarkRepository(db_path=test_db_path)
 
     def test_e2e_precalculated_in_benchmarks(self, repo):
         """Test that E2E latency is pre-calculated in benchmark data."""

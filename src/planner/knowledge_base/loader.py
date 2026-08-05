@@ -79,7 +79,7 @@ def prepare_benchmark_for_insert(
     prepared["config_id"] = generate_config_id(prepared)
 
     now = datetime.now().isoformat()
-    prepared["type"] = "local"
+    prepared.setdefault("type", "local")
     prepared["provider"] = None
     prepared["jbenchmark_created_at"] = now
     prepared["created_at"] = now
@@ -208,7 +208,7 @@ def extract_metadata(data: dict) -> dict:
     }
 
 
-def insert_benchmarks(
+def _insert_benchmarks(
     conn,
     benchmarks: list[dict],
     source: str = "local",
@@ -217,6 +217,7 @@ def insert_benchmarks(
     """Insert benchmarks into the database (append mode).
 
     Duplicates (same config_id) are silently skipped.
+    The caller is responsible for committing the transaction.
 
     Args:
         conn: sqlite3 connection
@@ -238,7 +239,6 @@ def insert_benchmarks(
 
     logger.info(f"Inserting {len(rows)} benchmark records...")
     cursor.executemany(_INSERT_QUERY, rows)
-    conn.commit()
 
     logger.info(f"Successfully processed {len(benchmarks)} benchmarks")
 

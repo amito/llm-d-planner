@@ -422,7 +422,7 @@ db-start: ## Initialize database (creates file and applies schema if needed)
 	@if [ -f $(DB_PATH) ]; then \
 		printf "$(YELLOW)Database already exists at $(DB_PATH)$(NC)\n"; \
 	else \
-		uv run python -c "from planner.knowledge_base.db import get_connection; from planner.knowledge_base.loader import ensure_schema; import os; os.environ['PLANNER_DB_PATH'] = '$(DB_PATH)'; conn = get_connection(); ensure_schema(conn); print('Schema initialized')"; \
+		uv run python -c "from planner.knowledge_base.db import create_connection; import os; os.environ['PLANNER_DB_PATH'] = '$(DB_PATH)'; conn = create_connection(); conn.close(); print('Schema initialized')"; \
 		printf "$(GREEN)✓ Database created at $(DB_PATH)$(NC)\n"; \
 	fi
 	@BENCH_COUNT=$$(sqlite3 $(DB_PATH) "SELECT COUNT(*) FROM exported_summaries;" 2>/dev/null || echo "0"); \
