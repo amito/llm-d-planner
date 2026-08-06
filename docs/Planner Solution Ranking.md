@@ -146,7 +146,7 @@ User Request
 Intent Extraction → Traffic Profile → SLO Targets
     ↓
 plan_all_capacities()
-    ├── Query PostgreSQL: find_configurations_meeting_slo()
+    ├── Query database: find_configurations_meeting_slo()
     ├── For each (model, GPU) config:
     │   ├── Look up model in catalog
     │   ├── Calculate accuracy via score_model()

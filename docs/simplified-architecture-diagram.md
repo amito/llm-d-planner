@@ -16,7 +16,7 @@ flowchart LR
     D --> E["🚀 Deploy to<br>Kubernetes"]
     E --> F["📈 Monitor<br>&amp; Test"]
     E -.-> K8S["☸️ Kubernetes Cluster<br><small>KIND + KServe + vLLM Simulator</small>"]
-    C -.-> KB[("Knowledge Base<br>PostgreSQL<br>Benchmarks, SLOs,<br>40 Models")]
+    C -.-> KB[("Knowledge Base<br>Database<br>Benchmarks, SLOs,<br>40 Models")]
     F -.-> K8S
     style A fill:#e1f5ff
     style B fill:#fff4e1
@@ -44,7 +44,7 @@ graph TB
     end
 
     subgraph "Data"
-        KB[(PostgreSQL<br/>Benchmarks<br/>SLO Templates<br/>40 Models)]
+        KB[(Database<br/>Benchmarks<br/>SLO Templates<br/>40 Models)]
     end
 
     subgraph "Deployment"
@@ -83,7 +83,7 @@ flowchart LR
 
     A --> B --> C --> D --> E --> F --> G --> H
 
-    KB[("📚 PostgreSQL<br/>Benchmarks<br/>9 Use Cases<br/>40 Models")]
+    KB[("📚 Database<br/>Benchmarks<br/>9 Use Cases<br/>40 Models")]
     D <-.-> KB
 
     style A fill:#fff
@@ -107,7 +107,7 @@ graph TB
         Chat["💬 Conversational Interface"]
         Intent["🧠 Intent & Specification Engine"]
         Rec["🎯 Recommendation Engine<br/><small>Model Selection | Capacity Planning</small>"]
-        KB[("📚 PostgreSQL<br/><small>Benchmarks p95/ITL | 9 Use Case SLOs | 40 Models</small>")]
+        KB[("📚 Database<br/><small>Benchmarks p95/ITL | 9 Use Case SLOs | 40 Models</small>")]
         Deploy["🚀 Deployment Automation<br/><small>YAML Generation | K8s Deployment</small>"]
     end
 

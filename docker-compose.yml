@@ -1,22 +1,4 @@
 services:
-  # PostgreSQL database for benchmarks and deployment outcomes
-  postgres:
-    image: postgres:latest
-    container_name: planner-postgres
-    environment:
-      POSTGRES_DB: planner
-      POSTGRES_USER: planner
-      POSTGRES_PASSWORD: planner_dev_password
-    volumes:
-      - postgres_data:/var/lib/postgresql      
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U planner"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - planner-network
-
   # Ollama for LLM-powered intent extraction
   ollama:
     image: ollama/ollama:latest
@@ -51,7 +33,7 @@ services:
     container_name: planner-backend
     environment:
       # Database configuration
-      DATABASE_URL: postgresql://planner:planner_dev_password@postgres:5432/planner
+      PLANNER_DB_PATH: /app/data/planner.db
 
       # Ollama configuration
       OLLAMA_HOST: http://ollama:11434
@@ -61,8 +43,8 @@ services:
       API_HOST: 0.0.0.0
       API_PORT: 8000
 
-      # Benchmark data source: "postgresql" (default) or "model_catalog" (RHOAI)
-      PLANNER_BENCHMARK_SOURCE: ${PLANNER_BENCHMARK_SOURCE:-postgresql}
+      # Benchmark data source: "database" (default) or "model_catalog" (RHOAI)
+      PLANNER_BENCHMARK_SOURCE: ${PLANNER_BENCHMARK_SOURCE:-database}
 
       # Model Catalog connection (only used when PLANNER_BENCHMARK_SOURCE=model_catalog)
       MODEL_CATALOG_URL: ${MODEL_CATALOG_URL:-}
@@ -82,8 +64,6 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
       ollama:
         condition: service_healthy
     healthcheck:
@@ -158,8 +138,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
-    driver: local
   ollama_data:
     driver: local
 

@@ -1,4 +1,4 @@
-"""ETL: sync RHOAI Model Catalog data into PostgreSQL and local catalogs."""
+"""ETL: sync RHOAI Model Catalog data into database and local catalogs."""
 
 from __future__ import annotations
 
@@ -11,10 +11,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from psycopg2.extensions import connection as pg_connection
-from psycopg2.extras import execute_batch
-
 if TYPE_CHECKING:
+    from planner.knowledge_base.benchmarks import BenchmarkRepository
     from planner.knowledge_base.model_catalog import ModelCatalog, ModelInfo
     from planner.knowledge_base.model_catalog_client import ModelCatalogClient
 
@@ -174,6 +172,7 @@ def _artifact_to_row(artifact: dict, model_uri: str = "") -> dict | None:
         "mean_output_tokens": _prop_float(props, "mean_output_tokens"),
         "requests_per_second": rps,
         "source": "model_catalog",
+        "confidence_level": "benchmarked",
         "model_uri": model_uri or None,
         "type": "model_catalog",
         "created_at": now,
@@ -193,29 +192,6 @@ def _artifact_to_row(artifact: dict, model_uri: str = "") -> dict | None:
     return row
 
 
-_COLUMNS = (
-    "id, config_id, model_hf_repo, provider, type, "
-    "ttft_mean, ttft_p90, ttft_p95, ttft_p99, "
-    "e2e_mean, e2e_p90, e2e_p95, e2e_p99, "
-    "itl_mean, itl_p90, itl_p95, itl_p99, "
-    "tps_mean, tps_p90, tps_p95, tps_p99, "
-    "hardware, hardware_count, framework, "
-    "requests_per_second, responses_per_second, tokens_per_second, "
-    "mean_input_tokens, mean_output_tokens, "
-    "huggingface_prompt_dataset, jbenchmark_created_at, "
-    "entrypoint, docker_image, framework_version, "
-    "created_at, updated_at, loaded_at, "
-    "prompt_tokens, prompt_tokens_stdev, prompt_tokens_min, prompt_tokens_max, "
-    "output_tokens, output_tokens_min, output_tokens_max, output_tokens_stdev, "
-    "profiler_type, profiler_image, profiler_tag, source, model_uri"
-)
-_VALUES = ", ".join(f"%({c.strip()})s" for c in _COLUMNS.split(", "))
-_INSERT_QUERY = (
-    f"INSERT INTO exported_summaries ({_COLUMNS}) VALUES ({_VALUES}) "
-    "ON CONFLICT (config_id) DO NOTHING;"
-)
-
-
 @dataclass
 class SyncResult:
     """Outcome of a Model Catalog sync operation."""
@@ -228,10 +204,10 @@ class SyncResult:
 
 def sync_model_catalog(
     client: ModelCatalogClient,
-    conn: pg_connection,
+    benchmark_repo: BenchmarkRepository,
     model_catalog: ModelCatalog,
 ) -> SyncResult:
-    """Sync Model Catalog data into PostgreSQL and ModelCatalog."""
+    """Sync Model Catalog data into database and ModelCatalog."""
     result = SyncResult()
 
     try:
@@ -288,13 +264,9 @@ def sync_model_catalog(
                 len(rows),
             )
         try:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM exported_summaries WHERE source = %s", ("model_catalog",))
-            execute_batch(cursor, _INSERT_QUERY, rows, page_size=100)
-            conn.commit()
+            benchmark_repo.replace_benchmarks("model_catalog", rows, confidence_level="benchmarked")
             result.benchmarks_inserted = len(rows)
         except Exception as exc:
-            conn.rollback()
             result.errors.append(f"DB error: {exc}")
             logger.error("Model Catalog sync DB error: %s", exc)
             return result

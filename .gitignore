@@ -88,6 +88,11 @@ logs/
 !scripts/schema.sql
 data/benchmarks/performance/benchmarks_GuideLLM.json
 
+# Embedded database (runtime data)
+data/planner.db
+data/planner.db-wal
+data/planner.db-shm
+
 # Presentation images (large files, regeneratable)
 data/archive/presentation/
 

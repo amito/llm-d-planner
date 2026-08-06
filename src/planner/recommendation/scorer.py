@@ -3,7 +3,7 @@
 Scores deployment configurations on 3 criteria (0-100 scale):
 - Quality: Model capability (from quality_scoring package or param count fallback)
 - Price: Cost efficiency (inverse of cost, normalized)
-- Latency: SLO compliance with capped scoring (from PostgreSQL benchmarks)
+- Latency: SLO compliance with capped scoring (from benchmark database)
 
 INTEGRATION NOTE:
 - Quality scoring: Uses quality_scoring package (Arena + Artificial Analysis benchmarks)

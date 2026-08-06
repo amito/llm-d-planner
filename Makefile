@@ -23,8 +23,7 @@ else
 endif
 
 # Container runtime detection
-# - CONTAINER_TOOL: Used for PostgreSQL, simulator builds, and general container operations
-#   Can be overridden: CONTAINER_TOOL=podman make db-start
+# - CONTAINER_TOOL: Used for simulator builds and general container operations
 # - KIND always requires Docker (it creates containers to simulate K8s nodes)
 #
 # Auto-detection prefers docker if running (for KIND compatibility), falls back to podman if running
@@ -57,8 +56,6 @@ SIMULATOR_FULL_IMAGE := $(REGISTRY)/$(REGISTRY_ORG)/$(SIMULATOR_IMAGE):$(SIMULAT
 OLLAMA_MODEL ?= qwen2.5:7b
 KIND_CLUSTER_NAME ?= planner
 
-PGDUMP_INPUT ?= data/benchmarks/performance/integ-oct-29.sql
-PGDUMP_OUTPUT ?= data/benchmarks/performance/benchmarks_GuideLLM.json
 
 SRC_DIR := src
 UI_DIR := ui
@@ -119,7 +116,6 @@ check-prereqs: ## Check if required tools are installed
 	@# Check Python version and warn if 3.14+
 	@PY_VERSION=$$($(PYTHON) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0"); \
 	if [ "$$(echo "$$PY_VERSION" | cut -d. -f1)" = "3" ] && [ "$$(echo "$$PY_VERSION" | cut -d. -f2)" -ge "14" ]; then \
-		printf "$(YELLOW)⚠ Warning: Python $$PY_VERSION detected. Some dependencies (psycopg2-binary) may not have wheels yet.$(NC)\n"; \
 		printf "$(YELLOW)  Recommend using Python 3.13 for best compatibility.$(NC)\n"; \
 	fi
 	@$(CONTAINER_TOOL) info >/dev/null 2>&1 || (printf "$(RED)✗ Docker or Podman daemon not running$(NC).\n" && exit 1)
@@ -185,7 +181,7 @@ start: db-start setup-ollama ## Start all services (DB + Ollama + Backend + UI)
 	@if [ "$(LLM_PROVIDER)" = "" ] || [ "$(LLM_PROVIDER)" = "ollama" ]; then \
 		printf "  Ollama:  http://localhost:11434\n"; \
 	fi
-	@printf "  DB:      postgresql://postgres:planner@localhost:5432/planner\n"
+	@printf "  DB:      $(DB_PATH)\n"
 	@printf "\n"
 	@printf "$(BLUE)Logs:$(NC)\n"
 	@printf "  make logs-backend\n"
@@ -246,14 +242,14 @@ stop: ## Stop Backend + UI (leaves Ollama and DB running)
 	@pkill -9 -f "streamlit run ui/main.py" 2>/dev/null || true
 	@pkill -9 -f "uvicorn planner.api.app:app" 2>/dev/null || true
 	@printf "$(GREEN)✓ All Planner services stopped$(NC)\n"
-	@# Don't stop Ollama or DB as they might be used by other apps/tools
+	@# Don't stop Ollama as it might be used by other apps/tools
 	@if [ "$(MAKECMDGOALS)" != "stop-all" ]; then \
-		printf "$(YELLOW)Note: Ollama and PostgreSQL left running (use 'make stop-all' to stop everything)$(NC)\n"; \
+		printf "$(YELLOW)Note: Ollama left running (use 'make stop-all' to stop everything)$(NC)\n"; \
 	fi
 
 restart: stop start ## Restart all services
 
-stop-all: stop db-stop ## Stop everything (Backend + UI + Ollama + DB)
+stop-all: stop ## Stop everything (Backend + UI + Ollama)
 	@pkill -x ollama 2>/dev/null || true
 	@printf "$(GREEN)✓ Ollama stopped$(NC)\n"
 	@printf "$(GREEN)✓ All services and infrastructure stopped$(NC)\n"
@@ -356,7 +352,6 @@ docker-up: ## Start all services with Docker Compose
 	@printf "  UI:        http://localhost:8501\n"
 	@printf "  Backend:   http://localhost:8000\n"
 	@printf "  API Docs:  http://localhost:8000/docs\n"
-	@printf "  PostgreSQL: localhost:5432\n"
 	@printf "  Ollama:    http://localhost:11434\n"
 	@printf "\n"
 	@printf "$(BLUE)Logs:$(NC)\n"
@@ -419,87 +414,60 @@ clean-deployments: ## Delete all InferenceServices from cluster
 
 ##@ Data
 
-db-start: ## Start PostgreSQL (initializes schema on first run)
-	@printf "$(BLUE)Starting PostgreSQL...$(NC)\n"
-	@if $(CONTAINER_TOOL) ps -a --format '{{.Names}}' | grep -q '^planner-postgres$$'; then \
-		if $(CONTAINER_TOOL) ps --format '{{.Names}}' | grep -q '^planner-postgres$$'; then \
-			printf "$(YELLOW)PostgreSQL already running$(NC)\n"; \
-		else \
-			$(CONTAINER_TOOL) start planner-postgres; \
-			sleep 2; \
-			printf "$(GREEN)✓ PostgreSQL started$(NC)\n"; \
-		fi \
+DB_PATH ?= data/planner.db
+
+db-start: ## Initialize database (creates file and applies schema if needed)
+	@printf "$(BLUE)Initializing database...$(NC)\n"
+	@mkdir -p $$(dirname $(DB_PATH))
+	@if [ -f $(DB_PATH) ]; then \
+		printf "$(YELLOW)Database already exists at $(DB_PATH)$(NC)\n"; \
 	else \
-		$(CONTAINER_TOOL) run --name planner-postgres -d \
-			-e POSTGRES_PASSWORD=planner \
-			-e POSTGRES_DB=planner \
-			-p 5432:5432 \
-			postgres:16; \
-		sleep 3; \
-		printf "$(GREEN)✓ PostgreSQL started on port 5432$(NC)\n"; \
-		printf "$(BLUE)Initializing database schema...$(NC)\n"; \
-		$(CONTAINER_TOOL) exec -i planner-postgres psql -U postgres -d planner < scripts/schema.sql; \
-		printf "$(GREEN)✓ Schema initialized$(NC)\n"; \
+		uv run python -c "from planner.knowledge_base.db import create_connection; import os; os.environ['PLANNER_DB_PATH'] = '$(DB_PATH)'; conn = create_connection(); conn.close(); print('Schema initialized')"; \
+		printf "$(GREEN)✓ Database created at $(DB_PATH)$(NC)\n"; \
 	fi
-	@BENCH_COUNT=$$($(CONTAINER_TOOL) exec -i planner-postgres psql -U postgres -d planner -t -c "SELECT COUNT(*) FROM exported_summaries;" 2>/dev/null | tr -d ' \n'); \
-	if [ "$$BENCH_COUNT" = "0" ] || [ -z "$$BENCH_COUNT" ]; then \
+	@BENCH_COUNT=$$(sqlite3 $(DB_PATH) "SELECT COUNT(*) FROM exported_summaries;" 2>/dev/null || echo "0"); \
+	if [ "$$BENCH_COUNT" = "0" ]; then \
 		printf "$(YELLOW)Note: Database is empty. Load benchmark data with one of:$(NC)\n"; \
 		printf "  make db-load-blis          # BLIS benchmark data\n"; \
 		printf "  make db-load-estimated     # Estimated performance data\n"; \
 		printf "  make db-load-interpolated  # Interpolated benchmark data\n"; \
 	fi
-	@printf "$(BLUE)Database URL:$(NC) postgresql://postgres:planner@localhost:5432/planner\n"
 
-db-stop: ## Stop PostgreSQL container
-	@printf "$(BLUE)Stopping PostgreSQL...$(NC)\n"
-	@$(CONTAINER_TOOL) stop planner-postgres 2>/dev/null || true
-	@printf "$(GREEN)✓ PostgreSQL stopped$(NC)\n"
-
-db-remove: db-stop ## Stop and remove PostgreSQL container
-	@printf "$(BLUE)Removing PostgreSQL container...$(NC)\n"
-	@$(CONTAINER_TOOL) rm planner-postgres 2>/dev/null || true
-	@printf "$(GREEN)✓ PostgreSQL container removed$(NC)\n"
+db-remove: ## Remove database file
+	@printf "$(BLUE)Removing database...$(NC)\n"
+	@rm -f $(DB_PATH) $(DB_PATH)-wal $(DB_PATH)-shm
+	@printf "$(GREEN)✓ Database removed$(NC)\n"
 
 db-load-blis: db-start ## Load BLIS benchmark data (appends)
 	@printf "$(BLUE)Loading BLIS benchmark data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json
 	@printf "$(GREEN)✓ BLIS data loaded$(NC)\n"
 
 db-load-estimated: db-start ## Load estimated performance benchmarks (appends)
 	@printf "$(BLUE)Loading estimated performance data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_estimated_performance.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_estimated_performance.json
 	@printf "$(GREEN)✓ Estimated data loaded$(NC)\n"
 
 db-load-interpolated: db-start ## Load interpolated benchmark data (appends)
 	@printf "$(BLUE)Loading interpolated benchmark data...$(NC)\n"
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_interpolated_v2.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_interpolated_v2.json
 	@printf "$(GREEN)✓ Interpolated data loaded$(NC)\n"
 
 db-load-guidellm: db-start ## Load GuideLLM benchmark data (appends)
 	@printf "$(BLUE)Loading GuideLLM benchmark data...$(NC)\n"
 	@if [ ! -f data/benchmarks/performance/benchmarks_GuideLLM.json ]; then \
 		printf "$(RED)✗ data/benchmarks/performance/benchmarks_GuideLLM.json not found$(NC)\n"; \
-		printf "$(YELLOW)Run 'make db-convert-pgdump' first to create it from a pg_dump file$(NC)\n"; \
 		exit 1; \
 	fi
-	@uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_GuideLLM.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_GuideLLM.json
 	@printf "$(GREEN)✓ GuideLLM data loaded$(NC)\n"
 
-db-convert-pgdump: db-start ## Convert PostgreSQL dump to JSON format
-	@printf "$(BLUE)Converting PostgreSQL dump to JSON...$(NC)\n"
-	@if [ ! -f $(PGDUMP_INPUT) ]; then \
-		printf "$(RED)✗ $(PGDUMP_INPUT) not found$(NC)\n"; \
-		exit 1; \
-	fi
-	@uv run python scripts/convert_pgdump_to_json.py $(PGDUMP_INPUT) -o $(PGDUMP_OUTPUT)
-	@printf "$(GREEN)✓ Created $(PGDUMP_OUTPUT)$(NC)\n"
-
-db-shell: ## Open PostgreSQL shell
-	@$(CONTAINER_TOOL) exec -it planner-postgres psql -U postgres -d planner
+db-shell: ## Open database shell
+	@sqlite3 $(DB_PATH)
 
 db-query-traffic: ## Query unique traffic patterns from database
 	@printf "$(BLUE)Querying unique traffic patterns...$(NC)\n"
-	@$(CONTAINER_TOOL) exec -i planner-postgres psql -U postgres -d planner -c \
+	@sqlite3 -header -column $(DB_PATH) \
 		"SELECT prompt_tokens, output_tokens, COUNT(*) as num_benchmarks \
 		FROM exported_summaries \
 		GROUP BY prompt_tokens, output_tokens \
@@ -507,14 +475,16 @@ db-query-traffic: ## Query unique traffic patterns from database
 
 db-query-models: ## Query available models in database
 	@printf "$(BLUE)Querying available models...$(NC)\n"
-	@$(CONTAINER_TOOL) exec -i planner-postgres psql -U postgres -d planner -c \
-		"SELECT DISTINCT model_hf_repo, hardware, hardware_count, COUNT(*) as num_benchmarks \
+	@sqlite3 -header -column $(DB_PATH) \
+		"SELECT model_hf_repo, hardware, hardware_count, COUNT(*) as num_benchmarks \
 		FROM exported_summaries \
 		GROUP BY model_hf_repo, hardware, hardware_count \
 		ORDER BY model_hf_repo, hardware, hardware_count;"
 
-db-reset: db-remove db-start ## Reset PostgreSQL (remove and reinitialize)
-	@printf "$(GREEN)✓ PostgreSQL reset complete$(NC)\n"
+db-reset: db-start ## Reset database (clear all benchmark data, safe while backend is running)
+	@printf "$(BLUE)Clearing benchmark data...$(NC)\n"
+	@sqlite3 $(DB_PATH) "DELETE FROM exported_summaries;"
+	@printf "$(GREEN)✓ Database reset complete$(NC)\n"
 
 quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
 	@printf "$(BLUE)Syncing Arena leaderboard (no API key needed)...$(NC)\n"
@@ -531,16 +501,12 @@ quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
 
 ##@ Testing
 
-test: test-unit test-db test-integration ## Run all tests (requires DB and Ollama)
+test: test-unit test-integration ## Run all tests (requires Ollama)
 	@printf "$(GREEN)✓ All tests passed$(NC)\n"
 
-test-unit: ## Run unit tests (no DB or Ollama required)
+test-unit: ## Run unit tests (no Ollama required)
 	@printf "$(BLUE)Running unit tests...$(NC)\n"
-	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m "not database and not integration and not intent_extraction"
-
-test-db: ## Run database tests (requires PostgreSQL with benchmark data)
-	@printf "$(BLUE)Running database tests...$(NC)\n"
-	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m database
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m "not integration and not intent_extraction"
 
 test-integration: setup-ollama ## Run integration tests (requires Ollama and DB)
 	@printf "$(BLUE)Running integration tests...$(NC)\n"

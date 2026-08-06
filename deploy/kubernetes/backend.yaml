@@ -36,13 +36,8 @@ spec:
             - configMapRef:
                 name: planner-config
           env:
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: planner-secrets
-                  key: postgres-password
-            - name: DATABASE_URL
-              value: postgresql://planner:$(POSTGRES_PASSWORD)@postgres:5432/planner
+            - name: PLANNER_DB_PATH
+              value: /app/db/planner.db
             - name: MODEL_CATALOG_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -117,6 +112,8 @@ spec:
             - name: CORS_ORIGINS
               value: "*"
           volumeMounts:
+            - name: planner-data
+              mountPath: /app/db
             - name: service-ca
               mountPath: /etc/pki/service-ca
               readOnly: true
@@ -142,6 +139,9 @@ spec:
               cpu: "2"
               memory: 2Gi
       volumes:
+        - name: planner-data
+          persistentVolumeClaim:
+            claimName: planner-data-pvc
         - name: service-ca
           configMap:
             name: planner-service-ca
@@ -161,3 +161,18 @@ spec:
   ports:
     - port: 8000
       targetPort: 8000
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: planner-data-pvc
+  namespace: planner
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: planner
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

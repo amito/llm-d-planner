@@ -143,7 +143,7 @@ integrated views:
 
 #### e. Configuration Tab (Database Management)
 
-- Upload benchmark JSON files into PostgreSQL (append mode, duplicates skipped)
+- Upload benchmark JSON files into the database (append mode, duplicates skipped)
 - Reset the benchmark database (removes all benchmark data, preserves schema)
 - View database statistics: total benchmarks, distinct models, hardware types,
   traffic profile distribution
@@ -458,8 +458,7 @@ components:
 
 **Technology**: Hybrid storage approach
 
-- **Embedded Database**: Benchmark data and deployment outcomes (currently
-  PostgreSQL, migrating to DuckDB or SQLite for simpler deployment)
+- **Embedded Database**: Benchmark data and deployment outcomes (SQLite)
 - **JSON files**: Configuration as code (SLO templates, model catalog, hardware
   profiles)
 - **Data Management**: Benchmark data can be loaded, inspected, and reset via

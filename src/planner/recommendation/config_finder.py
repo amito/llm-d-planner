@@ -1,6 +1,6 @@
 """Capacity planning and GPU configuration recommendation.
 
-IMPORTANT: PostgreSQL Migration (Phase 1):
+IMPORTANT: Database Implementation (Phase 1):
 - Uses traffic profile-based exact matching on (prompt_tokens, output_tokens)
 - Queries benchmarks by exact traffic profile (512→256, 1024→1024, 4096→512, 10240→1536)
 - Filters by p95 SLO compliance (TTFT, ITL, E2E)
@@ -53,7 +53,7 @@ class ConfigFinder:
         Initialize capacity planner.
 
         Args:
-            benchmark_repo: PostgreSQL benchmark repository.
+            benchmark_repo: Benchmark repository for database queries.
             catalog: Model catalog
             engine: ScoringEngine for quality scoring (from quality_scoring package)
             quality_weights: Use-case category weights dict loaded from quality_weights.json
@@ -230,7 +230,7 @@ class ConfigFinder:
         # so we can fall back to all GPUs if cluster GPUs have no benchmark data.
         gpu_filter_from_cluster = bool(cluster_gpu_types) and not normalized_user_gpus
 
-        # Query PostgreSQL for configurations meeting relaxed SLO targets
+        # Query benchmark database for configurations meeting relaxed SLO targets
         matching_configs = self.benchmark_repo.find_configurations_meeting_slo(
             prompt_tokens=traffic_profile.prompt_tokens,
             output_tokens=traffic_profile.output_tokens,

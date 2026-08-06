@@ -1,7 +1,6 @@
-"""
-Benchmark data loading utilities.
+"""Benchmark data loading utilities.
 
-Provides functions for loading benchmark JSON data into PostgreSQL.
+Provides functions for loading benchmark JSON data into the database.
 Used by both the scripts/load_benchmarks.py CLI tool and the
 /api/v1/db/* API endpoints.
 """
@@ -10,9 +9,8 @@ import hashlib
 import logging
 import uuid
 from datetime import datetime
-from pathlib import Path
 
-from psycopg2.extras import RealDictCursor, execute_batch
+from planner.knowledge_base.db import find_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -37,22 +35,18 @@ def normalize_benchmark_fields(benchmark: dict) -> dict:
     """
     normalized = benchmark.copy()
 
-    # Map model_id -> model_hf_repo (estimated/interpolated files)
     if "model_hf_repo" not in normalized and "model_id" in normalized:
         normalized["model_hf_repo"] = normalized["model_id"]
 
-    # Map hardware_type or gpu_type -> hardware (interpolated file)
     if "hardware" not in normalized:
         if "hardware_type" in normalized:
             normalized["hardware"] = normalized["hardware_type"]
         elif "gpu_type" in normalized:
             normalized["hardware"] = normalized["gpu_type"]
 
-    # Map tokens_per_second_mean -> tokens_per_second (estimated files)
     if "tokens_per_second" not in normalized and "tokens_per_second_mean" in normalized:
         normalized["tokens_per_second"] = normalized["tokens_per_second_mean"]
 
-    # Map mean_input_tokens/mean_output_tokens from prompt_tokens/output_tokens if missing
     if "mean_input_tokens" not in normalized and "prompt_tokens" in normalized:
         normalized["mean_input_tokens"] = normalized["prompt_tokens"]
     if "mean_output_tokens" not in normalized and "output_tokens" in normalized:
@@ -74,27 +68,24 @@ def prepare_benchmark_for_insert(
     Args:
         benchmark: Raw benchmark dict (from JSON file or estimation output).
         source: Data source identifier, e.g. 'blis', 'llm-optimizer'.
-        confidence_level: Trust level — 'benchmarked' or 'estimated'.
+        confidence_level: Trust level -- 'benchmarked' or 'estimated'.
 
     Returns:
         Dict ready for insertion into exported_summaries.
     """
-    # First normalize field names from different JSON formats
     prepared = normalize_benchmark_fields(benchmark)
 
-    # Generate UUID and config_id
     prepared["id"] = str(uuid.uuid4())
     prepared["config_id"] = generate_config_id(prepared)
 
-    # Add required fields with defaults (matching real data schema)
-    prepared["type"] = "local"  # benchmark type
-    prepared["provider"] = None  # Optional field
-    prepared["jbenchmark_created_at"] = datetime.now()
-    prepared["created_at"] = datetime.now()
-    prepared["updated_at"] = datetime.now()
-    prepared["loaded_at"] = None  # Optional field
+    now = datetime.now().isoformat()
+    prepared.setdefault("type", "local")
+    prepared["provider"] = None
+    prepared["jbenchmark_created_at"] = now
+    prepared["created_at"] = now
+    prepared["updated_at"] = now
+    prepared["loaded_at"] = None
 
-    # Optional fields that may not be in all JSON formats
     prepared.setdefault("framework", None)
     prepared.setdefault("framework_version", None)
     prepared.setdefault("huggingface_prompt_dataset", None)
@@ -121,67 +112,81 @@ def prepare_benchmark_for_insert(
     return prepared
 
 
-# The INSERT query used by insert_benchmarks()
-_INSERT_QUERY = """
-    INSERT INTO exported_summaries (
-        id, config_id, model_hf_repo, provider, type,
-        ttft_mean, ttft_p90, ttft_p95, ttft_p99,
-        e2e_mean, e2e_p90, e2e_p95, e2e_p99,
-        itl_mean, itl_p90, itl_p95, itl_p99,
-        tps_mean, tps_p90, tps_p95, tps_p99,
-        hardware, hardware_count, framework,
-        requests_per_second, responses_per_second, tokens_per_second,
-        mean_input_tokens, mean_output_tokens,
-        huggingface_prompt_dataset, jbenchmark_created_at,
-        entrypoint, docker_image, framework_version,
-        created_at, updated_at, loaded_at,
-        prompt_tokens, prompt_tokens_stdev, prompt_tokens_min, prompt_tokens_max,
-        output_tokens, output_tokens_min, output_tokens_max, output_tokens_stdev,
-        profiler_type, profiler_image, profiler_tag,
-        source, confidence_level, model_uri
-    ) VALUES (
-        %(id)s, %(config_id)s, %(model_hf_repo)s, %(provider)s, %(type)s,
-        %(ttft_mean)s, %(ttft_p90)s, %(ttft_p95)s, %(ttft_p99)s,
-        %(e2e_mean)s, %(e2e_p90)s, %(e2e_p95)s, %(e2e_p99)s,
-        %(itl_mean)s, %(itl_p90)s, %(itl_p95)s, %(itl_p99)s,
-        %(tps_mean)s, %(tps_p90)s, %(tps_p95)s, %(tps_p99)s,
-        %(hardware)s, %(hardware_count)s, %(framework)s,
-        %(requests_per_second)s, %(responses_per_second)s, %(tokens_per_second)s,
-        %(mean_input_tokens)s, %(mean_output_tokens)s,
-        %(huggingface_prompt_dataset)s, %(jbenchmark_created_at)s,
-        %(entrypoint)s, %(docker_image)s, %(framework_version)s,
-        %(created_at)s, %(updated_at)s, %(loaded_at)s,
-        %(prompt_tokens)s, %(prompt_tokens_stdev)s, %(prompt_tokens_min)s, %(prompt_tokens_max)s,
-        %(output_tokens)s, %(output_tokens_min)s, %(output_tokens_max)s, %(output_tokens_stdev)s,
-        %(profiler_type)s, %(profiler_image)s, %(profiler_tag)s,
-        %(source)s, %(confidence_level)s, %(model_uri)s
-    )
-    ON CONFLICT (config_id) DO NOTHING;
-"""
+_INSERT_COLUMNS = [
+    "id",
+    "config_id",
+    "model_hf_repo",
+    "provider",
+    "type",
+    "ttft_mean",
+    "ttft_p90",
+    "ttft_p95",
+    "ttft_p99",
+    "e2e_mean",
+    "e2e_p90",
+    "e2e_p95",
+    "e2e_p99",
+    "itl_mean",
+    "itl_p90",
+    "itl_p95",
+    "itl_p99",
+    "tps_mean",
+    "tps_p90",
+    "tps_p95",
+    "tps_p99",
+    "hardware",
+    "hardware_count",
+    "framework",
+    "requests_per_second",
+    "responses_per_second",
+    "tokens_per_second",
+    "mean_input_tokens",
+    "mean_output_tokens",
+    "huggingface_prompt_dataset",
+    "jbenchmark_created_at",
+    "entrypoint",
+    "docker_image",
+    "framework_version",
+    "created_at",
+    "updated_at",
+    "loaded_at",
+    "prompt_tokens",
+    "prompt_tokens_stdev",
+    "prompt_tokens_min",
+    "prompt_tokens_max",
+    "output_tokens",
+    "output_tokens_min",
+    "output_tokens_max",
+    "output_tokens_stdev",
+    "profiler_type",
+    "profiler_image",
+    "profiler_tag",
+    "source",
+    "confidence_level",
+    "model_uri",
+]
+
+_INSERT_QUERY = (
+    f"INSERT INTO exported_summaries ({', '.join(_INSERT_COLUMNS)}) "
+    f"VALUES ({', '.join('?' for _ in _INSERT_COLUMNS)}) "
+    "ON CONFLICT (config_id) DO NOTHING"
+)
 
 
-def _find_project_root() -> Path:
-    path = Path(__file__).resolve()
-    for parent in path.parents:
-        if (parent / "pyproject.toml").exists():
-            return parent
-    raise FileNotFoundError("Could not find project root (no pyproject.toml found)")
-
-
-_SCHEMA_PATH = _find_project_root() / "scripts" / "schema.sql"
+_SCHEMA_PATH = find_project_root() / "scripts" / "schema.sql"
 
 
 def ensure_schema(conn) -> None:
     """Create the database schema if it doesn't already exist.
 
     Reads and executes scripts/schema.sql, which uses CREATE TABLE IF NOT EXISTS
-    and idempotent migrations throughout, so it's safe to call on every insert.
+    and CREATE INDEX IF NOT EXISTS throughout, so it's safe to call on every insert.
     """
     if not _SCHEMA_PATH.exists():
         logger.warning("schema.sql not found at %s, skipping schema init", _SCHEMA_PATH)
         return
     cursor = conn.cursor()
-    cursor.execute(_SCHEMA_PATH.read_text())
+    cursor.executescript(_SCHEMA_PATH.read_text())
     conn.commit()
     cursor.close()
     logger.info("Database schema ensured")
@@ -203,7 +208,7 @@ def extract_metadata(data: dict) -> dict:
     }
 
 
-def insert_benchmarks(
+def _insert_benchmarks(
     conn,
     benchmarks: list[dict],
     source: str = "local",
@@ -212,9 +217,10 @@ def insert_benchmarks(
     """Insert benchmarks into the database (append mode).
 
     Duplicates (same config_id) are silently skipped.
+    The caller is responsible for committing the transaction.
 
     Args:
-        conn: psycopg2 connection
+        conn: sqlite3 connection
         benchmarks: List of benchmark dicts from JSON
         source: Data source identifier (default: "local")
         confidence_level: Confidence level for the data (default: "estimated")
@@ -222,23 +228,20 @@ def insert_benchmarks(
     Returns:
         Dict with insertion stats: {inserted, total_in_db, stats}
     """
-    ensure_schema(conn)
-
     cursor = conn.cursor()
 
-    # Prepare benchmarks with required fields
     prepared_benchmarks = [
         prepare_benchmark_for_insert(b, source=source, confidence_level=confidence_level)
         for b in benchmarks
     ]
 
-    logger.info(f"Inserting {len(prepared_benchmarks)} benchmark records...")
-    execute_batch(cursor, _INSERT_QUERY, prepared_benchmarks, page_size=100)
-    conn.commit()
+    rows = [tuple(p[col] for col in _INSERT_COLUMNS) for p in prepared_benchmarks]
+
+    logger.info(f"Inserting {len(rows)} benchmark records...")
+    cursor.executemany(_INSERT_QUERY, rows)
 
     logger.info(f"Successfully processed {len(benchmarks)} benchmarks")
 
-    # Get updated stats
     stats = get_db_stats(conn)
     cursor.close()
     return stats
@@ -248,21 +251,23 @@ def get_db_stats(conn) -> dict:
     """Get current database statistics.
 
     Args:
-        conn: psycopg2 connection
+        conn: sqlite3 connection
 
     Returns:
         Dict with total_benchmarks, num_models, num_hardware_types,
         num_traffic_profiles, traffic_distribution
     """
-    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor = conn.cursor()
 
     cursor.execute("""
         SELECT
             COUNT(DISTINCT model_hf_repo) as num_models,
             COUNT(DISTINCT hardware) as num_hardware_types,
-            COUNT(DISTINCT (prompt_tokens, output_tokens)) as num_traffic_profiles,
+            (SELECT COUNT(*) FROM (
+                SELECT DISTINCT prompt_tokens, output_tokens FROM exported_summaries
+            )) as num_traffic_profiles,
             COUNT(*) as total_benchmarks
-        FROM exported_summaries;
+        FROM exported_summaries
     """)
     row = cursor.fetchone()
 
@@ -273,12 +278,11 @@ def get_db_stats(conn) -> dict:
         "total_benchmarks": row["total_benchmarks"] if row else 0,
     }
 
-    # Get traffic profile distribution
     cursor.execute("""
         SELECT prompt_tokens, output_tokens, COUNT(*) as num_benchmarks
         FROM exported_summaries
         GROUP BY prompt_tokens, output_tokens
-        ORDER BY prompt_tokens, output_tokens;
+        ORDER BY prompt_tokens, output_tokens
     """)
     stats["traffic_distribution"] = [
         {
@@ -306,20 +310,16 @@ def get_db_stats(conn) -> dict:
 
 
 def reset_benchmarks(conn) -> None:
-    """Reset the benchmark database by truncating all data.
+    """Reset the benchmark database by deleting all data.
 
-    Truncates exported_summaries (cascading to related tables)
-    and recreates the unique index on config_id.
+    Deletes all rows from exported_summaries. The schema and indexes
+    are preserved.
 
     Args:
-        conn: psycopg2 connection
+        conn: sqlite3 connection
     """
     cursor = conn.cursor()
-    cursor.execute("TRUNCATE exported_summaries CASCADE;")
-    cursor.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_config_id_unique
-        ON exported_summaries(config_id);
-    """)
+    cursor.execute("DELETE FROM exported_summaries")
     conn.commit()
     cursor.close()
     logger.info("Benchmark database reset complete")

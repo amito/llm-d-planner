@@ -47,7 +47,6 @@ Planner supports both **Docker** and **Podman** as container runtimes.
 
 | Component | Docker | Podman | Notes |
 |-----------|--------|--------|-------|
-| PostgreSQL (`db-*` targets) | ✅ | ✅ | Works with either |
 | Simulator build/push/pull | ✅ | ✅ | Works with either |
 | KIND cluster (`cluster-*` targets) | ✅ | ❌ | KIND requires Docker |
 | Docker Compose (`docker-*` targets) | ✅ | ⚠️ | Requires `podman-compose` |
@@ -115,21 +114,12 @@ Error: listen tcp :5432: bind: address already in use
 ```
 
 **To resolve:**
-1. Stop and remove the container in the other runtime:
+1. Check what's holding the port:
    ```bash
-   # If switching TO Podman, clean up Docker first:
-   docker stop planner-postgres && docker rm planner-postgres
-
-   # If switching TO Docker, clean up Podman first:
-   podman stop planner-postgres && podman rm planner-postgres
+   lsof -i :<PORT>
    ```
 
-2. If the port is still in use, check what's holding it:
-   ```bash
-   lsof -i :5432
-   ```
-
-3. You may need to restart Docker Desktop if it has a stale port binding.
+2. You may need to restart Docker Desktop if it has a stale port binding.
 
 #### Mixed Docker/Podman Setup
 
@@ -384,17 +374,6 @@ Test individual components without external dependencies:
 make test-unit
 ```
 
-### Database Tests
-
-Test PostgreSQL benchmark queries using an isolated `planner_test` database
-with static fixture data (your production database is never touched):
-
-```bash
-make test-db
-```
-
-Requires PostgreSQL running (`make db-start`).
-
 ### Integration Tests
 
 Test the full recommendation workflow including LLM-powered intent extraction:
@@ -403,7 +382,7 @@ Test the full recommendation workflow including LLM-powered intent extraction:
 make test-integration
 ```
 
-Requires Ollama running with `qwen2.5:7b` model and PostgreSQL.
+Requires Ollama running with `qwen2.5:7b` model.
 
 ### Run All Tests
 
@@ -411,7 +390,7 @@ Requires Ollama running with `qwen2.5:7b` model and PostgreSQL.
 make test
 ```
 
-Runs all three tiers: unit, database, and integration.
+Runs both unit and integration tests.
 
 ## Debugging
 
@@ -801,7 +780,7 @@ Then open http://localhost:8501 in your browser.
 ### Option 2: Test End-to-End Workflow
 
 Test the complete recommendation workflow with demo scenarios.
-Requires Ollama running with `qwen2.5:7b` and PostgreSQL with benchmark data:
+Requires Ollama running with `qwen2.5:7b` and database with benchmark data:
 
 ```bash
 uv run pytest tests/test_recommendation_workflow.py -v
@@ -1024,7 +1003,7 @@ Then deploy to a GPU-enabled cluster with:
 
 ### Quick Tests
 
-Requires Ollama running with `qwen2.5:7b` and PostgreSQL with benchmark data:
+Requires Ollama running with `qwen2.5:7b` and database with benchmark data:
 
 ```bash
 # Test end-to-end workflow

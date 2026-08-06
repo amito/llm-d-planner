@@ -6,7 +6,6 @@ This guide explains how to run Planner using Docker and Docker Compose.
 
 Planner is containerized into the following services:
 
-- **postgres**: PostgreSQL database for benchmarks and deployment outcomes
 - **ollama**: Ollama LLM service for intent extraction (qwen2.5:7b model)
 - **backend**: FastAPI REST API server
 - **ui**: Streamlit web interface
@@ -17,7 +16,7 @@ Planner is containerized into the following services:
 - Docker Engine 20.10+ or Docker Desktop
 - Docker Compose v2.0+
 - At least 8GB of RAM available for Docker
-- 10GB of free disk space (for Ollama models and PostgreSQL data)
+- 10GB of free disk space (for Ollama models)
 
 ## Quick Start
 
@@ -25,7 +24,7 @@ Planner is containerized into the following services:
 
 ### Production Mode
 
-Run the full stack (backend, UI, PostgreSQL, Ollama):
+Run the full stack (backend, UI, Ollama):
 
 ```bash
 # Build and start all services
@@ -171,20 +170,8 @@ make docker-ps
 ### Database Operations
 
 ```bash
-# Access PostgreSQL CLI
-docker-compose exec postgres psql -U planner -d planner
-
-# Run database migrations/scripts
-docker-compose exec postgres psql -U planner -d planner -f /scripts/schema.sql
-
-# Load benchmark data
-docker-compose exec backend python scripts/load_benchmarks.py
-
-# Backup database
-docker-compose exec postgres pg_dump -U planner planner > backup.sql
-
-# Restore database
-docker-compose exec -T postgres psql -U planner planner < backup.sql
+# Load benchmark data (runs inside backend container)
+docker-compose exec backend python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json
 ```
 
 ### Ollama Operations
@@ -207,11 +194,6 @@ docker-compose exec ollama ollama run qwen2.5:7b
 Create a `.env` file in the project root to customize configuration:
 
 ```env
-# Database Configuration
-POSTGRES_DB=planner
-POSTGRES_USER=planner
-POSTGRES_PASSWORD=your_secure_password
-
 # Ollama Configuration
 LLM_MODEL=qwen2.5:7b
 
@@ -232,7 +214,6 @@ Default port mappings (can be customized in docker-compose.yml):
 |-----------|----------------|-----------|
 | UI        | 8501           | 8501      |
 | Backend   | 8000           | 8000      |
-| PostgreSQL| 5432           | 5432      |
 | Ollama    | 11434          | 11434     |
 | Simulator | 8080           | 8080      |
 
@@ -288,9 +269,6 @@ docker-compose exec backend /bin/bash
 
 # UI container
 docker-compose exec ui /bin/bash
-
-# PostgreSQL container
-docker-compose exec postgres /bin/bash
 ```
 
 #### Check Service Health
@@ -316,10 +294,10 @@ All services communicate via a bridge network (`planner-network`):
 ┌─────────────────────────────────────────────┐
 │           planner-network (bridge)          │
 │                                             │
-│  ┌─────────┐    ┌─────────┐    ┌────────┐   │
-│  │   UI    │───▶│ Backend │───▶│Postgres│   │
-│  │ :8501   │    │  :8000  │    │ :5432  │   │
-│  └─────────┘    └────┬────┘    └────────┘   │
+│  ┌─────────┐    ┌─────────┐                 │
+│  │   UI    │───▶│ Backend │                 │
+│  │ :8501   │    │  :8000  │                 │
+│  └─────────┘    └────┬────┘                 │
 │                      │                      │
 │                      ▼                      │
 │                 ┌─────────┐                 │
@@ -327,10 +305,10 @@ All services communicate via a bridge network (`planner-network`):
 │                 │ :11434  │                 │
 │                 └─────────┘                 │
 └─────────────────────────────────────────────┘
-         │         │         │         │
-         ▼         ▼         ▼         ▼
-    localhost  localhost localhost localhost
-      :8501     :8000     :5432    :11434
+         │         │         │
+         ▼         ▼         ▼
+    localhost  localhost localhost
+      :8501     :8000     :11434
 ```
 
 ### Volume Mounts
@@ -341,7 +319,6 @@ All services communicate via a bridge network (`planner-network`):
 - `./data` → `/app/data`
 
 **Persistent Volumes** (data):
-- `postgres_data`: PostgreSQL database files
 - `ollama_data`: Ollama models and cache
 
 ## Troubleshooting
@@ -357,44 +334,13 @@ docker system prune  # Free up space
 **Check service logs:**
 ```bash
 docker-compose logs backend
-docker-compose logs postgres
+docker-compose logs ollama
 ```
 
 **Verify dependencies:**
 ```bash
 # Ensure Ollama model is downloaded
 docker-compose exec ollama ollama list
-
-# Verify database schema
-docker-compose exec postgres psql -U planner -c "\dt"
-```
-
-### Database Connection Errors
-
-**Ensure PostgreSQL is healthy:**
-```bash
-docker-compose ps postgres
-make docker-ps
-
-docker-compose logs postgres
-```
-
-**Test database connection:**
-```bash
-docker-compose exec postgres pg_isready -U planner
-```
-
-**Reset database (WARNING: deletes all data):**
-```bash
-# Using docker-compose
-docker-compose down -v
-docker-compose up -d postgres
-# Wait for PostgreSQL to initialize
-docker-compose up -d
-
-# Using Makefile (easier)
-make docker-down-v
-make docker-up
 ```
 
 ### Ollama Model Not Loading
@@ -443,10 +389,9 @@ docker stats
 
 Before deploying to production:
 
-- [ ] Change default PostgreSQL password
 - [ ] Use secrets management (Docker Swarm secrets or Kubernetes secrets)
 - [ ] Enable TLS/HTTPS with reverse proxy (nginx, traefik)
-- [ ] Configure firewall rules (restrict PostgreSQL port 5432)
+- [ ] Configure firewall rules
 - [ ] Set `DEBUG=false` in environment variables
 - [ ] Review CORS settings in backend
 - [ ] Enable authentication/authorization
@@ -485,7 +430,7 @@ server {
 **Recommended (Production)**:
 - 4+ CPU cores
 - 16GB RAM
-- 50GB disk space (for Ollama models + PostgreSQL data)
+- 50GB disk space (for Ollama models)
 
 ## Next Steps
 

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""
-Load benchmark data from benchmarks.json into PostgreSQL.
+"""Load benchmark data from JSON into the database.
 
-This script reads benchmark data from a JSON file
-and inserts it into the PostgreSQL exported_summaries table.
+This script reads benchmark data from a JSON file and inserts it
+into the exported_summaries table.
 
 Core loading logic lives in planner.knowledge_base.loader and is
 shared with the /api/v1/db/* API endpoints.
@@ -11,40 +10,15 @@ shared with the /api/v1/db/* API endpoints.
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
-import psycopg2
-
-from planner.knowledge_base.loader import extract_metadata, insert_benchmarks
-
-
-def get_db_connection():
-    """Create a connection to the PostgreSQL database."""
-    db_url = os.getenv("DATABASE_URL", "postgresql://postgres:planner@localhost:5432/planner")
-
-    try:
-        conn = psycopg2.connect(db_url)
-        return conn
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
-        print(f"Database URL: {db_url}")
-        print("\nMake sure PostgreSQL is running:")
-        print("  make db-start")
-        sys.exit(1)
+from planner.knowledge_base.benchmarks import BenchmarkRepository
+from planner.knowledge_base.loader import extract_metadata
 
 
 def load_benchmarks_json(json_file=None):
-    """Load benchmarks from JSON file.
-
-    Args:
-        json_file: Optional path to JSON file relative to project root.
-                  Defaults to "data/benchmarks/performance/benchmarks_BLIS.json" if not specified.
-
-    Returns:
-        Full parsed JSON dict (with metadata and benchmarks).
-    """
+    """Load benchmarks from JSON file."""
     if json_file:
         json_path = Path(__file__).parent.parent / json_file
     else:
@@ -66,17 +40,15 @@ def load_benchmarks_json(json_file=None):
 
 def main():
     """Main function."""
-    # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Load benchmark data into PostgreSQL")
+    parser = argparse.ArgumentParser(description="Load benchmark data into database")
     parser.add_argument("json_file", nargs="?", default=None, help="Path to benchmark JSON file")
     args = parser.parse_args()
 
     print("=" * 60)
-    print("Loading Benchmark Data into PostgreSQL")
+    print("Loading Benchmark Data")
     print("=" * 60)
     print()
 
-    # Load benchmarks from JSON
     data = load_benchmarks_json(args.json_file)
     benchmarks = data.get("benchmarks", [])
     print(f"Loaded {len(benchmarks)} benchmarks from JSON")
@@ -86,16 +58,13 @@ def main():
     confidence_level = meta["confidence_level"] or "estimated"
     print(f"  source: {source}, confidence_level: {confidence_level}")
 
-    # Connect to database
-    print("Connecting to PostgreSQL...")
-    conn = get_db_connection()
+    repo = BenchmarkRepository()
     print("Connected to database")
     print()
 
     try:
-        # Insert benchmarks using shared loader
-        stats = insert_benchmarks(
-            conn, benchmarks, source=source, confidence_level=confidence_level
+        stats = repo.load_benchmarks(
+            benchmarks, source=source, confidence_level=confidence_level
         )
 
         print("\nDatabase Statistics:")
@@ -110,10 +79,7 @@ def main():
 
     except Exception as e:
         print(f"\nError inserting benchmarks: {e}")
-        conn.rollback()
         sys.exit(1)
-    finally:
-        conn.close()
 
     print("\n" + "=" * 60)
     print("Load complete!")
@@ -122,7 +88,7 @@ def main():
     print("Next steps:")
     print("  make db-query-traffic  # View traffic patterns")
     print("  make db-query-models   # View available models")
-    print("  make db-shell          # Open PostgreSQL shell")
+    print("  make db-shell          # Open database shell")
 
 
 if __name__ == "__main__":

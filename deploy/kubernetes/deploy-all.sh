@@ -5,7 +5,6 @@ NAMESPACE="${PLANNER_NAMESPACE:-planner}"
 ENABLE_GPU="${PLANNER_ENABLE_GPU:-true}"
 LLM_PROVIDER="${LLM_PROVIDER:-ollama}"
 CLUSTER_ADMIN="${CLUSTER_ADMIN:-true}"
-DB_INIT="${DB_INIT:-false}"
 RENDERED_DIR="deploy/kubernetes/.rendered"
 trap "rm -rf \"$RENDERED_DIR\"" EXIT
 
@@ -83,7 +82,6 @@ fi
 APPLY_ARGS="-f $RENDERED_DIR/secrets.yaml \
   -f $RENDERED_DIR/configmap.yaml \
   -f $RENDERED_DIR/service-ca-configmap.yaml \
-  -f $RENDERED_DIR/postgres.yaml \
   -f $RENDERED_DIR/ui.yaml \
   -f $RENDERED_DIR/route.yaml"
 
@@ -148,7 +146,7 @@ if [ "$BENCHMARK_SOURCE" = "model_catalog" ]; then
     sleep 2
   done
 else
-  echo "Skipping Model Catalog network policy (benchmark source: ${BENCHMARK_SOURCE:-postgresql})"
+  echo "Skipping Model Catalog network policy (benchmark source: ${BENCHMARK_SOURCE:-database})"
   if [ "$CLUSTER_ADMIN" = "true" ]; then
     oc delete -f "$RENDERED_DIR/networkpolicy-model-catalog.yaml" --ignore-not-found
   fi
@@ -157,22 +155,5 @@ fi
 # Apply backend after prerequisites are ready
 echo "Deploying backend..."
 oc apply -f "$RENDERED_DIR/backend.yaml"
-
-if [ "$DB_INIT" = "true" ]; then
-  echo "Waiting for PostgreSQL to be ready..."
-  oc wait --for=condition=ready pod -l app.kubernetes.io/name=postgres -n "${NAMESPACE}" --timeout=120s
-
-  echo "Running database initialization job..."
-  # Delete previous job if it exists (jobs are immutable)
-  oc delete job db-init -n "${NAMESPACE}" --ignore-not-found
-  oc apply -f "$RENDERED_DIR/db-init-job.yaml"
-
-  echo "Waiting for db-init job to complete..."
-  oc wait --for=condition=complete job/db-init -n "${NAMESPACE}" --timeout=300s
-
-  echo "Database initialized."
-else
-  echo "Skipping database initialization (DB_INIT=${DB_INIT})"
-fi
 
 echo "Deployment complete."

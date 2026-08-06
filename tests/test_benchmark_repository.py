@@ -1,11 +1,9 @@
-"""Tests for PostgreSQL benchmark repository and SLO templates.
+"""Tests for benchmark repository and SLO templates.
 
-Database tests use a dedicated planner_test database with static fixture
-data (see conftest.py), so they work regardless of what production data
-is loaded.
+Uses a temporary SQLite database with static fixture data (see conftest.py).
 
 Tests cover:
-1. BenchmarkRepository - PostgreSQL connection and queries
+1. BenchmarkRepository - database connection and queries
 2. Traffic profile exact matching
 3. p95/ITL metric usage
 4. SLO filtering and compliance checking
@@ -19,19 +17,19 @@ from planner.knowledge_base.loader import get_db_stats
 from planner.knowledge_base.slo_templates import SLOTemplateRepository
 
 
-@pytest.mark.database
+@pytest.mark.unit
 class TestBenchmarkRepository:
-    """Tests for BenchmarkRepository with PostgreSQL backend."""
+    """Tests for BenchmarkRepository with database backend."""
 
     @pytest.fixture
-    def repo(self, test_db_url):
+    def repo(self, test_db_path):
         """Create a BenchmarkRepository connected to the test database."""
-        return BenchmarkRepository(database_url=test_db_url)
+        return BenchmarkRepository(db_path=test_db_path)
 
     def test_connection(self, repo):
-        """Test that we can connect to PostgreSQL."""
+        """Test that we can connect to the database."""
         assert repo is not None
-        assert repo.database_url is not None
+        assert repo._conn is not None
 
     def test_db_stats_include_benchmark_sources(self, repo):
         """Test that get_db_stats returns benchmark_sources from real data."""
@@ -261,14 +259,14 @@ class TestSLOTemplates:
             assert profile in expected_profiles, f"Unexpected profile: {profile}"
 
 
-@pytest.mark.database
+@pytest.mark.unit
 class TestTrafficProfileMatching:
     """Tests for traffic profile exact matching logic."""
 
     @pytest.fixture
-    def repo(self, test_db_url):
+    def repo(self, test_db_path):
         """Create a BenchmarkRepository connected to the test database."""
-        return BenchmarkRepository(database_url=test_db_url)
+        return BenchmarkRepository(db_path=test_db_path)
 
     def test_exact_match_512_256(self, repo):
         """Test exact match for (512, 256) traffic profile."""
@@ -311,14 +309,14 @@ class TestTrafficProfileMatching:
         assert benchmark is None
 
 
-@pytest.mark.database
+@pytest.mark.unit
 class TestE2ELatencyCalculation:
     """Tests for E2E latency (pre-calculated vs dynamic)."""
 
     @pytest.fixture
-    def repo(self, test_db_url):
+    def repo(self, test_db_path):
         """Create a BenchmarkRepository connected to the test database."""
-        return BenchmarkRepository(database_url=test_db_url)
+        return BenchmarkRepository(db_path=test_db_path)
 
     def test_e2e_precalculated_in_benchmarks(self, repo):
         """Test that E2E latency is pre-calculated in benchmark data."""

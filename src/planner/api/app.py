@@ -50,6 +50,8 @@ async def lifespan(app: FastAPI):
     # where init_app_state runs) to avoid cross-loop binding issues.
     app.state.cluster_manager_lock = asyncio.Lock()
     yield
+    if hasattr(app.state, "benchmark_repo"):
+        app.state.benchmark_repo.close()
 
 
 def create_app() -> FastAPI:

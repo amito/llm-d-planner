@@ -140,11 +140,10 @@ make cluster-start  # Optional: Create local KIND cluster with vLLM simulator fo
 
 Then open [http://localhost:8501](http://localhost:8501) in your browser.
 
-**Note**: PostgreSQL runs as a Docker container (`planner-postgres`) with
-benchmark data. All `db-load-*` commands append to existing data. Use `make
-db-reset` first for a clean database. Benchmark data can also be uploaded and
-managed via the UI's **Configuration** tab or the REST API
-(`/api/v1/db/upload-benchmarks`).
+**Note**: The embedded database (`data/planner.db`) stores benchmark data. All
+`db-load-*` commands append to existing data. Use `make db-reset` first for a
+clean database. Benchmark data can also be uploaded and managed via the UI's
+**Configuration** tab or the REST API (`/api/v1/db/upload-benchmarks`).
 
 **Stop everything:**
 
@@ -213,8 +212,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
   simulation
 - ✅ **Monitoring & Testing**: Real-time deployment status, inference testing UI,
   cluster observability
-- ✅ **Database Management**: PostgreSQL benchmark storage, upload/reset via REST
-  API or UI Configuration tab
+- ✅ **Database Management**: Embedded database benchmark storage, upload/reset
+  via REST API or UI Configuration tab
 
 ## Key Technologies
 
@@ -223,7 +222,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
 | Backend | FastAPI, Pydantic |
 | Frontend | Streamlit |
 | LLM | Ollama (qwen2.5:7b) |
-| Data | PostgreSQL |
+| Data | Embedded SQLite database |
 | Performance Estimation | BentoML llm-optimizer (roofline model) |
 | Model Configs | HuggingFace Hub API, transformers |
 | YAML Generation | Jinja2 templates |
@@ -270,14 +269,14 @@ make restart                 # Restart all services
 make logs-backend            # Show backend logs
 make logs-ui                 # Show UI logs
 
-# Database (PostgreSQL)
-make db-start                # Start PostgreSQL (initializes schema on first run)
+# Database
+make db-start                # Initialize database (creates file and applies schema if needed)
 make db-load-blis            # Load BLIS benchmark data (appends)
 make db-load-estimated       # Load estimated performance data (appends)
 make db-load-interpolated    # Load interpolated benchmark data (appends)
 make db-load-guidellm        # Load benchmark data created with GuideLLM (not included in repo yet) (appends)
 make db-reset                # Reset database (remove all data and reinitialize)
-make db-shell                # Open PostgreSQL shell
+make db-shell                # Open database shell
 make db-query-models         # Query available models in database
 make db-query-traffic        # Query traffic patterns in database
 
@@ -286,10 +285,9 @@ make cluster-status          # Check Kubernetes cluster status
 make clean-deployments       # Delete all InferenceServices
 
 # Testing
-make test                    # Run all tests (requires DB and Ollama)
+make test                    # Run all tests (requires Ollama)
 make test-unit               # Run unit tests (no external dependencies)
-make test-db                 # Run database tests (requires PostgreSQL)
-make test-integration        # Run integration tests (requires Ollama and DB)
+make test-integration        # Run integration tests (requires Ollama and database)
 
 make clean                   # Remove generated files
 ```
