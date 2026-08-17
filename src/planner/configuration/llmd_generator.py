@@ -19,7 +19,7 @@ from planner.configuration.utils import (
     validate_model_id,
     validate_namespace,
 )
-from planner.shared.schemas import DeploymentRecommendation
+from planner.shared.schemas import DeploymentConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +46,16 @@ class LlmdDeploymentGenerator:
 
     def _prepare_context(
         self,
-        recommendation: DeploymentRecommendation,
+        config: DeploymentConfiguration,
         deployment_id: str,
         namespace: str,
     ) -> dict[str, Any]:
-        """Prepare Jinja2 template context from recommendation."""
-        gpu_config = recommendation.gpu_config
-
-        model_id = recommendation.model_id or "unknown"
+        """Prepare Jinja2 template context from configuration."""
+        model_id = config.model_id
         validate_model_id(model_id)
         validate_namespace(namespace)
 
-        tensor_parallel = gpu_config.tensor_parallel if gpu_config else 1
+        tensor_parallel = config.gpu_config.tensor_parallel
 
         return {
             "deployment_id": deployment_id,
@@ -65,20 +63,20 @@ class LlmdDeploymentGenerator:
             "model_id": model_id,
             "tensor_parallel": tensor_parallel,
             "gpus_per_replica": tensor_parallel,
-            "replicas": gpu_config.replicas if gpu_config else 1,
+            "replicas": config.gpu_config.replicas,
         }
 
     def generate_all(
         self,
-        recommendation: DeploymentRecommendation,
+        config: DeploymentConfiguration,
         namespace: str = "default",
     ) -> dict[str, Any]:
         """Generate all llm-d deployment files.
 
         Returns a dict with: deployment_id, namespace, files, contents.
         """
-        deployment_id = generate_deployment_id(recommendation)
-        context = self._prepare_context(recommendation, deployment_id, namespace)
+        deployment_id = generate_deployment_id(config)
+        context = self._prepare_context(config, deployment_id, namespace)
 
         configs: list[tuple[str, str, str]] = [
             ("kustomization.yaml.j2", "modelserver/kustomization.yaml", "kustomization"),

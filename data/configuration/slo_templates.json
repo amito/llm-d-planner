@@ -8,7 +8,6 @@
         "prompt_tokens": 512,
         "output_tokens": 256
       },
-      "experience_class": "conversational",
       "slo_targets": {
         "ttft_p95_ms": 15000,
         "itl_p95_ms": 200,
@@ -28,7 +27,6 @@
         "prompt_tokens": 512,
         "output_tokens": 256
       },
-      "experience_class": "instant",
       "slo_targets": {
         "ttft_p95_ms": 15000,
         "itl_p95_ms": 200,
@@ -48,7 +46,6 @@
         "prompt_tokens": 1024,
         "output_tokens": 1024
       },
-      "experience_class": "interactive",
       "slo_targets": {
         "ttft_p95_ms": 1000,
         "itl_p95_ms": 500,
@@ -68,7 +65,6 @@
         "prompt_tokens": 512,
         "output_tokens": 256
       },
-      "experience_class": "interactive",
       "slo_targets": {
         "ttft_p95_ms": 15000,
         "itl_p95_ms": 200,
@@ -88,7 +84,6 @@
         "prompt_tokens": 512,
         "output_tokens": 256
       },
-      "experience_class": "interactive",
       "slo_targets": {
         "ttft_p95_ms": 15000,
         "itl_p95_ms": 200,
@@ -108,7 +103,6 @@
         "prompt_tokens": 4096,
         "output_tokens": 512
       },
-      "experience_class": "interactive",
       "slo_targets": {
         "ttft_p95_ms": 300000,
         "itl_p95_ms": 300,
@@ -128,7 +122,6 @@
         "prompt_tokens": 4096,
         "output_tokens": 512
       },
-      "experience_class": "interactive",
       "slo_targets": {
         "ttft_p95_ms": 300000,
         "itl_p95_ms": 300,
@@ -148,7 +141,6 @@
         "prompt_tokens": 10240,
         "output_tokens": 1536
       },
-      "experience_class": "deferred",
       "slo_targets": {
         "ttft_p95_ms": 2000,
         "itl_p95_ms": 500,
@@ -168,7 +160,6 @@
         "prompt_tokens": 10240,
         "output_tokens": 1536
       },
-      "experience_class": "deferred",
       "slo_targets": {
         "ttft_p95_ms": 2000,
         "itl_p95_ms": 500,

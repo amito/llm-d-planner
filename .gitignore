@@ -93,6 +93,11 @@ data/planner.db
 data/planner.db-wal
 data/planner.db-shm
 
+# Test database artifacts
+tests/**/*.db
+tests/**/*.db-wal
+tests/**/*.db-shm
+
 # Presentation images (large files, regeneratable)
 data/archive/presentation/
 

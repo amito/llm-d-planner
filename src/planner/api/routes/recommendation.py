@@ -1,255 +1,125 @@
 """Recommendation endpoints."""
 
 import logging
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel
 
-from planner.api.dependencies import get_deployment_generator, get_workflow
-from planner.configuration import DeploymentGenerator
+from planner.api.dependencies import get_workflow
 from planner.orchestration.workflow import RecommendationWorkflow
-from planner.shared.schemas import DeploymentRecommendation
+from planner.shared.schemas.specification import DeploymentSpecification
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["recommendation"])
 
 
-class SimpleRecommendationRequest(BaseModel):
-    """Simple request for deployment recommendation (UI compatibility)."""
+class RecommendationRequest(BaseModel):
+    """Request for ranked recommendations from a DeploymentSpecification."""
 
-    message: str
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "specification": {
+                        "intent": {
+                            "use_case": "chatbot_conversational",
+                            "user_count": 1000,
+                            "domain_specialization": ["general"],
+                            "preferred_gpu_types": [],
+                            "preferred_models": [],
+                            "quality_priority": "medium",
+                            "cost_priority": "medium",
+                            "latency_priority": "high",
+                        },
+                        "slo_targets": {
+                            "ttft_target_ms": 200,
+                            "itl_target_ms": 24,
+                            "e2e_target_ms": 6280,
+                            "percentile": "p95",
+                            "ttft_range": {"min": 100, "max": 500},
+                            "itl_range": {"min": 15, "max": 50},
+                            "e2e_range": {"min": 3940, "max": 13300},
+                        },
+                        "workload_profile": {
+                            "prompt_tokens": 512,
+                            "output_tokens": 256,
+                            "expected_qps": 0.87,
+                        },
+                        "quality_weights": {
+                            "categories": {
+                                "overall": 4,
+                                "instruction_following": 3,
+                                "multi_turn": 3,
+                                "creative_writing": 2,
+                                "hard_prompts": 2,
+                            }
+                        },
+                        "priorities": {
+                            "quality": {"priority": "medium", "weight": 4},
+                            "cost": {"priority": "medium", "weight": 4},
+                            "latency": {"priority": "high", "weight": 2},
+                        },
+                    },
+                    "enable_estimated": True,
+                    "min_quality": 50.0,
+                    "max_cost": 10000.0,
+                    "include_near_miss": True,
+                }
+            ]
+        }
+    }
 
-
-class BalancedWeights(BaseModel):
-    """Weights for balanced score calculation (0-10 scale)."""
-
-    quality: int = Field(default=4, ge=0)
-    price: int = Field(default=4, ge=0)
-    latency: int = Field(default=1, ge=0)
-
-    @model_validator(mode="after")
-    def at_least_one_positive(self) -> "BalancedWeights":
-        if self.quality == 0 and self.price == 0 and self.latency == 0:
-            raise ValueError("At least one weight must be positive.")
-        return self
-
-
-class RankedRecommendationFromSpecRequest(BaseModel):
-    """Request for ranked recommendations from pre-built specification.
-
-    Used when UI has already extracted/edited the specification and wants
-    ranked recommendations without re-running intent extraction.
-    """
-
-    # Intent fields
-    use_case: str
-    user_count: int
-    preferred_gpu_types: list[str] | None = None  # GPU filter list (empty/None = any GPU)
-
-    # Traffic profile fields
-    prompt_tokens: int
-    output_tokens: int
-    expected_qps: float
-
-    # SLO target fields (required - explicit SLOs must always be provided)
-    ttft_target_ms: int
-    itl_target_ms: int
-    e2e_target_ms: int
-    percentile: Literal["mean", "p90", "p95", "p99"] = "p95"
-
-    # Model preferences
-    preferred_models: list[str] | None = None  # User-specified HF model IDs
-
-    # Estimated performance
-    enable_estimated: bool = True  # Run roofline estimation for missing benchmarks
-
-    # Ranking options
+    specification: DeploymentSpecification
+    enable_estimated: bool = True
     min_quality: float | None = None
     max_cost: float | None = None
     include_near_miss: bool = True
-    weights: BalancedWeights | None = None
 
 
-@router.post("/recommend")
-def simple_recommend(
-    request: SimpleRecommendationRequest,
-    workflow: RecommendationWorkflow = Depends(get_workflow),
-    deployment_generator: DeploymentGenerator = Depends(get_deployment_generator),
-):
-    """
-    Simplified recommendation endpoint for UI compatibility.
-
-    Args:
-        request: Simple request with message field
-
-    Returns:
-        Recommendation as JSON dict with auto-generated YAML
-    """
-    try:
-        logger.info(f"Received UI recommendation request: {request.message[:100]}...")
-
-        # Always generate specification first (this cannot fail)
-        specification = workflow.generate_specification(
-            user_message=request.message, conversation_history=None
-        )[0]
-
-        # Try to find viable recommendations
-        try:
-            recommendation = workflow.generate_recommendation(
-                user_message=request.message, conversation_history=None
-            )
-
-            # Auto-generate deployment YAML
-            try:
-                yaml_result = deployment_generator.generate_all(
-                    recommendation=recommendation, namespace="default"
-                )
-                deployment_id = yaml_result["deployment_id"]
-                yaml_contents: dict = yaml_result["contents"]
-                logger.info(
-                    f"Auto-generated YAML for {deployment_id}: {list(yaml_contents.keys())}"
-                )
-                yaml_generated = True
-            except Exception as yaml_error:
-                logger.warning(f"Failed to auto-generate YAML: {yaml_error}")
-                deployment_id = None
-                yaml_contents = {}
-                yaml_generated = False
-
-            # Return recommendation as dict with YAML info
-            result = recommendation.model_dump()
-            result["deployment_id"] = deployment_id
-            result["yaml_generated"] = yaml_generated
-            result["yaml_files"] = yaml_contents
-
-            return result
-
-        except ValueError as e:
-            # No viable configurations found - return specification only
-            logger.warning(f"No viable configurations found: {e}")
-
-            partial_recommendation = DeploymentRecommendation(
-                intent=specification.intent,
-                traffic_profile=specification.traffic_profile,
-                slo_targets=specification.slo_targets,
-                model_id=None,
-                model_name=None,
-                model_uri=None,
-                gpu_config=None,
-                predicted_ttft_p95_ms=None,
-                predicted_itl_p95_ms=None,
-                predicted_e2e_p95_ms=None,
-                predicted_throughput_qps=None,
-                cost_per_hour_usd=None,
-                cost_per_month_usd=None,
-                meets_slo=False,
-                reasoning=str(e),
-                alternative_options=None,
-            )
-
-            result = partial_recommendation.model_dump()
-            result["deployment_id"] = None
-            result["yaml_generated"] = False
-            result["yaml_files"] = {}
-
-            return result
-
-    except Exception as e:
-        logger.error(f"Failed to generate recommendation: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate recommendation: {str(e)}",
-        ) from e
-
-
-@router.post("/ranked-recommend-from-spec")
-def ranked_recommend_from_spec(
-    request: RankedRecommendationFromSpecRequest,
+@router.post("/generate-recommendations")
+def generate_recommendations(
+    request: RecommendationRequest,
     workflow: RecommendationWorkflow = Depends(get_workflow),
 ):
     """
-    Generate ranked recommendations from pre-built specification.
+    Generate ranked recommendations from a DeploymentSpecification.
 
-    This endpoint is optimized for the UI workflow where specifications
-    have already been extracted and potentially edited by the user.
-    Skips intent extraction and uses provided specs directly.
-
-    Returns 4 ranked views of deployment configurations:
-    - balanced: Weighted composite score
+    Accepts a structured specification (output of /generate-specification)
+    and returns 4 ranked views of deployment configurations:
+    - balanced: Weighted composite score using priorities from spec
     - best_quality: Top configs by model capability
     - lowest_cost: Top configs by price efficiency
     - lowest_latency: Top configs by SLO headroom
 
     Args:
-        request: Request with pre-built specification and optional filters
+        request: Request with DeploymentSpecification and optional filters
 
     Returns:
-        RankedRecommendationsResponse with 4 ranked lists
+        RankedRecommendations with 4 ranked lists
     """
     try:
-        # Log complete request for debugging
-        logger.info("=" * 60)
-        logger.info("RANKED-RECOMMEND-FROM-SPEC REQUEST")
-        logger.info("=" * 60)
-        logger.info(f"  use_case: {request.use_case}")
-        logger.info(f"  user_count: {request.user_count}")
-        logger.info(f"  preferred_gpu_types: {request.preferred_gpu_types}")
-        logger.info(f"  preferred_models: {request.preferred_models}")
-        logger.info(f"  prompt_tokens: {request.prompt_tokens}")
-        logger.info(f"  output_tokens: {request.output_tokens}")
-        logger.info(f"  expected_qps: {request.expected_qps}")
-        logger.info(f"  percentile: {request.percentile}")
-        logger.info(f"  ttft_target_ms: {request.ttft_target_ms}ms")
-        logger.info(f"  itl_target_ms: {request.itl_target_ms}ms")
-        logger.info(f"  e2e_target_ms: {request.e2e_target_ms}ms")
-        logger.info(f"  min_quality: {request.min_quality}")
-        logger.info(f"  max_cost: {request.max_cost}")
-        logger.info(f"  include_near_miss: {request.include_near_miss}")
-        logger.info(f"  enable_estimated: {request.enable_estimated}")
-        if request.weights:
-            logger.info(
-                f"  weights: quality={request.weights.quality}, price={request.weights.price}, "
-                f"latency={request.weights.latency}"
-            )
-        else:
-            logger.info("  weights: None (using defaults)")
-        logger.info("=" * 60)
+        spec = request.specification
 
-        # Build specifications dict for workflow
+        # Build specifications dict for workflow (existing interface)
         specifications = {
-            "intent": {
-                "use_case": request.use_case,
-                "user_count": request.user_count,
-                "domain_specialization": ["general"],
-                "preferred_gpu_types": request.preferred_gpu_types or [],
-                "preferred_models": request.preferred_models or [],
-            },
+            "intent": spec.intent.model_dump(),
             "traffic_profile": {
-                "prompt_tokens": request.prompt_tokens,
-                "output_tokens": request.output_tokens,
-                "expected_qps": request.expected_qps,
+                "prompt_tokens": spec.workload_profile.prompt_tokens,
+                "output_tokens": spec.workload_profile.output_tokens,
+                "expected_qps": spec.workload_profile.expected_qps,
             },
-            "slo_targets": {
-                "ttft_p95_target_ms": request.ttft_target_ms,
-                "itl_p95_target_ms": request.itl_target_ms,
-                "e2e_p95_target_ms": request.e2e_target_ms,
-                "percentile": request.percentile,
-            },
+            "slo_targets": spec.slo_targets.model_dump(),
         }
 
-        # Convert weights to dict for workflow
-        weights_dict = None
-        if request.weights:
-            weights_dict = {
-                "quality": request.weights.quality,
-                "price": request.weights.price,
-                "latency": request.weights.latency,
-            }
+        # Weights from specification priorities
+        weights_dict = {
+            "quality": spec.priorities.quality.weight,
+            "price": spec.priorities.cost.weight,
+            "latency": spec.priorities.latency.weight,
+        }
 
-        # Generate ranked recommendations from specs
-        response = workflow.generate_ranked_recommendations_from_spec(
+        response = workflow.generate_recommendations(
             specifications=specifications,
             min_quality=request.min_quality,
             max_cost=request.max_cost,
@@ -258,47 +128,12 @@ def ranked_recommend_from_spec(
             enable_estimated=request.enable_estimated,
         )
 
-        logger.info(
-            f"Ranked recommendation from spec complete: {response.total_configs_evaluated} configs, "
-            f"{response.configs_after_filters} after filters"
-        )
-
-        return response.model_dump()
+        response.specification = spec
+        return response
 
     except Exception as e:
-        logger.error(f"Failed to generate ranked recommendations from spec: {e}", exc_info=True)
+        logger.error(f"Failed to generate recommendations: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate ranked recommendations: {str(e)}",
+            detail=f"Failed to generate recommendations: {str(e)}",
         ) from e
-
-
-@router.post("/test")
-async def test_endpoint(
-    workflow: RecommendationWorkflow = Depends(get_workflow),
-    message: str = "I need a chatbot for 1000 users",
-):
-    """
-    Quick test endpoint for validation.
-
-    Args:
-        message: Test message (optional)
-
-    Returns:
-        Simplified recommendation
-    """
-    try:
-        recommendation = workflow.generate_recommendation(message)
-
-        return {
-            "success": True,
-            "model": recommendation.model_name,
-            "gpu_config": f"{recommendation.gpu_config.gpu_count}x {recommendation.gpu_config.gpu_type}"
-            if recommendation.gpu_config
-            else "N/A",
-            "cost_per_month": f"${recommendation.cost_per_month_usd:.2f}",
-            "meets_slo": recommendation.meets_slo,
-            "reasoning": recommendation.reasoning,
-        }
-    except Exception as e:
-        return {"success": False, "error": str(e)}

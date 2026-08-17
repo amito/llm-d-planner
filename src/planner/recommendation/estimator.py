@@ -232,9 +232,9 @@ def generate_estimated_configs(
                             output_len=traffic_profile.output_tokens,
                             max_gpus=tp,
                             gpu_list=[roofline_gpu],
-                            max_ttft=slo_targets.ttft_p95_target_ms,
-                            max_itl=slo_targets.itl_p95_target_ms,
-                            max_latency=slo_targets.e2e_p95_target_ms / 1000,
+                            max_ttft=slo_targets.ttft_target_ms,
+                            max_itl=slo_targets.itl_target_ms,
+                            max_latency=slo_targets.e2e_target_ms / 1000,
                             catalog=catalog,
                         )
                         gpu_results, failed_gpus = recommender.get_gpu_results()

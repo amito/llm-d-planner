@@ -13,7 +13,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from planner.configuration.utils import generate_deployment_id as _generate_deployment_id
 from planner.knowledge_base.model_catalog import ModelCatalog
-from planner.shared.schemas import DeploymentRecommendation
+from planner.shared.schemas import DeploymentConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +59,13 @@ class DeploymentGenerator:
             f"DeploymentGenerator initialized with output_dir: {self.output_dir}, simulator_mode: {simulator_mode}"
         )
 
-    def generate_deployment_id(self, recommendation: DeploymentRecommendation) -> str:
+    def generate_deployment_id(self, config: DeploymentConfiguration) -> str:
         """Generate a unique deployment ID that meets Kubernetes naming requirements."""
-        return _generate_deployment_id(recommendation)
+        return _generate_deployment_id(config)
 
     def _prepare_template_context(
         self,
-        recommendation: DeploymentRecommendation,
+        config: DeploymentConfiguration,
         deployment_id: str,
         namespace: str = "default",
     ) -> dict[str, Any]:
@@ -73,19 +73,14 @@ class DeploymentGenerator:
         Prepare context dictionary for Jinja2 templates.
 
         Args:
-            recommendation: Deployment recommendation
+            config: Deployment configuration
             deployment_id: Generated deployment ID
             namespace: Kubernetes namespace
 
         Returns:
             Context dictionary with all template variables
         """
-        gpu_config = recommendation.gpu_config
-        traffic = recommendation.traffic_profile
-        slo = recommendation.slo_targets
-
-        if gpu_config is None:
-            raise ValueError("gpu_config is required for template context")
+        gpu_config = config.gpu_config
 
         # Look up GPU info from ModelCatalog
         gpu_info = self._catalog.get_gpu_type(gpu_config.gpu_type)
@@ -129,31 +124,29 @@ class DeploymentGenerator:
             "long_document_summarization": 16384,
             "research_legal_analysis": 16384,
         }
-        max_model_len = max_model_len_map.get(recommendation.intent.use_case, 4096)
-        if recommendation.intent.use_case not in max_model_len_map:
+        max_model_len = max_model_len_map.get(config.use_case, 4096)
+        if config.use_case not in max_model_len_map:
             logger.warning(
-                f"Unknown use_case '{recommendation.intent.use_case}' for max_model_len, "
-                f"falling back to 4096"
+                f"Unknown use_case '{config.use_case}' for max_model_len, falling back to 4096"
             )
 
         # Calculate max_num_seqs based on expected QPS and latency
         # Rule of thumb: concurrent requests = QPS × avg_latency_seconds
-        avg_latency_sec = slo.e2e_p95_target_ms / 1000.0
-        expected_qps = traffic.expected_qps or 0.0
+        avg_latency_sec = config.e2e_target_ms / 1000.0
+        expected_qps = config.expected_qps
         max_num_seqs = max(32, int(expected_qps * avg_latency_sec * 1.5))
 
         # Max batched tokens (vLLM parameter)
-        max_num_batched_tokens = max_num_seqs * (traffic.prompt_tokens + traffic.output_tokens)
+        max_num_batched_tokens = max_num_seqs * (config.prompt_tokens + config.output_tokens)
 
         context = {
             # Deployment metadata
             "deployment_id": deployment_id,
             "namespace": namespace,
-            "model_id": recommendation.model_id,
-            "model_name": recommendation.model_name,
-            "model_uri": recommendation.model_uri,
-            "use_case": recommendation.intent.use_case,
-            "reasoning": recommendation.reasoning,
+            "model_id": config.model_id,
+            "model_name": config.model_name,
+            "model_uri": config.model_uri,
+            "use_case": config.use_case,
             "generated_at": datetime.now().isoformat(),
             # Simulator mode
             "simulator_mode": self.simulator_mode,
@@ -183,40 +176,31 @@ class DeploymentGenerator:
             "cpu_limit": cpu_limit,
             "memory_request": memory_request,
             "memory_limit": memory_limit,
-            # SLO targets (p95)
-            "ttft_target": slo.ttft_p95_target_ms,
-            "itl_target": slo.itl_p95_target_ms,
-            "e2e_target": slo.e2e_p95_target_ms,
-            "target_qps": traffic.expected_qps,
             # Traffic profile
-            "expected_qps": traffic.expected_qps,
-            "prompt_tokens": traffic.prompt_tokens,
-            "output_tokens": traffic.output_tokens,
-            # Cost estimation
-            "cost_per_hour": recommendation.cost_per_hour_usd,
-            "cost_per_month": recommendation.cost_per_month_usd,
+            "expected_qps": config.expected_qps,
+            "prompt_tokens": config.prompt_tokens,
+            "output_tokens": config.output_tokens,
+            # GPU pricing
             "gpu_hourly_rate": gpu_hourly_rate,
-            # Intent metadata
-            "user_count": recommendation.intent.user_count,
         }
 
         return context
 
     def generate_all(
-        self, recommendation: DeploymentRecommendation, namespace: str = "default"
+        self, config: DeploymentConfiguration, namespace: str = "default"
     ) -> dict[str, Any]:
         """
         Generate all deployment YAML files.
 
         Args:
-            recommendation: Deployment recommendation
+            config: Deployment configuration
             namespace: Kubernetes namespace
 
         Returns:
             Dictionary with deployment_id, namespace, files (paths), and contents (rendered YAML)
         """
-        deployment_id = self.generate_deployment_id(recommendation)
-        context = self._prepare_template_context(recommendation, deployment_id, namespace)
+        deployment_id = self.generate_deployment_id(config)
+        context = self._prepare_template_context(config, deployment_id, namespace)
 
         generated_files = {}
         generated_contents = {}
@@ -257,7 +241,7 @@ class DeploymentGenerator:
 
     def generate_kserve_yaml(
         self,
-        recommendation: DeploymentRecommendation,
+        config: DeploymentConfiguration,
         deployment_id: str | None = None,
         namespace: str = "default",
     ) -> str:
@@ -265,7 +249,7 @@ class DeploymentGenerator:
         Generate only the KServe InferenceService YAML.
 
         Args:
-            recommendation: Deployment recommendation
+            config: Deployment configuration
             deployment_id: Optional deployment ID (auto-generated if not provided)
             namespace: Kubernetes namespace
 
@@ -273,9 +257,9 @@ class DeploymentGenerator:
             Path to generated YAML file
         """
         if not deployment_id:
-            deployment_id = self.generate_deployment_id(recommendation)
+            deployment_id = self.generate_deployment_id(config)
 
-        context = self._prepare_template_context(recommendation, deployment_id, namespace)
+        context = self._prepare_template_context(config, deployment_id, namespace)
         template = self.env.get_template("kserve-inferenceservice.yaml.j2")
         rendered = template.render(**context)
 

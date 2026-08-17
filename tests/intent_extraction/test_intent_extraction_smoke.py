@@ -15,7 +15,6 @@ def test_smoke_chatbot_extraction(intent_extractor):
     intent = intent_extractor.extract_intent("I need a chatbot for 500 users")
 
     assert intent.use_case == "chatbot_conversational"
-    assert intent.experience_class == "conversational"
     assert intent.user_count > 0
 
 
@@ -25,5 +24,4 @@ def test_smoke_code_completion_extraction(intent_extractor):
     intent = intent_extractor.extract_intent("Fast code completion for 100 developers")
 
     assert intent.use_case == "code_completion"
-    assert intent.experience_class == "instant"
     assert intent.user_count > 0

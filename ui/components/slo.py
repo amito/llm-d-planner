@@ -13,6 +13,7 @@ from api_client import (
     fetch_priority_weights,
     fetch_slo_defaults,
     fetch_workload_profile,
+    generate_specification,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,62 @@ def _load_quality_categories() -> dict:
     return {}
 
 
+def _populate_specification_from_api(extraction: dict) -> dict | None:
+    """Generate specification from extraction and populate session state.
+
+    This replaces multiple GET calls (slo-defaults, workload-profile, expected-rps)
+    with a single POST to generate-specification.
+
+    Args:
+        extraction: Extraction result dict with use_case, user_count, priorities, etc.
+
+    Returns:
+        The full specification dict, or None on error.
+    """
+    # Build intent from extraction
+    intent = {
+        "use_case": extraction.get("use_case", "chatbot_conversational"),
+        "user_count": extraction.get("user_count", 1000),
+        "quality_priority": extraction.get("quality_priority", "medium"),
+        "cost_priority": extraction.get("cost_priority", "medium"),
+        "latency_priority": extraction.get("latency_priority", "medium"),
+        "preferred_gpu_types": extraction.get("preferred_gpu_types", []),
+        "preferred_models": extraction.get("preferred_models", []),
+        "domain_specialization": extraction.get("domain_specialization", ["general"]),
+    }
+
+    specification = generate_specification(intent)
+    if not specification:
+        return None
+
+    # Populate session state with specification data
+    slo_targets = specification["slo_targets"]
+    st.session_state.input_ttft = slo_targets["ttft_target_ms"]
+    st.session_state.input_itl = slo_targets["itl_target_ms"]
+    st.session_state.input_e2e = slo_targets["e2e_target_ms"]
+    st.session_state.slo_percentile = slo_targets["percentile"]
+
+    # Initialize custom values if not already set
+    if "custom_ttft" not in st.session_state:
+        st.session_state.custom_ttft = slo_targets["ttft_target_ms"]
+    if "custom_itl" not in st.session_state:
+        st.session_state.custom_itl = slo_targets["itl_target_ms"]
+    if "custom_e2e" not in st.session_state:
+        st.session_state.custom_e2e = slo_targets["e2e_target_ms"]
+
+    workload = specification["workload_profile"]
+    st.session_state.spec_prompt_tokens = workload["prompt_tokens"]
+    st.session_state.spec_output_tokens = workload["output_tokens"]
+    st.session_state.spec_expected_qps = workload["expected_qps"]
+
+    priorities = specification["priorities"]
+    st.session_state.weight_quality = priorities["quality"]["weight"]
+    st.session_state.weight_cost = priorities["cost"]["weight"]
+    st.session_state.weight_latency = priorities["latency"]["weight"]
+
+    return specification
+
+
 def get_workload_insights(use_case: str, qps: int, user_count: int) -> list:
     """Get workload pattern insights based on API data.
 
@@ -41,18 +98,6 @@ def get_workload_insights(use_case: str, qps: int, user_count: int) -> list:
     workload_profile = fetch_workload_profile(use_case)
     if not workload_profile:
         return messages
-
-    distribution = workload_profile.get("distribution", "poisson")
-    active_fraction = workload_profile.get("active_fraction", 0.2)
-
-    messages.append(
-        (
-            "",
-            "",
-            f"Pattern: {distribution.replace('_', ' ').title()} | {int(active_fraction * 100)}% concurrent users",
-            "info",
-        )
-    )
 
     return messages
 
@@ -84,8 +129,7 @@ def _render_slo_targets(slo_defaults):
         with val_col:
             st.number_input(
                 f"{metric.upper()} value",
-                min_value=val_min,
-                max_value=val_max,
+                min_value=1,
                 step=step,
                 key=input_key,
                 label_visibility="collapsed",
@@ -120,19 +164,17 @@ def _render_slo_targets(slo_defaults):
 
 
 def _render_workload_profile(use_case, workload_profile, estimated_qps, qps, user_count):
-    """Render workload profile: QPS input, token counts, peak multiplier, insights."""
+    """Render workload profile: QPS input, token counts, insights."""
     st.write("**Workload Profile**")
 
     prompt_tokens = workload_profile["prompt_tokens"]
     output_tokens = workload_profile["output_tokens"]
-    peak_mult = workload_profile["peak_multiplier"]
 
     st.session_state.spec_prompt_tokens = prompt_tokens
     st.session_state.spec_output_tokens = output_tokens
-    st.session_state.spec_peak_multiplier = peak_mult
 
     default_qps = estimated_qps
-    st.write("**Throughput (Requests Per Second)**")
+    st.write("**Request Rate (Requests Per Second)**")
     new_qps = st.number_input(
         "Expected RPS",
         value=min(qps, 10000000),
@@ -165,14 +207,7 @@ def _render_workload_profile(use_case, workload_profile, estimated_qps, qps, use
                 <span style="font-size: 0.95rem; font-weight: 500;">Mean Output Tokens</span>
                 <span style="font-weight: 700; font-size: 1.1rem; padding: 3px 10px; border-radius: 4px;">{output_tokens}</span>
             </div>
-            <div style="font-size: 0.75rem; margin-top: 0.25rem; padding-left: 0;">Average output token length generated per request</div>
-        </div>
-        <div style="padding: 0.5rem 0;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-size: 0.95rem; font-weight: 500;">Peak Multiplier</span>
-                <span style="font-weight: 700; font-size: 1.1rem; padding: 3px 10px; border-radius: 4px;">{peak_mult}x</span>
-            </div>
-            <div style="font-size: 0.75rem; margin-top: 0.25rem; padding-left: 0;">Capacity buffer for traffic spikes</div>
+            <div style="font-size: 0.75rem; margin-top: 0.25rem; padding-left: 0;">Mean output token length per request</div>
         </div>
     </div>
     """,
@@ -190,12 +225,7 @@ def _render_workload_profile(use_case, workload_profile, estimated_qps, qps, use
 
 def _render_quality_benchmarks(use_case: str) -> None:
     """Render the quality benchmark weights for the current use case."""
-    st.write("**Quality Benchmark Weights**")
-    st.caption(
-        "Quality scores combine human preference ratings (LM Arena) and "
-        "automated benchmarks (Artificial Analysis) into percentile-based "
-        "composite scores."
-    )
+    st.write("**Quality Benchmarks**")
 
     weights_data = _load_quality_categories()
     use_case_key = use_case.lower().replace(" ", "_").replace("-", "_")
@@ -203,7 +233,7 @@ def _render_quality_benchmarks(use_case: str) -> None:
     categories = config.get("categories", {})
 
     if not categories:
-        st.info(f"No quality weights configured for use case: {use_case}")
+        st.info(f"No quality benchmarks configured for use case: {use_case}")
         return
 
     # Normalize weights to 0-1 range for progress bars
@@ -389,7 +419,16 @@ def _render_constraints(extraction: dict):
 
     parts = []
     if gpu_types:
-        parts.append(f"**GPUs:** {', '.join(gpu_types)}")
+        gpu_labels = []
+        for g in gpu_types:
+            if isinstance(g, dict) and "gpu_type" in g:
+                label = g["gpu_type"]
+                if g.get("max_count"):
+                    label += f" (max {g['max_count']})"
+                gpu_labels.append(label)
+            else:
+                gpu_labels.append(str(g))
+        parts.append(f"**GPUs:** {', '.join(gpu_labels)}")
     else:
         parts.append("**GPUs:** Any")
     if models:
@@ -405,59 +444,29 @@ def render_slo_with_approval(extraction: dict):
     use_case = extraction.get("use_case", "chatbot_conversational")
     user_count = extraction.get("user_count", 1000)
 
+    # Check if we need to populate specification data from the API
+    # This replaces the piecemeal GET calls in render_slo_cards
+    if "_specification_populated" not in st.session_state:
+        with st.spinner("Loading specification data..."):
+            spec = _populate_specification_from_api(extraction)
+            if spec:
+                st.session_state._specification_populated = True
+            else:
+                st.error("Failed to generate specification. Using fallback values.")
+                # Fall through to render_slo_cards which will use old GET endpoints as fallback
+
     render_slo_cards(use_case, user_count)
     _render_constraints(extraction)
 
-    # Validate SLO values
-    slo_defaults = fetch_slo_defaults(use_case)
-    if not slo_defaults:
-        st.error(f"Failed to fetch SLO defaults for use case: {use_case}")
-        return
-
-    ttft_min = int(slo_defaults["ttft_ms"]["min"])
-    ttft_max = int(slo_defaults["ttft_ms"]["max"])
-    itl_min = int(slo_defaults["itl_ms"]["min"])
-    itl_max = int(slo_defaults["itl_ms"]["max"])
-    e2e_min = int(slo_defaults["e2e_ms"]["min"])
-    e2e_max = int(slo_defaults["e2e_ms"]["max"])
-
-    current_ttft = int(st.session_state.get("edit_ttft", ttft_max))
-    current_itl = int(st.session_state.get("edit_itl", itl_max))
-    current_e2e = int(st.session_state.get("edit_e2e", e2e_max))
-
-    validation_errors = []
-    if current_ttft < ttft_min or current_ttft > ttft_max:
-        validation_errors.append(f"TTFT must be between {ttft_min:,}-{ttft_max:,}ms")
-    if current_itl < itl_min or current_itl > itl_max:
-        validation_errors.append(f"ITL must be between {itl_min}-{itl_max}ms")
-    if current_e2e < e2e_min or current_e2e > e2e_max:
-        validation_errors.append(f"E2E must be between {e2e_min:,}-{e2e_max:,}ms")
-
-    is_valid = len(validation_errors) == 0
-
+    # No validation needed - allow any positive values
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if not is_valid:
-            st.markdown(
-                f"""
-            <div style="border: 1px solid rgba(239, 68, 68, 0.5);
-                        border-radius: 8px; padding: 0.75rem; margin-bottom: 0.75rem; text-align: center;">
-                <div style="color: #ef4444; font-weight: 600; font-size: 0.9rem;">⚠️ Invalid SLO Values</div>
-                <div style="font-size: 0.8rem; margin-top: 0.25rem;">
-                    {" • ".join(validation_errors)}
-                </div>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
         if st.button(
             "Generate Recommendations",
             type="primary",
             width="stretch",
             key="generate_recs",
-            disabled=not is_valid,
         ):
             st.session_state.slo_approved = True
             st.session_state.recommendation_result = None

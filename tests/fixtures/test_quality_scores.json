@@ -1,0 +1,169 @@
+{
+    "_metadata": {
+        "description": "Minimal quality score fixture for pipeline tests",
+        "note": "These scores are based on actual AA indices for Llama 3.1 8B. Granite 3.1 8B is not in AA data, so uses estimated values slightly below Llama. Arena percentiles are null in production data, so we use realistic placeholders for testing.",
+        "models": ["meta-llama/llama-3.1-8b-instruct", "ibm-granite/granite-3.1-8b-instruct"],
+        "sources": {
+            "llama-3.1-8b": "AA intelligence_index=7, coding_index=5, math_index=4, livecodebench=0.116, scicode=0.132",
+            "granite-3.1-8b": "Not in AA data - estimated based on model size and capabilities"
+        }
+    },
+    "arena_rows": [
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "overall",
+            "rating": 1180,
+            "rating_lower": 1170,
+            "rating_upper": 1190
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "instruction_following",
+            "rating": 1175,
+            "rating_lower": 1165,
+            "rating_upper": 1185
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "multi_turn",
+            "rating": 1170,
+            "rating_lower": 1160,
+            "rating_upper": 1180
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "creative_writing",
+            "rating": 1160,
+            "rating_lower": 1150,
+            "rating_upper": 1170
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "hard_prompts",
+            "rating": 1150,
+            "rating_lower": 1140,
+            "rating_upper": 1160
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "coding",
+            "rating": 1165,
+            "rating_lower": 1155,
+            "rating_upper": 1175
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "math",
+            "rating": 1155,
+            "rating_lower": 1145,
+            "rating_upper": 1165
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "longer_query",
+            "rating": 1168,
+            "rating_lower": 1158,
+            "rating_upper": 1178
+        },
+        {
+            "model_name": "llama-3.1-8b-instruct",
+            "category": "expert",
+            "rating": 1162,
+            "rating_lower": 1152,
+            "rating_upper": 1172
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "overall",
+            "rating": 1160,
+            "rating_lower": 1150,
+            "rating_upper": 1170
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "instruction_following",
+            "rating": 1155,
+            "rating_lower": 1145,
+            "rating_upper": 1165
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "multi_turn",
+            "rating": 1150,
+            "rating_lower": 1140,
+            "rating_upper": 1160
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "creative_writing",
+            "rating": 1145,
+            "rating_lower": 1135,
+            "rating_upper": 1155
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "hard_prompts",
+            "rating": 1140,
+            "rating_lower": 1130,
+            "rating_upper": 1150
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "coding",
+            "rating": 1150,
+            "rating_lower": 1140,
+            "rating_upper": 1160
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "math",
+            "rating": 1142,
+            "rating_lower": 1132,
+            "rating_upper": 1152
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "longer_query",
+            "rating": 1152,
+            "rating_lower": 1142,
+            "rating_upper": 1162
+        },
+        {
+            "model_name": "granite-3.1-8b-instruct",
+            "category": "expert",
+            "rating": 1148,
+            "rating_lower": 1138,
+            "rating_upper": 1158
+        }
+    ],
+    "aa_models": [
+        {
+            "name": "Llama 3.1 Instruct 8B",
+            "slug": "llama-3-1-instruct-8b",
+            "intelligence_index": 7,
+            "coding_index": 5,
+            "math_index": 4,
+            "mmlu_pro": 0.476,
+            "gpqa": 0.259,
+            "livecodebench": 0.116,
+            "scicode": 0.132,
+            "hle": null,
+            "math_500": null,
+            "aime": null
+        },
+        {
+            "name": "Granite 3.1 Instruct 8B",
+            "slug": "granite-3-1-instruct-8b",
+            "intelligence_index": 6,
+            "coding_index": 4,
+            "math_index": 3,
+            "mmlu_pro": 0.450,
+            "gpqa": 0.240,
+            "livecodebench": 0.105,
+            "scicode": 0.120,
+            "hle": null,
+            "math_500": null,
+            "aime": null
+        }
+    ]
+}

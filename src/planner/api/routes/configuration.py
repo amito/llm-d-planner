@@ -1,10 +1,10 @@
 """Configuration and deployment endpoints."""
 
 import logging
-import random
 from datetime import datetime
 from typing import Any, Literal
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -16,7 +16,8 @@ from planner.api.dependencies import (
     get_yaml_validator,
 )
 from planner.configuration import DeploymentGenerator, LlmdDeploymentGenerator, YAMLValidator
-from planner.shared.schemas import DeploymentMode, DeploymentRecommendation
+from planner.shared.schemas import DeploymentConfiguration, DeploymentMode
+from planner.shared.schemas.recommendation import DeploymentBundle
 
 StackType = Literal["vllm", "llm-d"]
 
@@ -25,40 +26,73 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1", tags=["configuration"])
 
 
-class DeploymentRequest(BaseModel):
-    """Request to generate deployment YAML files."""
+class GenerateDeploymentRequest(BaseModel):
+    """Request to generate deployment YAML from configuration."""
 
-    recommendation: DeploymentRecommendation
+    configuration: DeploymentConfiguration
     namespace: str = "default"
     stack: StackType = "vllm"
-
-
-class DeploymentResponse(BaseModel):
-    """Response with generated deployment files."""
-
-    deployment_id: str
-    namespace: str
-    yaml_contents: dict[str, Any]
-    success: bool = True
-    message: str | None = None
-
-
-class DeploymentStatusResponse(BaseModel):
-    """Mock deployment status response."""
-
-    deployment_id: str
-    status: str
-    slo_compliance: dict[str, Any]
-    resource_utilization: dict[str, Any]
-    cost_analysis: dict[str, Any]
-    traffic_patterns: dict[str, Any]
-    recommendations: list[str] | None = None
 
 
 class DeploymentModeRequest(BaseModel):
     """Request to set deployment mode."""
 
     mode: DeploymentMode
+
+
+class DeployBundleRequest(BaseModel):
+    """Request to deploy a DeploymentBundle to cluster."""
+
+    bundle: DeploymentBundle
+
+
+def _generate_yaml_from_config(
+    config: DeploymentConfiguration,
+    namespace: str,
+    stack: StackType,
+    deployment_generator: DeploymentGenerator,
+    llmd_generator: LlmdDeploymentGenerator,
+    yaml_validator: YAMLValidator,
+) -> dict[str, Any]:
+    """Generate YAML files from a deployment configuration.
+
+    Args:
+        config: Deployment configuration
+        namespace: Kubernetes namespace
+        stack: Deployment stack (vllm or llm-d)
+        deployment_generator: vLLM deployment generator
+        llmd_generator: llm-d deployment generator
+        yaml_validator: YAML validator
+
+    Returns:
+        Dict with deployment_id, namespace, files (file paths), and contents (YAML strings)
+
+    Raises:
+        HTTPException: If stack is unknown or YAML validation fails
+    """
+    logger.info(f"Generating deployment for model: {config.model_name} (stack={stack})")
+
+    if stack == "llm-d":
+        result = llmd_generator.generate_all(config=config, namespace=namespace)
+    elif stack == "vllm":
+        result = deployment_generator.generate_all(config=config, namespace=namespace)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown stack: {stack}",
+        )
+
+    try:
+        yaml_validator.validate_all(result["files"])
+        logger.info(f"All YAML files validated for deployment: {result['deployment_id']}")
+    except Exception as e:
+        logger.error(f"YAML validation failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Generated YAML validation failed: {str(e)}",
+        ) from e
+
+    return result
 
 
 @router.get("/deployment-mode")
@@ -78,50 +112,34 @@ async def set_mode(request: DeploymentModeRequest, http_request: Request):
     return {"mode": request.mode}
 
 
-@router.post("/deploy", response_model=DeploymentResponse)
-async def deploy_model(
-    request: DeploymentRequest,
+@router.post("/generate-deployment", response_model=DeploymentBundle)
+async def generate_deployment(
+    request: GenerateDeploymentRequest,
     deployment_generator: DeploymentGenerator = Depends(get_deployment_generator),
     llmd_generator: LlmdDeploymentGenerator = Depends(get_llmd_deployment_generator),
     yaml_validator: YAMLValidator = Depends(get_yaml_validator),
 ):
-    """Generate deployment YAML and return contents inline."""
+    """Generate deployment files and return as a DeploymentBundle.
+
+    This endpoint generates YAML files but does NOT deploy them to the cluster.
+    Use /deploy-bundle-to-cluster to apply the bundle to a cluster.
+    """
     try:
-        logger.info(
-            f"Generating deployment for model: {request.recommendation.model_name}"
-            f" (stack={request.stack})"
+        result = _generate_yaml_from_config(
+            request.configuration,
+            request.namespace,
+            request.stack,
+            deployment_generator,
+            llmd_generator,
+            yaml_validator,
         )
 
-        if request.stack == "llm-d":
-            result = llmd_generator.generate_all(
-                recommendation=request.recommendation, namespace=request.namespace
-            )
-        elif request.stack == "vllm":
-            result = deployment_generator.generate_all(
-                recommendation=request.recommendation, namespace=request.namespace
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown stack: {request.stack}",
-            )
-
-        try:
-            yaml_validator.validate_all(result["files"])
-            logger.info(f"All YAML files validated for deployment: {result['deployment_id']}")
-        except Exception as e:
-            logger.error(f"YAML validation failed: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Generated YAML validation failed: {str(e)}",
-            ) from e
-
-        return DeploymentResponse(
+        return DeploymentBundle(
             deployment_id=result["deployment_id"],
-            namespace=result["namespace"],
-            yaml_contents=result["contents"],
-            success=True,
-            message=f"Deployment files generated successfully for {result['deployment_id']}",
+            namespace=request.namespace,
+            stack=request.stack,
+            configuration=request.configuration,
+            files=result["contents"],
         )
 
     except HTTPException:
@@ -134,107 +152,19 @@ async def deploy_model(
         ) from e
 
 
-@router.get("/deployments/{deployment_id}/status", response_model=DeploymentStatusResponse)
-async def get_deployment_status(deployment_id: str):
-    """
-    Get mock deployment status for observability demonstration.
-
-    This endpoint returns simulated observability data to demonstrate
-    Component 9 (Inference Observability & SLO Monitoring).
-
-    Args:
-        deployment_id: Deployment identifier
-
-    Returns:
-        Mock deployment status with observability metrics
-
-    Raises:
-        HTTPException: If deployment not found
-    """
-    try:
-        logger.info(f"Fetching mock status for deployment: {deployment_id}")
-
-        # Mock observability data (in production, this would query Prometheus/Grafana)
-        base_ttft = 185
-        base_tpot = 48
-        base_e2e = 1850
-
-        mock_status = DeploymentStatusResponse(
-            deployment_id=deployment_id,
-            status="running",
-            slo_compliance={
-                "ttft_p90_ms": base_ttft + random.randint(-10, 15),
-                "ttft_target_ms": 200,
-                "ttft_compliant": True,
-                "tpot_p90_ms": base_tpot + random.randint(-3, 5),
-                "tpot_target_ms": 50,
-                "tpot_compliant": True,
-                "e2e_p90_ms": base_e2e + random.randint(-50, 100),
-                "e2e_target_ms": 2000,
-                "e2e_compliant": True,
-                "throughput_qps": 122 + random.randint(-5, 10),
-                "throughput_target_qps": 100,
-                "throughput_compliant": True,
-                "uptime_pct": 99.94 + random.uniform(-0.05, 0.05),
-                "uptime_target_pct": 99.9,
-                "uptime_compliant": True,
-            },
-            resource_utilization={
-                "gpu_utilization_pct": 78 + random.randint(-5, 10),
-                "gpu_memory_used_gb": 14.2 + random.uniform(-1, 2),
-                "gpu_memory_total_gb": 24,
-                "avg_batch_size": 18 + random.randint(-3, 5),
-                "queue_depth": random.randint(0, 5),
-                "token_throughput_per_gpu": 3500 + random.randint(-200, 300),
-            },
-            cost_analysis={
-                "actual_cost_per_hour_usd": 0.95 + random.uniform(-0.05, 0.1),
-                "predicted_cost_per_hour_usd": 1.00,
-                "actual_cost_per_month_usd": 812 + random.randint(-30, 50),
-                "predicted_cost_per_month_usd": 800,
-                "cost_per_1k_tokens_usd": 0.042 + random.uniform(-0.002, 0.005),
-                "predicted_cost_per_1k_tokens_usd": 0.040,
-            },
-            traffic_patterns={
-                "avg_prompt_tokens": 165 + random.randint(-10, 20),
-                "predicted_prompt_tokens": 150,
-                "avg_generation_tokens": 220 + random.randint(-15, 25),
-                "predicted_generation_tokens": 200,
-                "peak_qps": 95 + random.randint(-5, 10),
-                "predicted_peak_qps": 100,
-                "requests_last_hour": 7200 + random.randint(-500, 800),
-                "requests_last_24h": 172800 + random.randint(-5000, 10000),
-            },
-            recommendations=[
-                "GPU utilization is 78%, below the 80% efficiency target. Consider downsizing to reduce cost.",
-                "Actual traffic is 10% higher than predicted. Monitor for potential capacity constraints.",
-                "All SLO targets are being met with headroom. Configuration is performing well.",
-            ],
-        )
-
-        return mock_status
-
-    except Exception as e:
-        logger.error(f"Failed to get deployment status: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"Deployment not found: {deployment_id}"
-        ) from e
-
-
-@router.post("/deploy-to-cluster")
-async def deploy_to_cluster(
-    request: DeploymentRequest,
+@router.post("/deploy-bundle-to-cluster")
+async def deploy_bundle_to_cluster(
+    request: DeployBundleRequest,
     http_request: Request,
-    deployment_generator: DeploymentGenerator = Depends(get_deployment_generator),
-    yaml_validator: YAMLValidator = Depends(get_yaml_validator),
 ):
     """
-    Deploy model to Kubernetes cluster.
+    Deploy a DeploymentBundle to Kubernetes cluster.
 
-    This endpoint generates YAML files AND applies them to the cluster.
+    Applies YAML content directly via kubectl stdin — no intermediate
+    files are written to disk.
 
     Args:
-        request: Deployment request with recommendation and namespace
+        request: Request containing a DeploymentBundle
 
     Returns:
         Deployment result with status
@@ -242,60 +172,58 @@ async def deploy_to_cluster(
     Raises:
         HTTPException: If cluster not accessible or deployment fails
     """
-    manager = await get_cluster_manager_or_raise(http_request, request.namespace)
+    bundle = request.bundle
+    manager = await get_cluster_manager_or_raise(http_request, bundle.namespace)
 
     try:
-        logger.info(f"Deploying model to cluster: {request.recommendation.model_name}")
+        logger.info(f"Deploying bundle {bundle.deployment_id} to cluster")
 
-        # Step 1: Generate YAML files
-        result = deployment_generator.generate_all(
-            recommendation=request.recommendation, namespace=request.namespace
+        # Step 1: Create namespace if it doesn't exist
+        await run_in_threadpool(manager.create_namespace_if_not_exists)
+
+        # Step 2: Validate YAML content before applying
+        for name, yaml_content in bundle.files.items():
+            try:
+                list(yaml.safe_load_all(yaml_content))
+                logger.info(f"YAML validation passed for {name}")
+            except yaml.YAMLError as e:
+                logger.error(f"YAML validation failed for {name}: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid YAML syntax in {name}: {str(e)}",
+                ) from e
+
+        # Step 3: Apply each YAML document via kubectl apply -f - (stdin)
+        applied_files = []
+        for name, yaml_content in bundle.files.items():
+            result = await run_in_threadpool(manager.apply_yaml_content, yaml_content)
+            if not result["success"]:
+                logger.error(f"Failed to apply {name}: {result.get('error')}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to apply {name}: {result.get('error')}",
+                )
+            applied_files.append(name)
+
+        logger.info(
+            f"Successfully deployed bundle {bundle.deployment_id} to cluster ({len(applied_files)} files)"
         )
-
-        deployment_id = result["deployment_id"]
-        file_paths = result["files"]
-
-        # Step 2: Validate generated files
-        try:
-            yaml_validator.validate_all(file_paths)
-            logger.info(f"YAML validation passed for: {deployment_id}")
-        except Exception as e:
-            logger.error(f"YAML validation failed: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Generated YAML validation failed: {str(e)}",
-            ) from e
-
-        # Step 3: Deploy to cluster
-        yaml_file_paths = [file_paths["inferenceservice"], file_paths["autoscaling"]]
-
-        deployment_result = await run_in_threadpool(manager.deploy_all, yaml_file_paths)
-
-        if not deployment_result["success"]:
-            logger.error(f"Deployment failed: {deployment_result['errors']}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Deployment failed: {deployment_result['errors']}",
-            )
-
-        logger.info(f"Successfully deployed {deployment_id} to cluster")
 
         return {
             "success": True,
-            "deployment_id": deployment_id,
-            "namespace": request.namespace,
-            "yaml_contents": result["contents"],
-            "deployment_result": deployment_result,
-            "message": f"Successfully deployed {deployment_id} to Kubernetes cluster",
+            "deployment_id": bundle.deployment_id,
+            "namespace": bundle.namespace,
+            "files_applied": applied_files,
+            "message": f"Successfully deployed {bundle.deployment_id} to Kubernetes cluster",
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to deploy to cluster: {e}", exc_info=True)
+        logger.error(f"Failed to deploy bundle to cluster: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to deploy to cluster: {str(e)}",
+            detail=f"Failed to deploy bundle to cluster: {str(e)}",
         ) from e
 
 

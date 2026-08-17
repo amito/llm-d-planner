@@ -12,6 +12,7 @@ import logging
 from planner.configuration.generator import DeploymentGenerator
 from planner.configuration.validator import YAMLValidator
 from planner.shared.schemas import (
+    DeploymentConfiguration,
     DeploymentIntent,
     DeploymentRecommendation,
     GPUConfig,
@@ -31,16 +32,27 @@ def create_test_recommendation() -> DeploymentRecommendation:
 
     intent = DeploymentIntent(
         use_case="chatbot_conversational",
-        experience_class="conversational",
         user_count=5000,
         domain_specialization=["general"],
     )
 
     traffic_profile = TrafficProfile(prompt_tokens=512, output_tokens=256, expected_qps=50.0)
 
-    slo_targets = SLOTargets(ttft_p95_target_ms=200, itl_p95_target_ms=50, e2e_p95_target_ms=2000)
+    slo_targets = SLOTargets(ttft_target_ms=200, itl_target_ms=50, e2e_target_ms=2000)
 
     gpu_config = GPUConfig(gpu_type="A100-80", gpu_count=2, tensor_parallel=2, replicas=1)
+
+    configuration = DeploymentConfiguration(
+        model_id="meta-llama/Llama-3.1-8B-Instruct",
+        model_name="Llama 3.1 8B Instruct",
+        model_uri="meta-llama/Llama-3.1-8B-Instruct",
+        gpu_config=gpu_config,
+        use_case=intent.use_case,
+        expected_qps=traffic_profile.expected_qps or 50.0,
+        prompt_tokens=traffic_profile.prompt_tokens,
+        output_tokens=traffic_profile.output_tokens,
+        e2e_target_ms=slo_targets.e2e_target_ms,
+    )
 
     recommendation = DeploymentRecommendation(
         intent=intent,
@@ -61,6 +73,7 @@ def create_test_recommendation() -> DeploymentRecommendation:
         "2x A100-80 GPUs in tensor parallel configuration meets all SLO targets "
         "with headroom for traffic spikes. Cost-effective for 5000 concurrent users.",
         alternative_options=None,
+        configuration=configuration,
     )
 
     return recommendation
@@ -86,7 +99,9 @@ def test_yaml_generation():
     logger.info("\n[2/4] Generating deployment YAML files...")
     generator = DeploymentGenerator()
 
-    result = generator.generate_all(recommendation, namespace="default")
+    # Extract configuration from recommendation
+    assert recommendation.configuration is not None, "Recommendation must have configuration"
+    result = generator.generate_all(recommendation.configuration, namespace="default")
     assert result is not None
     assert "deployment_id" in result
     assert "files" in result

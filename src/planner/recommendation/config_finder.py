@@ -24,13 +24,14 @@ from planner.knowledge_base.benchmarks import BenchmarkData, BenchmarkRepository
 from planner.knowledge_base.model_catalog import ModelCatalog, ModelInfo
 from planner.shared.schemas import (
     ConfigurationScores,
+    DeploymentConfiguration,
     DeploymentIntent,
     DeploymentRecommendation,
     GPUConfig,
     SLOTargets,
     TrafficProfile,
 )
-from planner.shared.utils import normalize_gpu_types
+from planner.shared.utils import extract_gpu_max_counts, normalize_gpu_types
 from quality_scoring.engine import ScoringEngine
 
 from .estimator import generate_estimated_configs
@@ -183,19 +184,22 @@ class ConfigFinder:
         # Determine SLO thresholds for query
         # If including near-miss, relax thresholds by tolerance
         if include_near_miss:
-            query_ttft = int(slo_targets.ttft_p95_target_ms * (1 + near_miss_tolerance))
-            query_itl = int(slo_targets.itl_p95_target_ms * (1 + near_miss_tolerance))
-            query_e2e = int(slo_targets.e2e_p95_target_ms * (1 + near_miss_tolerance))
+            query_ttft = int(slo_targets.ttft_target_ms * (1 + near_miss_tolerance))
+            query_itl = int(slo_targets.itl_target_ms * (1 + near_miss_tolerance))
+            query_e2e = int(slo_targets.e2e_target_ms * (1 + near_miss_tolerance))
         else:
-            query_ttft = slo_targets.ttft_p95_target_ms
-            query_itl = slo_targets.itl_p95_target_ms
-            query_e2e = slo_targets.e2e_p95_target_ms
+            query_ttft = slo_targets.ttft_target_ms
+            query_itl = slo_targets.itl_target_ms
+            query_e2e = slo_targets.e2e_target_ms
 
         # Get percentile from SLO targets (default to p95 for backwards compatibility)
         percentile = getattr(slo_targets, "percentile", "p95")
 
-        # Normalize user's preferred GPU types
+        # Normalize user's preferred GPU types (handles both str and GpuPreference)
         normalized_user_gpus = normalize_gpu_types(intent.preferred_gpu_types)
+
+        # Extract max_count limits from GpuPreference objects
+        gpu_max_counts = extract_gpu_max_counts(intent.preferred_gpu_types)
 
         # Determine effective GPU filter by intersecting cluster and user preferences
         # cluster_gpu_types semantics:
@@ -257,7 +261,7 @@ class ConfigFinder:
             else:
                 msg = (
                     f"No configurations found for preferred GPUs "
-                    f"({', '.join(intent.preferred_gpu_types)}). "
+                    f"({', '.join(normalized_user_gpus)}). "
                     f"Showing other available GPU configurations."
                 )
             logger.warning(msg)
@@ -332,6 +336,19 @@ class ConfigFinder:
 
         # Process each matching benchmark (no pre-filtering by model list)
         for bench in matching_configs:
+            # Filter by max_count if specified
+            if gpu_max_counts:
+                gpu_type_upper = bench.hardware.upper()
+                if (
+                    gpu_type_upper in gpu_max_counts
+                    and bench.hardware_count > gpu_max_counts[gpu_type_upper]
+                ):
+                    logger.debug(
+                        f"Skipping {bench.model_hf_repo} on {bench.hardware_count}x{bench.hardware} "
+                        f"(exceeds max_count={gpu_max_counts[gpu_type_upper]})"
+                    )
+                    continue
+
             # Look up model in catalog (may be None if not in catalog)
             model = model_lookup.get(bench.model_hf_repo.lower())
 
@@ -371,9 +388,9 @@ class ConfigFinder:
                 predicted_ttft_ms=predicted_ttft,
                 predicted_itl_ms=predicted_itl,
                 predicted_e2e_ms=predicted_e2e,
-                target_ttft_ms=slo_targets.ttft_p95_target_ms,
-                target_itl_ms=slo_targets.itl_p95_target_ms,
-                target_e2e_ms=slo_targets.e2e_p95_target_ms,
+                target_ttft_ms=slo_targets.ttft_target_ms,
+                target_itl_ms=slo_targets.itl_target_ms,
+                target_e2e_ms=slo_targets.e2e_target_ms,
                 use_case=intent.use_case,
                 near_miss_tolerance=near_miss_tolerance,
             )
@@ -433,6 +450,19 @@ class ConfigFinder:
                 "confidence_level": getattr(bench, "confidence_level", "benchmarked"),
             }
 
+            # Build deployment configuration
+            configuration = DeploymentConfiguration(
+                model_id=model_id,
+                model_name=model_name,
+                model_uri=getattr(bench, "model_uri", None),
+                gpu_config=gpu_config,
+                use_case=intent.use_case,
+                expected_qps=traffic_profile.expected_qps or 0.0,
+                prompt_tokens=traffic_profile.prompt_tokens,
+                output_tokens=traffic_profile.output_tokens,
+                e2e_target_ms=slo_targets.e2e_target_ms,
+            )
+
             # Build recommendation (price score calculated later after we know min/max)
             recommendation = DeploymentRecommendation(
                 intent=intent,
@@ -459,6 +489,7 @@ class ConfigFinder:
                     balanced_score=0.0,  # Placeholder
                     slo_status=slo_status,
                 ),
+                configuration=configuration,
             )
 
             all_configs.append(recommendation)

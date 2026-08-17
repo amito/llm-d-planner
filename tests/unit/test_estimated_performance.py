@@ -1,5 +1,6 @@
 """Unit tests for estimated performance flow (roofline estimation)."""
 
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,7 +12,7 @@ from planner.recommendation.estimator import (
     convert_estimation_to_benchmark,
     generate_estimated_configs,
 )
-from planner.shared.schemas import DeploymentIntent, SLOTargets, TrafficProfile
+from planner.shared.schemas import DeploymentIntent, GpuPreference, SLOTargets, TrafficProfile
 
 
 def _make_intent(
@@ -21,9 +22,8 @@ def _make_intent(
     """Create a minimal DeploymentIntent for testing."""
     return DeploymentIntent(
         use_case="chatbot_conversational",
-        experience_class="conversational",
         user_count=100,
-        preferred_gpu_types=preferred_gpu_types or [],
+        preferred_gpu_types=cast(list[str | GpuPreference], preferred_gpu_types or []),
         preferred_models=preferred_models or [],
     )
 
@@ -38,9 +38,9 @@ def _make_traffic() -> TrafficProfile:
 
 def _make_slo() -> SLOTargets:
     return SLOTargets(
-        ttft_p95_target_ms=500,
-        itl_p95_target_ms=50,
-        e2e_p95_target_ms=15000,
+        ttft_target_ms=500,
+        itl_target_ms=50,
+        e2e_target_ms=15000,
     )
 
 

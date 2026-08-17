@@ -130,3 +130,78 @@ class TestFuzzyResolution:
 
         result = normalize_gpu_types(["H100", "NVIDIA-A100-SXM4-80GB"])
         assert result == ["A100-80", "H100"]
+
+
+@pytest.mark.unit
+class TestGpuPreferenceHandling:
+    """Test GPU normalizer with GpuPreference objects."""
+
+    def setup_method(self):
+        """Reset catalog singleton before each test."""
+        import planner.shared.utils.gpu_normalizer as mod
+
+        mod._catalog_instance = None
+
+    def test_normalize_gpu_preference_objects(self):
+        from planner.shared.schemas.intent import GpuPreference
+        from planner.shared.utils.gpu_normalizer import normalize_gpu_types
+
+        result = normalize_gpu_types(
+            [
+                "H100",
+                GpuPreference(gpu_type="L4", max_count=2),
+            ]
+        )
+        assert "H100" in result
+        assert "L4" in result
+
+    def test_normalize_preserves_max_count(self):
+        from planner.shared.schemas.intent import GpuPreference
+        from planner.shared.utils.gpu_normalizer import normalize_gpu_types
+
+        input_list = [GpuPreference(gpu_type="H100", max_count=4)]
+        result = normalize_gpu_types(input_list)
+        assert "H100" in result
+
+    def test_extract_gpu_max_counts(self):
+        from planner.shared.schemas.intent import GpuPreference
+        from planner.shared.utils.gpu_normalizer import extract_gpu_max_counts
+
+        result = extract_gpu_max_counts(
+            [
+                "H100",
+                GpuPreference(gpu_type="L4", max_count=2),
+                GpuPreference(gpu_type="A100", max_count=4),
+            ]
+        )
+        # H100 string has no max_count
+        assert "H100" not in result
+        # L4 has max_count=2
+        assert result.get("L4") == 2
+        # A100 expands to both variants with same max_count
+        assert result.get("A100-40") == 4
+        assert result.get("A100-80") == 4
+
+    def test_extract_gpu_max_counts_none_set(self):
+        from planner.shared.schemas.intent import GpuPreference
+        from planner.shared.utils.gpu_normalizer import extract_gpu_max_counts
+
+        result = extract_gpu_max_counts(
+            [
+                "H100",
+                GpuPreference(gpu_type="L4", max_count=None),
+            ]
+        )
+        assert result == {}
+
+    def test_mixed_string_and_preference(self):
+        from planner.shared.schemas.intent import GpuPreference
+        from planner.shared.utils.gpu_normalizer import normalize_gpu_types
+
+        result = normalize_gpu_types(
+            [
+                "H100",
+                GpuPreference(gpu_type="NVIDIA-A100-SXM4-80GB", max_count=2),
+            ]
+        )
+        assert result == ["A100-80", "H100"]

@@ -1,331 +1,110 @@
 """Workflow orchestration for end-to-end recommendation flow."""
 
+import json
 import logging
+from pathlib import Path
 
 from planner.cluster.gpu_detector import detect_cluster_gpus
-from planner.intent_extraction import IntentExtractor
-from planner.llm.client import LLMClient
-from planner.llm.factory import create_llm_client
 from planner.recommendation.analyzer import Analyzer
 from planner.recommendation.config_finder import ConfigFinder
-from planner.shared.schemas import (
-    ConversationMessage,
-    DeploymentRecommendation,
-    RankedRecommendationsResponse,
-)
-from planner.specification import TrafficProfileGenerator
+from planner.shared.schemas import RankedRecommendations
 
 logger = logging.getLogger(__name__)
 
 
 class RecommendationWorkflow:
-    """Orchestrate the full recommendation workflow."""
+    """Orchestrate the recommendation workflow."""
 
     def __init__(
         self,
-        llm_client: LLMClient | None = None,
-        intent_extractor: IntentExtractor | None = None,
-        traffic_generator: TrafficProfileGenerator | None = None,
         config_finder: ConfigFinder | None = None,
     ):
-        """
-        Initialize workflow orchestrator.
-
-        Args:
-            llm_client: Ollama client (creates default if not provided)
-            intent_extractor: Intent extractor
-            traffic_generator: Traffic profile generator
-            config_finder: Configuration finder
-        """
-        self.llm_client = llm_client or create_llm_client()
-        self.intent_extractor = intent_extractor or IntentExtractor(self.llm_client)
-        self.traffic_generator = traffic_generator or TrafficProfileGenerator()
         self.config_finder = config_finder or ConfigFinder()
 
-    def generate_specification(
-        self, user_message: str, conversation_history: list[ConversationMessage] | None = None
-    ) -> tuple:
-        """
-        Generate deployment specification from user message.
+    def _create_workload_profile(self, traffic_profile, intent):
+        """Create WorkloadProfile from TrafficProfile."""
+        from planner.shared.schemas import WorkloadProfile
 
-        This extracts intent and generates traffic/SLO specs from conversation.
-        Model recommendation happens later in generate_recommendation_from_specs.
-
-        Returns:
-            Tuple of (DeploymentSpecification, intent, traffic_profile, slo_targets)
-        """
-        from planner.shared.schemas import DeploymentSpecification
-
-        logger.info("Step 1: Extracting deployment intent")
-        intent = self.intent_extractor.extract_intent(user_message, conversation_history)
-        intent = self.intent_extractor.infer_missing_fields(intent)
-        logger.info(f"Intent extracted: {intent.use_case}, {intent.user_count} users")
-
-        logger.info("Step 2: Generating traffic profile and SLO targets")
-        traffic_profile = self.traffic_generator.generate_profile(intent)
-        slo_targets = self.traffic_generator.generate_slo_targets(intent)
-        logger.info(
-            f"Traffic profile: ({traffic_profile.prompt_tokens}→{traffic_profile.output_tokens}), "
-            f"{traffic_profile.expected_qps} QPS"
-        )
-        logger.info(
-            f"SLO targets (p95): TTFT={slo_targets.ttft_p95_target_ms}ms, "
-            f"ITL={slo_targets.itl_p95_target_ms}ms, E2E={slo_targets.e2e_p95_target_ms}ms"
+        return WorkloadProfile(
+            prompt_tokens=traffic_profile.prompt_tokens,
+            output_tokens=traffic_profile.output_tokens,
+            expected_qps=traffic_profile.expected_qps or 0.0,
         )
 
-        specification = DeploymentSpecification(
-            intent=intent,
-            traffic_profile=traffic_profile,
-            slo_targets=slo_targets,
-        )
+    def _load_quality_weights(self, use_case: str):
+        """Load QualityWeights from quality_weights.json for the use case."""
+        from planner.shared.schemas import QualityWeights
 
-        return specification, intent, traffic_profile, slo_targets
+        repo_root = Path(__file__).parent.parent.parent.parent
+        weights_path = repo_root / "data" / "configuration" / "quality_weights.json"
 
-    def generate_recommendation(
-        self, user_message: str, conversation_history: list[ConversationMessage] | None = None
-    ) -> DeploymentRecommendation:
-        """
-        Generate deployment recommendation from user message.
+        if not weights_path.is_file():
+            logger.warning("Quality weights file not found: %s. Using fallback.", weights_path)
+            return QualityWeights(categories={"overall": 10})
 
-        This is the main workflow that orchestrates all components:
-        1. Extract intent from conversation
-        2. Generate traffic profile and SLO targets
-        3. Delegate to generate_recommendation_from_specs for recommendation
+        with open(weights_path) as f:
+            data = json.load(f)
 
-        Args:
-            user_message: User's deployment request
-            conversation_history: Optional conversation context
+        # Filter out metadata keys (starting with "_")
+        weights_by_use_case = {k: v for k, v in data.items() if not k.startswith("_")}
 
-        Returns:
-            DeploymentRecommendation
+        if use_case not in weights_by_use_case:
+            logger.warning("Use case %r not found in quality weights. Using fallback.", use_case)
+            return QualityWeights(categories={"overall": 10})
 
-        Raises:
-            ValueError: If recommendation cannot be generated
-        """
-        logger.info("Starting recommendation workflow")
+        categories = weights_by_use_case[use_case].get("categories", {})
+        return QualityWeights(categories=categories)
 
-        # Generate specification from conversation
-        specification, intent, traffic_profile, slo_targets = self.generate_specification(
-            user_message, conversation_history
-        )
+    def _load_priorities(self, intent):
+        """Load Priorities from priority_weights.json using intent priority levels."""
+        from planner.shared.schemas import Priorities, PriorityEntry
 
-        # Convert to dict format and delegate to single recommendation path
-        specs = {
-            "intent": intent.model_dump(),
-            "traffic_profile": traffic_profile.model_dump(),
-            "slo_targets": slo_targets.model_dump(),
-        }
-        return self.generate_recommendation_from_specs(specs)
+        repo_root = Path(__file__).parent.parent.parent.parent
+        weights_path = repo_root / "data" / "configuration" / "priority_weights.json"
 
-    def generate_recommendation_from_specs(self, specifications: dict) -> DeploymentRecommendation:
-        """
-        Generate recommendation from specifications.
+        if not weights_path.is_file():
+            logger.warning("Priority weights file not found: %s. Using fallback.", weights_path)
+            weight_map = {"low": 1, "medium": 4, "high": 8}
+        else:
+            with open(weights_path) as f:
+                data = json.load(f)
+            weight_map_data = data.get("priority_weights", {})
+            quality_weights = weight_map_data.get("quality", {"low": 2, "medium": 4, "high": 8})
+            cost_weights = weight_map_data.get("cost", {"low": 2, "medium": 4, "high": 8})
+            latency_weights = weight_map_data.get("latency", {"low": 0, "medium": 1, "high": 2})
 
-        This is the single entry point for recommendation generation.
-        Used by both:
-        - generate_recommendation() - after extracting specs from conversation
-        - Direct calls with user-edited specifications
-
-        Args:
-            specifications: Dict with keys: intent, traffic_profile, slo_targets
-
-        Returns:
-            DeploymentRecommendation
-
-        Raises:
-            ValueError: If recommendation cannot be generated
-        """
-        from planner.shared.schemas import DeploymentIntent, SLOTargets, TrafficProfile
-
-        logger.info("Generating recommendation from specifications")
-
-        # Infer experience_class if not provided in intent
-        intent_data = specifications["intent"].copy()
-        if "experience_class" not in intent_data or not intent_data.get("experience_class"):
-            # Use the same inference logic as the extractor
-            use_case = intent_data.get("use_case", "")
-            if use_case == "code_completion":
-                intent_data["experience_class"] = "instant"
-            elif use_case in [
-                "chatbot_conversational",
-                "code_generation_detailed",
-                "translation",
-                "content_generation",
-                "summarization_short",
-            ]:
-                intent_data["experience_class"] = "conversational"
-            elif use_case == "document_analysis_rag":
-                intent_data["experience_class"] = "interactive"
-            elif use_case == "long_document_summarization":
-                intent_data["experience_class"] = "deferred"
-            elif use_case == "research_legal_analysis":
-                intent_data["experience_class"] = "batch"
-            else:
-                intent_data["experience_class"] = "conversational"  # Default
-
-        # Parse specifications into proper schema objects
-        intent = DeploymentIntent(**intent_data)
-        traffic_profile = TrafficProfile(**specifications["traffic_profile"])
-        slo_targets = SLOTargets(**specifications["slo_targets"])
-
-        logger.info(
-            f"Specs: {intent.use_case}, {intent.user_count} users, "
-            f"{traffic_profile.expected_qps} QPS, "
-            f"TTFT target={slo_targets.ttft_p95_target_ms}ms (p95)"
-        )
-
-        # Generate all viable configurations with full scoring
-        # No model pre-filtering - all benchmark configs meeting SLO are scored
-        # Detect cluster GPUs for filtering
-        cluster_gpu_types = detect_cluster_gpus()
-        logger.info("Generating all viable configurations")
-        all_configs, _warnings = self.config_finder.plan_all_capacities(
-            traffic_profile=traffic_profile,
-            slo_targets=slo_targets,
-            intent=intent,
-            include_near_miss=False,  # Strict SLO for best recommendation
-            cluster_gpu_types=cluster_gpu_types,
-        )
-
-        if not all_configs:
-            # Build helpful error message with context
-            error_msg = (
-                f"No viable deployment configurations found meeting SLO targets.\n\n"
-                f"**Requirements:**\n"
-                f"- Use case: {intent.use_case} ({intent.experience_class} experience)\n"
-                f"- Scale: {intent.user_count:,} users\n\n"
-                f"**Traffic profile:**\n"
-                f"- {traffic_profile.prompt_tokens} prompt tokens -> {traffic_profile.output_tokens} output tokens\n"
-                f"- Expected load: {traffic_profile.expected_qps} queries/second\n\n"
-                f"**SLO targets (p95):**\n"
-                f"- TTFT <= {slo_targets.ttft_p95_target_ms}ms\n"
-                f"- ITL <= {slo_targets.itl_p95_target_ms}ms\n"
-                f"- E2E <= {slo_targets.e2e_p95_target_ms}ms\n\n"
-                f"No configurations can meet the SLO targets with available hardware configurations. "
-                f"Try relaxing SLO targets or considering a different use case."
-            )
-            raise ValueError(error_msg)
-
-        # Sort by balanced score and pick best
-        all_configs.sort(key=lambda x: x.scores.balanced_score if x.scores else 0, reverse=True)
-        best_recommendation = all_configs[0]
-
-        gpu_cfg = best_recommendation.gpu_config
-        logger.info(
-            f"Selected: {best_recommendation.model_name} on "
-            f"{gpu_cfg.gpu_count}x {gpu_cfg.gpu_type} "
-            f"(balanced score: {best_recommendation.scores.balanced_score if best_recommendation.scores else 0:.1f})"
-            if gpu_cfg
-            else f"Selected: {best_recommendation.model_name} (no GPU config)"
-        )
-
-        # Add top 3 alternatives
-        if len(all_configs) > 1:
-            best_recommendation.alternative_options = [
-                rec.to_alternative_dict() for rec in all_configs[1:4]
-            ]
-            logger.info(f"Added {len(best_recommendation.alternative_options)} alternative options")
-
-        return best_recommendation
-
-    def generate_ranked_recommendations(
-        self,
-        user_message: str,
-        conversation_history: list[ConversationMessage] | None = None,
-        min_quality: float | None = None,
-        max_cost: float | None = None,
-        include_near_miss: bool = True,
-        weights: dict[str, int] | None = None,
-    ) -> RankedRecommendationsResponse:
-        """
-        Generate ranked recommendation lists from user message.
-
-        This is the enhanced workflow that returns multiple ranked views
-        instead of a single best recommendation. Useful for exploring
-        trade-offs between quality, cost, and latency.
-
-        Args:
-            user_message: User's deployment request
-            conversation_history: Optional conversation context
-            min_quality: Minimum quality score filter (0-100)
-            max_cost: Maximum monthly cost filter (USD)
-            include_near_miss: Whether to include near-SLO configurations
-            weights: Optional custom weights for balanced score (0-10 scale)
-                     Keys: quality, price, latency
-
-        Returns:
-            RankedRecommendationsResponse with 4 ranked lists
-        """
-        logger.info("Starting ranked recommendation workflow")
-
-        # Generate specification from conversation
-        specification, intent, traffic_profile, slo_targets = self.generate_specification(
-            user_message, conversation_history
-        )
-
-        # Get ALL configurations with scores
-        # No model pre-filtering - all benchmark configs meeting SLO are scored
-        # Detect cluster GPUs for filtering
-        cluster_gpu_types = detect_cluster_gpus()
-        logger.info("Planning capacity for all model/GPU combinations")
-        all_configs, estimation_warnings = self.config_finder.plan_all_capacities(
-            traffic_profile=traffic_profile,
-            slo_targets=slo_targets,
-            intent=intent,
-            include_near_miss=include_near_miss,
-            cluster_gpu_types=cluster_gpu_types,
-            preferred_models=intent.preferred_models if intent.preferred_models else None,
-            enable_estimated=True,
-        )
-
-        if not all_configs:
-            logger.warning("No viable configurations found")
-            return RankedRecommendationsResponse(
-                min_quality_threshold=min_quality,
-                max_cost_ceiling=max_cost,
-                include_near_miss=include_near_miss,
-                specification=specification,
-                total_configs_evaluated=0,
-                configs_after_filters=0,
-                warnings=estimation_warnings,
+            return Priorities(
+                quality=PriorityEntry(
+                    priority=intent.quality_priority,
+                    weight=quality_weights[intent.quality_priority],
+                ),
+                cost=PriorityEntry(
+                    priority=intent.cost_priority,
+                    weight=cost_weights[intent.cost_priority],
+                ),
+                latency=PriorityEntry(
+                    priority=intent.latency_priority,
+                    weight=latency_weights[intent.latency_priority],
+                ),
             )
 
-        # Generate ranked lists (top 10 solutions per criterion)
-        # Pass use_case for task-specific bonuses on Balanced card
-        analyzer = Analyzer()
-        ranked_lists = analyzer.generate_ranked_lists(
-            configurations=all_configs,
-            min_quality=min_quality,
-            max_cost=max_cost,
-            top_n=5,  # Top 5 quality models only
-            weights=weights,
-            use_case=intent.use_case,  # Task bonuses for Balanced
-            preferred_models=intent.preferred_models if intent.preferred_models else None,
+        # Fallback if file not found
+        return Priorities(
+            quality=PriorityEntry(
+                priority=intent.quality_priority,
+                weight=weight_map[intent.quality_priority],
+            ),
+            cost=PriorityEntry(
+                priority=intent.cost_priority,
+                weight=weight_map[intent.cost_priority],
+            ),
+            latency=PriorityEntry(
+                priority=intent.latency_priority,
+                weight=weight_map[intent.latency_priority],
+            ),
         )
 
-        # Count configs after filtering
-        configs_after_filters = analyzer.get_unique_configs_count(ranked_lists)
-
-        logger.info(
-            f"Generated ranked recommendations: {len(all_configs)} total configs, "
-            f"{configs_after_filters} after filters"
-        )
-
-        return RankedRecommendationsResponse(
-            min_quality_threshold=min_quality,
-            max_cost_ceiling=max_cost,
-            include_near_miss=include_near_miss,
-            specification=specification,
-            best_quality=ranked_lists["best_quality"],
-            lowest_cost=ranked_lists["lowest_cost"],
-            lowest_latency=ranked_lists["lowest_latency"],
-            balanced=ranked_lists["balanced"],
-            total_configs_evaluated=len(all_configs),
-            configs_after_filters=configs_after_filters,
-            warnings=estimation_warnings,
-        )
-
-    def generate_ranked_recommendations_from_spec(
+    def generate_recommendations(
         self,
         specifications: dict,
         min_quality: float | None = None,
@@ -333,7 +112,7 @@ class RecommendationWorkflow:
         include_near_miss: bool = True,
         weights: dict[str, int] | None = None,
         enable_estimated: bool = True,
-    ) -> RankedRecommendationsResponse:
+    ) -> RankedRecommendations:
         """
         Generate ranked recommendation lists from pre-built specifications.
 
@@ -349,7 +128,7 @@ class RecommendationWorkflow:
                      Keys: quality, price, latency
 
         Returns:
-            RankedRecommendationsResponse with 4 ranked lists
+            RankedRecommendations with 4 ranked lists
         """
         from planner.shared.schemas import (
             DeploymentIntent,
@@ -360,44 +139,30 @@ class RecommendationWorkflow:
 
         logger.info("Starting ranked recommendation workflow from specifications")
 
-        # Infer experience_class if not provided in intent
-        intent_data = specifications["intent"].copy()
-        if "experience_class" not in intent_data or not intent_data.get("experience_class"):
-            use_case = intent_data.get("use_case", "")
-            if use_case == "code_completion":
-                intent_data["experience_class"] = "instant"
-            elif use_case in [
-                "chatbot_conversational",
-                "code_generation_detailed",
-                "translation",
-                "content_generation",
-                "summarization_short",
-            ]:
-                intent_data["experience_class"] = "conversational"
-            elif use_case == "document_analysis_rag":
-                intent_data["experience_class"] = "interactive"
-            elif use_case == "long_document_summarization":
-                intent_data["experience_class"] = "deferred"
-            elif use_case == "research_legal_analysis":
-                intent_data["experience_class"] = "batch"
-            else:
-                intent_data["experience_class"] = "conversational"
+        intent_data = specifications["intent"]
 
         # Parse specifications into schema objects
         intent = DeploymentIntent(**intent_data)
         traffic_profile = TrafficProfile(**specifications["traffic_profile"])
         slo_targets = SLOTargets(**specifications["slo_targets"])
 
+        # Create new required fields for DeploymentSpecification
+        workload_profile = self._create_workload_profile(traffic_profile, intent)
+        quality_weights = self._load_quality_weights(intent.use_case)
+        priorities = self._load_priorities(intent)
+
         specification = DeploymentSpecification(
             intent=intent,
-            traffic_profile=traffic_profile,
             slo_targets=slo_targets,
+            workload_profile=workload_profile,
+            quality_weights=quality_weights,
+            priorities=priorities,
         )
 
         logger.info(
             f"Specs: {intent.use_case}, {intent.user_count} users, "
             f"{traffic_profile.expected_qps} QPS, "
-            f"TTFT target={slo_targets.ttft_p95_target_ms}ms (p95)"
+            f"TTFT target={slo_targets.ttft_target_ms}ms (p95)"
         )
 
         # Get ALL configurations with scores
@@ -418,7 +183,7 @@ class RecommendationWorkflow:
 
         if not all_configs:
             logger.warning("No viable configurations found")
-            return RankedRecommendationsResponse(
+            return RankedRecommendations(
                 min_quality_threshold=min_quality,
                 max_cost_ceiling=max_cost,
                 include_near_miss=include_near_miss,
@@ -449,7 +214,7 @@ class RecommendationWorkflow:
             f"{configs_after_filters} after filters"
         )
 
-        return RankedRecommendationsResponse(
+        return RankedRecommendations(
             min_quality_threshold=min_quality,
             max_cost_ceiling=max_cost,
             include_near_miss=include_near_miss,

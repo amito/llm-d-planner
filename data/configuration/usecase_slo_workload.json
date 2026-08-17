@@ -7,7 +7,6 @@
     "chatbot_conversational": {
       "description": "Real-time conversational chatbots (short prompts, short responses)",
       "workload": {
-        "distribution": "poisson",
         "active_fraction": 0.20,
         "requests_per_active_user_per_min": 0.4,
         "peak_multiplier": 2.0,
@@ -24,10 +23,8 @@
     "code_completion": {
       "description": "Fast code completion/autocomplete (short prompts, short completions)",
       "workload": {
-        "distribution": "compound_poisson",
         "active_fraction": 0.25,
         "requests_per_active_user_per_min": 2.0,
-        "burst_size": 3,
         "peak_multiplier": 2.5,
         "prompt_tokens": 512,
         "output_tokens": 256
@@ -42,7 +39,6 @@
     "code_generation_detailed": {
       "description": "Detailed code generation with explanations (medium prompts, long responses)",
       "workload": {
-        "distribution": "poisson",
         "active_fraction": 0.15,
         "requests_per_active_user_per_min": 0.3,
         "peak_multiplier": 2.0,
@@ -59,7 +55,6 @@
     "translation": {
       "description": "Document translation (medium prompts, medium responses)",
       "workload": {
-        "distribution": "poisson",
         "active_fraction": 0.15,
         "requests_per_active_user_per_min": 0.2,
         "peak_multiplier": 1.8,
@@ -76,10 +71,8 @@
     "content_generation": {
       "description": "Content creation, marketing copy (medium prompts, medium responses)",
       "workload": {
-        "distribution": "poisson_with_bursts",
         "active_fraction": 0.20,
         "requests_per_active_user_per_min": 0.5,
-        "burst_size": 2.5,
         "peak_multiplier": 2.2,
         "prompt_tokens": 512,
         "output_tokens": 256
@@ -94,7 +87,6 @@
     "summarization_short": {
       "description": "Short document summarization (medium prompts, short summaries)",
       "workload": {
-        "distribution": "poisson",
         "active_fraction": 0.15,
         "requests_per_active_user_per_min": 0.2,
         "peak_multiplier": 1.8,
@@ -111,7 +103,6 @@
     "document_analysis_rag": {
       "description": "RAG-based document Q&A (long prompts with context, medium responses)",
       "workload": {
-        "distribution": "poisson_clustered",
         "active_fraction": 0.20,
         "requests_per_active_user_per_min": 1.0,
         "peak_multiplier": 2.5,
@@ -128,7 +119,6 @@
     "long_document_summarization": {
       "description": "Long document summarization (very long prompts, medium summaries)",
       "workload": {
-        "distribution": "poisson",
         "active_fraction": 0.10,
         "requests_per_active_user_per_min": 0.1,
         "peak_multiplier": 1.5,
@@ -145,7 +135,6 @@
     "research_legal_analysis": {
       "description": "Research/legal document analysis (very long prompts, detailed analysis)",
       "workload": {
-        "distribution": "uniform_periodic",
         "active_fraction": 0.10,
         "requests_per_active_user_per_min": 0.03,
         "peak_multiplier": 2.5,
