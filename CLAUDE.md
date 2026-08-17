@@ -367,8 +367,40 @@ All API endpoints **must** follow these rules:
 - **Prefix**: Every route file uses `APIRouter(prefix="/api/v1")`. Individual route decorators use relative paths (e.g., `@router.post("/recommend")`), **not** full paths.
 - **Health check exception**: `/health` stays at root with no prefix (standard for load balancer probes). This is the only endpoint outside `/api/v1/`.
 - **Versioning**: All endpoints are under `/api/v1/`. When a v2 is needed, add new route files with `prefix="/api/v2"`.
-- **Naming**: Use kebab-case for multi-word paths (e.g., `/deploy-to-cluster`, `/ranked-recommend-from-spec`).
+- **Naming**: Use kebab-case for multi-word paths (e.g., `/deploy-bundle-to-cluster`, `/generate-recommendations`).
 - **When adding a new route file**: Set `prefix="/api/v1"` on the `APIRouter` and use relative paths in all decorators. Register the router in `src/planner/api/routes/__init__.py` and include it in `src/planner/api/app.py`.
+
+### API Pipeline Endpoints
+
+The API is organized as a composable pipeline where each stage's output feeds as input to the next:
+
+**Pipeline stages**:
+1. `POST /api/v1/extract-intent` - Extract structured intent from natural language (requires LLM)
+2. `POST /api/v1/generate-specification` - Generate complete deployment specification from intent
+3. `POST /api/v1/generate-recommendations` - Generate ranked recommendations from specification
+4. `POST /api/v1/generate-deployment` - Generate Kubernetes YAML files from selected configuration
+5. `POST /api/v1/deploy-bundle-to-cluster` - Deploy YAML bundle to Kubernetes cluster
+
+**Key schemas**:
+- `DeploymentIntent` - User intent (use case, user count, priorities, preferences)
+- `DeploymentSpecification` - Complete spec (SLO targets, workload profile, quality weights, priorities)
+- `RankedRecommendations` - Four ranked views (best quality, lowest cost, lowest latency, balanced)
+- `DeploymentRecommendation` - Single recommended configuration
+- `DeploymentConfiguration` - Slim model with only fields needed for YAML generation
+- `DeploymentBundle` - Generated YAML files ready for deployment
+
+**Removed endpoints**:
+- `POST /recommend` - One-shot endpoint (superseded by pipeline)
+- `POST /test` - Quick test endpoint (no longer needed)
+- `POST /ranked-recommend-from-spec` - Replaced by `/generate-recommendations`
+- `POST /deploy` - Replaced by `/generate-deployment`
+- `POST /deploy-to-cluster` - Replaced by `/deploy-bundle-to-cluster`
+- `GET /deployments/{id}/status` - Mock observability (replaced by `/k8s-status`)
+
+**Legacy aliases** (kept for compatibility):
+- `POST /extract` → `/extract-intent`
+
+See `docs/PROGRAMMATIC_API_DESIGN.md` for complete API pipeline documentation.
 
 ### Common Editing Patterns
 
