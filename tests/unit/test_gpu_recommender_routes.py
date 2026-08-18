@@ -33,6 +33,7 @@ MOCK_PERFORMANCE_SUMMARY = {
 
 
 @pytest.mark.unit
+@patch(f"{MOCK_PATH}._LLM_OPTIMIZER_AVAILABLE", True)
 @patch(f"{MOCK_PATH}.GPURecommender")
 def test_estimate_success(mock_recommender_cls):
     mock_rec = MagicMock()
@@ -60,6 +61,7 @@ def test_estimate_success(mock_recommender_cls):
 
 
 @pytest.mark.unit
+@patch(f"{MOCK_PATH}._LLM_OPTIMIZER_AVAILABLE", True)
 @patch(f"{MOCK_PATH}.GPURecommender")
 def test_estimate_with_constraints(mock_recommender_cls):
     mock_rec = MagicMock()
@@ -97,6 +99,7 @@ def test_estimate_missing_required_fields():
 
 
 @pytest.mark.unit
+@patch(f"{MOCK_PATH}._LLM_OPTIMIZER_AVAILABLE", True)
 @patch(f"{MOCK_PATH}.GPURecommender", side_effect=Exception("gated repo"))
 def test_estimate_hf_gated_error(mock_recommender_cls):
     resp = client.post(
@@ -111,6 +114,7 @@ def test_estimate_hf_gated_error(mock_recommender_cls):
 
 
 @pytest.mark.unit
+@patch(f"{MOCK_PATH}._LLM_OPTIMIZER_AVAILABLE", True)
 @patch(f"{MOCK_PATH}.GPURecommender", side_effect=Exception("connection refused"))
 def test_estimate_generic_error(mock_recommender_cls):
     resp = client.post(
@@ -125,6 +129,7 @@ def test_estimate_generic_error(mock_recommender_cls):
 
 
 @pytest.mark.unit
+@patch(f"{MOCK_PATH}._LLM_OPTIMIZER_AVAILABLE", True)
 @patch(f"{MOCK_PATH}.GPU_SPECS", {"H100": {}, "A100": {}, "L40": {}})
 @patch(f"{MOCK_PATH}.GPURecommender")
 def test_estimate_default_gpu_list(mock_recommender_cls):

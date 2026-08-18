@@ -5,7 +5,6 @@ SLO targets, workload profile, quality benchmarks, priorities, and approval.
 
 import json
 import logging
-from pathlib import Path
 
 import streamlit as st
 from api_client import (
@@ -16,11 +15,11 @@ from api_client import (
     generate_specification,
 )
 
+from planner.data._resolver import data_path as _data_path
+
 logger = logging.getLogger(__name__)
 
-_WEIGHTS_PATH = (
-    Path(__file__).parent.parent.parent / "data" / "configuration" / "quality_weights.json"
-)
+_WEIGHTS_PATH = _data_path("configuration/quality_weights.json")
 
 
 def _load_quality_categories() -> dict:

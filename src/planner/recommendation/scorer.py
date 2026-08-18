@@ -15,8 +15,9 @@ INTEGRATION NOTE:
 import json
 import logging
 import re
-from pathlib import Path
 from typing import Literal
+
+from planner.data._resolver import data_path as resolve_data_path
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +65,7 @@ class Scorer:
         Returns:
             Dict mapping use_case to SLO target ranges
         """
-        # Path is: src/planner/recommendation/scorer.py
-        # Need to go up 4 levels to get to project root, then into data/
-        config_path = (
-            Path(__file__).parent.parent.parent.parent
-            / "data"
-            / "configuration"
-            / "usecase_slo_workload.json"
-        )
+        config_path = resolve_data_path("configuration/usecase_slo_workload.json")
         try:
             with open(config_path) as f:
                 data = json.load(f)

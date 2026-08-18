@@ -4,6 +4,8 @@ import json
 import logging
 from pathlib import Path
 
+from planner.data._resolver import data_path as resolve_data_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,12 +71,7 @@ class SLOTemplateRepository:
             data_path: Path to slo_templates.json
         """
         if data_path is None:
-            data_path = (
-                Path(__file__).parent.parent.parent.parent
-                / "data"
-                / "configuration"
-                / "slo_templates.json"
-            )
+            data_path = resolve_data_path("configuration/slo_templates.json")
 
         self.data_path = data_path
         self._templates: dict[str, SLOTemplate] = {}

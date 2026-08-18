@@ -3,7 +3,6 @@ Main Page
 """
 
 import json
-from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -53,9 +52,9 @@ def _cached_calculate(
 
 def _load_gpu_specs_fallback() -> dict[str, dict]:
     """Load GPU specs from gpu_catalog.json when the backend API is unavailable."""
-    catalog_path = (
-        Path(__file__).parent.parent.parent / "data" / "configuration" / "gpu_catalog.json"
-    )
+    from planner.data._resolver import data_path
+
+    catalog_path = data_path("configuration/gpu_catalog.json")
     data = json.loads(catalog_path.read_text())
     return {g["gpu_type"]: g for g in data.get("gpu_types", [])}
 

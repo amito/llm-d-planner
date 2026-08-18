@@ -101,17 +101,6 @@ def generate_recommendations(
     try:
         spec = request.specification
 
-        # Build specifications dict for workflow (existing interface)
-        specifications = {
-            "intent": spec.intent.model_dump(),
-            "traffic_profile": {
-                "prompt_tokens": spec.workload_profile.prompt_tokens,
-                "output_tokens": spec.workload_profile.output_tokens,
-                "expected_qps": spec.workload_profile.expected_qps,
-            },
-            "slo_targets": spec.slo_targets.model_dump(),
-        }
-
         # Weights from specification priorities
         weights_dict = {
             "quality": spec.priorities.quality.weight,
@@ -120,7 +109,7 @@ def generate_recommendations(
         }
 
         response = workflow.generate_recommendations(
-            specifications=specifications,
+            spec=spec,
             min_quality=request.min_quality,
             max_cost=request.max_cost,
             include_near_miss=request.include_near_miss,
@@ -128,7 +117,6 @@ def generate_recommendations(
             enable_estimated=request.enable_estimated,
         )
 
-        response.specification = spec
         return response
 
     except Exception as e:

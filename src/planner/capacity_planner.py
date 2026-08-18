@@ -16,28 +16,43 @@ import io
 import json
 import logging
 import math
-import os
 import re
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
 from typing import Any, cast
 
-from huggingface_hub import HfApi
-from huggingface_hub.hf_api import ModelInfo, SafetensorsRepoMetadata
+from planner.data._resolver import data_path
 
-with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-    from transformers import AutoConfig
+try:
+    from huggingface_hub import HfApi
+    from huggingface_hub.hf_api import ModelInfo, SafetensorsRepoMetadata
+
+    _HF_AVAILABLE = True
+except ImportError:
+    _HF_AVAILABLE = False
+    # Placeholder types for type checking
+    HfApi = None  # type: ignore
+    ModelInfo = None  # type: ignore
+    SafetensorsRepoMetadata = None  # type: ignore
+
+try:
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        from transformers import AutoConfig
+
+    _TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    _TRANSFORMERS_AVAILABLE = False
+    AutoConfig = None  # type: ignore
 
 _logger = logging.getLogger(__name__)
 
 # Memory Overhead Constants (in GiB)
-# Loaded from data/configuration/vllm_memory_constants.json (calibrated against
+# Loaded from configuration/vllm_memory_constants.json (calibrated against
 # vLLM v0.19.0 on H100-80GB, 49 runs across 28 models).
 # See docs/accuracy/vllm-v0.19.0-accuracy-report.md for methodology.
-_CONSTANTS_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "data", "configuration", "vllm_memory_constants.json"
-)
+
+_CONSTANTS_PATH = data_path("configuration/vllm_memory_constants.json")
 
 _EXPECTED_ACTIVATION_BASE_KEYS = {"dense", "moe", "multimodal"}
 _EXPECTED_NON_TORCH_KEYS = {"tp1_pp1", "tp1_ppN", "tpN_pp1", "tpN_ppN"}
@@ -269,7 +284,15 @@ def get_model_info_from_hf(model_name: str, hf_token: str | None = None) -> Mode
     """
     Fetches model info from HF, does not handle error.
     Results are cached to avoid repeated API calls for the same model.
+
+    Raises:
+        ImportError: If huggingface_hub is not installed
     """
+    if not _HF_AVAILABLE:
+        raise ImportError(
+            "HuggingFace Hub integration requires huggingface_hub. "
+            "Install with: pip install llm-d-planner[estimation]"
+        )
     api = HfApi(token=hf_token)
     model_info = api.model_info(model_name)
     return model_info
@@ -280,7 +303,15 @@ def get_model_config_from_hf(model_name: str, hf_token: str | None = None) -> An
     """
     Returns LLM model config.
     Results are cached to avoid repeated API calls for the same model.
+
+    Raises:
+        ImportError: If transformers is not installed
     """
+    if not _TRANSFORMERS_AVAILABLE:
+        raise ImportError(
+            "Model configuration loading requires transformers. "
+            "Install with: pip install llm-d-planner[estimation]"
+        )
 
     model_config = AutoConfig.from_pretrained(
         model_name,
@@ -295,7 +326,16 @@ def get_model_config_from_hf(model_name: str, hf_token: str | None = None) -> An
 def _get_safetensors_metadata_cached(
     model_name: str, hf_token: str | None = None
 ) -> SafetensorsRepoMetadata:
-    """Cached internal function for fetching safetensors metadata."""
+    """Cached internal function for fetching safetensors metadata.
+
+    Raises:
+        ImportError: If huggingface_hub is not installed
+    """
+    if not _HF_AVAILABLE:
+        raise ImportError(
+            "HuggingFace Hub integration requires huggingface_hub. "
+            "Install with: pip install llm-d-planner[estimation]"
+        )
     api = HfApi(token=hf_token)
     return api.get_safetensors_metadata(model_name)
 

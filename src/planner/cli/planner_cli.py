@@ -10,7 +10,13 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from llm_optimizer.predefined.gpus import GPU_SPECS
+try:
+    from llm_optimizer.predefined.gpus import GPU_SPECS
+
+    _LLM_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _LLM_OPTIMIZER_AVAILABLE = False
+    GPU_SPECS = {}  # type: ignore
 
 from planner.capacity_planner import (
     KVCacheDetail,
@@ -231,6 +237,13 @@ def plan_capacity(args):
 
 def estimate_performance(args):
     """Run GPU performance estimation and recommendation"""
+
+    if not _LLM_OPTIMIZER_AVAILABLE:
+        sys.exit(
+            "Error: GPU performance estimation requires llm-optimizer.\n"
+            "This is not available as a PyPI package.\n"
+            "Install from source: pip install git+https://github.com/bentoml/llm-optimizer.git"
+        )
 
     try:
         # Parse GPU-specific max_gpus if provided

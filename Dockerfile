@@ -18,14 +18,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 
 # Install Python dependencies (frozen = use lockfile exactly, no-dev = skip dev deps)
-RUN uv sync --frozen --no-dev --extra cluster --extra vertex --extra openai
+RUN uv sync --frozen --no-dev --extra server --extra llm --extra openai --extra vertex --extra kubernetes --extra estimation --extra quality-sync
+RUN uv pip install "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git"
 
-# Copy backend source code
+# Copy backend source code and data files (Knowledge Base is now in src/planner/data/)
 COPY src/planner ./src/planner
 COPY src/quality_scoring ./src/quality_scoring
-
-# Copy data files (Knowledge Base)
-COPY data ./data
 
 # Copy scripts (schema init, benchmark loading)
 COPY scripts ./scripts

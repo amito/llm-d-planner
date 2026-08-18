@@ -4,8 +4,15 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
-from llm_optimizer.predefined.gpus import GPU_SPECS
 from pydantic import BaseModel
+
+try:
+    from llm_optimizer.predefined.gpus import GPU_SPECS
+
+    _LLM_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _LLM_OPTIMIZER_AVAILABLE = False
+    GPU_SPECS = {}  # type: ignore
 
 from planner.api.routes.common import handle_hf_error
 from planner.gpu_recommender import GPURecommender
@@ -45,6 +52,14 @@ async def estimate(request: EstimateRequest) -> EstimateResponse:
 
     Returns per-GPU performance data and ranked best recommendations.
     """
+    if not _LLM_OPTIMIZER_AVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="GPU performance estimation requires llm-optimizer, which is not installed. "
+            "This feature is not available as a PyPI package. "
+            "Install from source: pip install git+https://github.com/bentoml/llm-optimizer.git",
+        )
+
     gpu_list = request.gpu_list if request.gpu_list else sorted(GPU_SPECS.keys())
 
     try:

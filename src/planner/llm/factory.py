@@ -6,36 +6,56 @@ import logging
 import os
 
 from planner.llm.client import LLMClient
-from planner.llm.ollama_client import OllamaClient
 
 logger = logging.getLogger(__name__)
 
 _VALID_PROVIDERS = ("ollama", "vertex", "openai")
 
 
-def create_llm_client() -> LLMClient:
-    """Create an LLM client based on the LLM_PROVIDER environment variable.
+def create_llm_client(provider: str | None = None) -> LLMClient:
+    """Create an LLM client.
 
-    Returns OllamaClient by default. Set LLM_PROVIDER to 'vertex' for
-    Vertex AI or 'openai' for any OpenAI-compatible endpoint.
+    Args:
+        provider: LLM provider name ("ollama", "openai", "vertex").
+                  Falls back to LLM_PROVIDER env var, then "ollama".
     """
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    if provider is None:
+        provider = os.getenv("LLM_PROVIDER", "ollama")
+    provider = provider.lower()
 
     if provider == "ollama":
-        logger.info("Using Ollama LLM provider")
-        return OllamaClient()
+        try:
+            from planner.llm.ollama_client import OllamaClient
+
+            logger.info("Using Ollama LLM provider")
+            return OllamaClient()
+        except ImportError as e:
+            raise ImportError(
+                "Ollama provider requires ollama. Install with: pip install llm-d-planner[llm]"
+            ) from e
 
     if provider == "vertex":
-        from planner.llm.vertex_client import VertexClient
+        try:
+            from planner.llm.vertex_client import VertexClient
 
-        logger.info("Using Vertex AI LLM provider")
-        return VertexClient()
+            logger.info("Using Vertex AI LLM provider")
+            return VertexClient()
+        except ImportError as e:
+            raise ImportError(
+                "Vertex AI provider requires anthropic[vertex]. "
+                "Install with: pip install llm-d-planner[vertex]"
+            ) from e
 
     if provider == "openai":
-        from planner.llm.openai_client import OpenAIClient
+        try:
+            from planner.llm.openai_client import OpenAIClient
 
-        logger.info("Using OpenAI-compatible LLM provider")
-        return OpenAIClient()
+            logger.info("Using OpenAI-compatible LLM provider")
+            return OpenAIClient()
+        except ImportError as e:
+            raise ImportError(
+                "OpenAI provider requires openai. Install with: pip install llm-d-planner[openai]"
+            ) from e
 
     raise ValueError(
         f"Unknown LLM provider: '{provider}'. Valid options: {', '.join(_VALID_PROVIDERS)}"

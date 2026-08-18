@@ -485,7 +485,7 @@ class TestPlanAllCapacitiesEstimated:
         self.mock_catalog.get_all_models.return_value = []
         self.finder = ConfigFinder(benchmark_repo=self.mock_repo, catalog=self.mock_catalog)
 
-    @patch("planner.recommendation.config_finder.generate_estimated_configs")
+    @patch("planner.recommendation.estimator.generate_estimated_configs")
     def test_calls_estimated_flow_when_enabled(self, mock_gen):
         """Should call generate_estimated_configs when enable_estimated=True and preferred_models set."""
         mock_gen.return_value = ([], [])
@@ -500,7 +500,7 @@ class TestPlanAllCapacitiesEstimated:
 
         mock_gen.assert_called_once()
 
-    @patch("planner.recommendation.config_finder.generate_estimated_configs")
+    @patch("planner.recommendation.estimator.generate_estimated_configs")
     def test_skips_estimated_flow_when_disabled(self, mock_gen):
         """Should not call generate_estimated_configs when enable_estimated=False."""
         mock_gen.return_value = ([], [])
@@ -515,7 +515,7 @@ class TestPlanAllCapacitiesEstimated:
 
         mock_gen.assert_not_called()
 
-    @patch("planner.recommendation.config_finder.generate_estimated_configs")
+    @patch("planner.recommendation.estimator.generate_estimated_configs")
     def test_skips_estimated_flow_without_models(self, mock_gen):
         """Should not call generate_estimated_configs when no preferred_models."""
         mock_gen.return_value = ([], [])
@@ -529,7 +529,7 @@ class TestPlanAllCapacitiesEstimated:
 
         mock_gen.assert_not_called()
 
-    @patch("planner.recommendation.config_finder.generate_estimated_configs")
+    @patch("planner.recommendation.estimator.generate_estimated_configs")
     def test_benchmark_metrics_include_confidence_level(self, mock_gen):
         """benchmark_metrics dict should include source and confidence_level."""
         # Return a benchmark from the DB query

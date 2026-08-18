@@ -7,8 +7,8 @@ and writes benchmarks_GuideLLM.json (metadata-wrapped, native types).
 
 Usage:
     python scripts/convert_exported_summaries.py
-    python scripts/convert_exported_summaries.py -i data/benchmarks/performance/benchmarks-exported-summaries.json
-    python scripts/convert_exported_summaries.py -o data/benchmarks/performance/benchmarks_GuideLLM.json
+    python scripts/convert_exported_summaries.py -i src/planner/data/performance/benchmarks-exported-summaries.json
+    python scripts/convert_exported_summaries.py -o src/planner/data/performance/benchmarks_GuideLLM.json
 """
 
 import argparse
@@ -59,12 +59,12 @@ def main():
     parser = argparse.ArgumentParser(description="Convert exported summaries to GuideLLM format")
     parser.add_argument(
         "-i", "--input",
-        default="data/benchmarks/performance/benchmarks-exported-summaries.json",
+        default="src/planner/data/performance/benchmarks-exported-summaries.json",
         help="Input file path",
     )
     parser.add_argument(
         "-o", "--output",
-        default="data/benchmarks/performance/benchmarks_GuideLLM.json",
+        default="src/planner/data/performance/benchmarks_GuideLLM.json",
         help="Output file path",
     )
     args = parser.parse_args()

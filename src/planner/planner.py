@@ -1,0 +1,382 @@
+"""Planner facade — library API for external callers.
+
+Zero-config usage:
+    from planner import Planner
+    p = Planner()
+    p.load_bundled_benchmarks()
+    intent = p.extract_intent("I need a chatbot for 1000 users")
+    spec = p.generate_specification(intent)
+    recs = p.generate_recommendations(spec)
+    bundle = p.generate_deployment(recs.best_quality[0].configuration)
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from planner.data._resolver import data_path
+from planner.errors import PlannerError
+from planner.knowledge_base.benchmarks import BenchmarkRepository
+from planner.knowledge_base.model_catalog import ModelCatalog
+from planner.knowledge_base.slo_templates import SLOTemplateRepository
+from planner.orchestration.workflow import RecommendationWorkflow
+from planner.recommendation.config_finder import ConfigFinder
+from planner.recommendation.quality.scoring import build_scoring_engine, load_quality_weights
+from planner.shared.schemas import (
+    DeploymentBundle,
+    DeploymentConfiguration,
+    DeploymentIntent,
+    DeploymentSpecification,
+    RankedRecommendations,
+)
+from planner.specification.service import SpecificationService
+
+if TYPE_CHECKING:
+    from planner.intent_extraction import IntentExtractor
+    from planner.llm.client import LLMClient
+
+logger = logging.getLogger(__name__)
+
+
+class Planner:
+    """Zero-config library API for LLM deployment planning.
+
+    Example:
+        p = Planner()
+        p.load_bundled_benchmarks()
+        intent = DeploymentIntent(use_case="chatbot_conversational", user_count=100)
+        spec = p.generate_specification(intent)
+        recs = p.generate_recommendations(spec)
+        bundle = p.generate_deployment(recs.best_quality[0].configuration)
+    """
+
+    def __init__(
+        self,
+        data_dir: Path | None = None,
+        llm_provider: str | None = None,
+        **llm_kwargs,
+    ):
+        """Initialize Planner with optional custom data directory and LLM provider.
+
+        Args:
+            data_dir: Custom data directory (default: bundled package data)
+            llm_provider: LLM provider for intent extraction ("ollama", "vertex", "openai")
+            **llm_kwargs: Additional keyword args passed to LLM client (e.g., api_key)
+        """
+        self._data_dir = data_dir
+        self._llm_provider = llm_provider
+        self._llm_kwargs = llm_kwargs
+        self._llm_client: LLMClient | None = None
+        self._extractor: IntentExtractor | None = None
+
+        # Initialize in-memory SQLite database for benchmark data
+        self._benchmark_repo = BenchmarkRepository(db_path=":memory:")
+
+        # Resolve data paths
+        slo_path = data_path("configuration/slo_templates.json", data_dir)
+        catalog_path = data_path("configuration/model_catalog.json", data_dir)
+        gpu_catalog_path = data_path("configuration/gpu_catalog.json", data_dir)
+        quality_weights_path = data_path("configuration/quality_weights.json", data_dir)
+        quality_data_dir = data_path("quality", data_dir)
+
+        # Initialize components
+        self._model_catalog = ModelCatalog(
+            data_path=catalog_path,
+            gpu_catalog_path=gpu_catalog_path,
+        )
+        self._slo_repo = SLOTemplateRepository(data_path=slo_path)
+        self._spec_service = SpecificationService(data_dir=data_dir)
+
+        # Build quality scoring engine
+        self._scoring_engine, _ = build_scoring_engine(cache_dir=quality_data_dir)
+        self._quality_weights = load_quality_weights(quality_weights_path)
+
+        # Initialize config finder with scoring engine
+        self._config_finder = ConfigFinder(
+            benchmark_repo=self._benchmark_repo,
+            catalog=self._model_catalog,
+            engine=self._scoring_engine,
+            quality_weights=self._quality_weights,
+        )
+
+        # Initialize workflow orchestrator
+        self._workflow = RecommendationWorkflow(
+            config_finder=self._config_finder,
+            spec_service=self._spec_service,
+        )
+
+        logger.info("Planner initialized with data_dir=%s", data_dir or "<bundled>")
+
+    def load_bundled_benchmarks(self) -> None:
+        """Load bundled BLIS benchmark data.
+
+        This is the simplest way to get started. The bundled benchmarks
+        cover the 4 GuideLLM traffic profiles for a curated set of models.
+        """
+        bundled = data_path("performance/benchmarks_BLIS.json", self._data_dir)
+        self._load_benchmark_file(bundled)
+        logger.info("Loaded bundled BLIS benchmarks")
+
+    def load_benchmarks(self, path: str | Path) -> None:
+        """Load benchmark data from a custom JSON file.
+
+        Args:
+            path: Path to benchmark JSON file with {"benchmarks": [...]} structure
+        """
+        self._load_benchmark_file(Path(path))
+        logger.info("Loaded benchmarks from %s", path)
+
+    def _load_benchmark_file(self, path: Path) -> None:
+        """Parse JSON benchmark file and load into the in-memory repo.
+
+        Args:
+            path: Path to benchmark JSON file
+
+        Raises:
+            FileNotFoundError: If benchmark file not found
+            ValueError: If JSON is invalid or missing 'benchmarks' key
+        """
+        if not path.exists():
+            raise FileNotFoundError(f"Benchmark file not found: {path}")
+
+        with open(path) as f:
+            data = json.load(f)
+
+        benchmarks = data.get("benchmarks", [])
+        if not benchmarks:
+            logger.warning("No benchmarks found in %s", path)
+            return
+
+        # Extract metadata from file (source, confidence_level)
+        from planner.knowledge_base.loader import extract_metadata
+
+        meta = extract_metadata(data)
+        source = meta["source"] or "local"
+        confidence_level = meta["confidence_level"] or "estimated"
+
+        self._benchmark_repo.load_benchmarks(
+            benchmarks,
+            source=source,
+            confidence_level=confidence_level,
+        )
+
+    def generate_specification(
+        self,
+        intent: DeploymentIntent,
+    ) -> DeploymentSpecification:
+        """Generate a complete deployment specification from intent.
+
+        Args:
+            intent: Deployment intent with use_case, user_count, priorities
+
+        Returns:
+            Complete specification with SLO targets, workload profile, quality weights
+
+        Raises:
+            ValueError: If use_case is unknown or config data is missing
+        """
+        return self._spec_service.generate(intent)
+
+    def generate_recommendations(
+        self,
+        spec: DeploymentSpecification,
+        min_quality: float | None = None,
+        max_cost: float | None = None,
+        include_near_miss: bool = True,
+        weights: dict[str, int] | None = None,
+        enable_estimated: bool = True,
+    ) -> RankedRecommendations:
+        """Generate ranked recommendations from a specification.
+
+        Args:
+            spec: Deployment specification (from generate_specification)
+            min_quality: Minimum quality score filter (0-100)
+            max_cost: Maximum monthly cost filter (USD)
+            include_near_miss: Whether to include near-SLO configurations
+            weights: Custom weights for balanced score (0-10 scale)
+            enable_estimated: Whether to include estimated performance data
+
+        Returns:
+            Ranked recommendations with 4 views (best_quality, lowest_cost, etc.)
+
+        Raises:
+            PlannerError: If no benchmarks loaded
+        """
+        stats = self._benchmark_repo.get_stats()
+        if stats.get("total_benchmarks", 0) == 0:
+            raise PlannerError(
+                "No benchmarks loaded. Call load_bundled_benchmarks() or "
+                "load_benchmarks(path) first."
+            )
+
+        return self._workflow.generate_recommendations(
+            spec=spec,
+            min_quality=min_quality,
+            max_cost=max_cost,
+            include_near_miss=include_near_miss,
+            weights=weights,
+            enable_estimated=enable_estimated,
+        )
+
+    def generate_deployment(
+        self,
+        config: DeploymentConfiguration,
+        namespace: str = "default",
+        stack: str = "vllm",
+    ) -> DeploymentBundle:
+        """Generate Kubernetes YAML deployment bundle from configuration.
+
+        Args:
+            config: Deployment configuration (from recommendations)
+            namespace: Kubernetes namespace (default: "default")
+            stack: Deployment stack ("vllm" or "llm-d")
+
+        Returns:
+            Deployment bundle with YAML files ready for kubectl apply
+
+        Raises:
+            ValueError: If stack is unknown
+        """
+        from planner.configuration.generator import DeploymentGenerator
+        from planner.configuration.llmd_generator import LlmdDeploymentGenerator
+
+        if stack == "llm-d":
+            llmd_gen = LlmdDeploymentGenerator()
+            result = llmd_gen.generate_all(config=config, namespace=namespace)
+        elif stack == "vllm":
+            vllm_gen = DeploymentGenerator(simulator_mode=False)
+            result = vllm_gen.generate_all(config=config, namespace=namespace)
+        else:
+            raise ValueError(f"Unknown deployment stack: {stack}. Valid options: 'vllm', 'llm-d'")
+
+        return DeploymentBundle(
+            deployment_id=result["deployment_id"],
+            namespace=namespace,
+            stack=stack,
+            configuration=config,
+            files=result["contents"],
+        )
+
+    def extract_intent(self, text: str) -> DeploymentIntent:
+        """Extract deployment intent from natural language text.
+
+        Requires LLM provider to be configured via llm_provider parameter
+        in __init__ or LLM_PROVIDER environment variable.
+
+        Args:
+            text: Natural language description of deployment requirements
+
+        Returns:
+            Extracted and validated deployment intent
+
+        Raises:
+            PlannerError: If LLM provider not configured
+            ImportError: If required LLM dependencies not installed
+        """
+        if not self._llm_provider:
+            raise PlannerError(
+                "No LLM provider configured. Pass llm_provider to Planner(), e.g.:\n"
+                "  Planner(llm_provider='openai', api_key='...')"
+            )
+
+        # Lazy-initialize LLM client and extractor
+        if self._extractor is None:
+            from planner.intent_extraction import IntentExtractor
+            from planner.llm.factory import create_llm_client
+
+            self._llm_client = create_llm_client(provider=self._llm_provider)
+            self._extractor = IntentExtractor(self._llm_client)
+
+        intent = self._extractor.extract_intent(text)
+        return self._extractor.infer_missing_fields(intent)
+
+    def deploy_bundle_to_cluster(
+        self,
+        bundle: DeploymentBundle,
+    ) -> dict:
+        """Deploy a bundle to Kubernetes cluster.
+
+        Requires kubernetes package (install with: pip install llm-d-planner[kubernetes])
+
+        Args:
+            bundle: Deployment bundle (from generate_deployment)
+
+        Returns:
+            Result dictionary with success status and applied files
+
+        Raises:
+            ImportError: If kubernetes package not installed
+            PlannerError: If deployment fails
+        """
+        try:
+            from planner.cluster.manager import KubernetesClusterManager
+        except ImportError:
+            raise ImportError(
+                "Kubernetes deployment requires kubernetes package.\n"
+                "Install with: pip install llm-d-planner[kubernetes]"
+            ) from None
+
+        manager = KubernetesClusterManager(namespace=bundle.namespace)
+        manager.create_namespace_if_not_exists()
+
+        for name, yaml_content in bundle.files.items():
+            result = manager.apply_yaml_content(yaml_content)
+            if not result["success"]:
+                raise PlannerError(f"Failed to apply {name}: {result.get('error')}")
+
+        return {
+            "success": True,
+            "deployment_id": bundle.deployment_id,
+            "files_applied": list(bundle.files.keys()),
+        }
+
+    def sync_model_catalog(self) -> dict:
+        """Sync benchmark data from external Model Catalog API.
+
+        Fetches latest benchmarks and merges into the in-memory database.
+        Requires MODEL_CATALOG_API_URL environment variable.
+
+        Returns:
+            Sync result with counts and errors
+
+        Raises:
+            ImportError: If httpx not installed
+            ValueError: If MODEL_CATALOG_API_URL not set
+        """
+        import os
+
+        api_url = os.getenv("MODEL_CATALOG_API_URL")
+        if not api_url:
+            raise ValueError(
+                "MODEL_CATALOG_API_URL environment variable not set.\n"
+                "Set it to the Model Catalog API endpoint URL."
+            )
+
+        try:
+            from planner.knowledge_base.model_catalog_client import ModelCatalogClient
+            from planner.knowledge_base.model_catalog_sync import sync_model_catalog
+        except ImportError:
+            raise ImportError(
+                "Model Catalog sync requires httpx.\nInstall with: pip install llm-d-planner[api]"
+            ) from None
+
+        client = ModelCatalogClient(base_url=api_url)
+        result = sync_model_catalog(
+            client=client,
+            benchmark_repo=self._benchmark_repo,
+            model_catalog=self._model_catalog,
+        )
+
+        # result is a SyncResult from model_catalog_sync
+        benchmarks_added = getattr(result, "benchmarks_added", 0)
+        models_added = getattr(result, "models_added", 0)
+        errors = getattr(result, "errors", [])
+
+        return {
+            "benchmarks_added": benchmarks_added,
+            "models_added": models_added,
+            "errors": errors,
+        }

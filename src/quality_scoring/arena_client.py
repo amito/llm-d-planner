@@ -9,9 +9,6 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pandas as pd
-from datasets import load_dataset
-
 from quality_scoring.cache import get_cache_dir
 
 logger = logging.getLogger(__name__)
@@ -23,6 +20,9 @@ def get_cache_path(cache_dir: Path | None = None) -> Path:
 
 def fetch_from_hf() -> list[dict]:
     """Fetch the Arena leaderboard dataset from HuggingFace."""
+    import pandas as pd
+    from datasets import load_dataset
+
     ds = load_dataset("lmarena-ai/leaderboard-dataset", "text_style_control", split="latest")
     df = pd.DataFrame(ds)
     return df.to_dict(orient="records")  # type: ignore[no-any-return]

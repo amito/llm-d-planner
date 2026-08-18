@@ -2,6 +2,7 @@
 
 import difflib
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,12 @@ from planner.shared.schemas import ConversationMessage, DeploymentIntent
 logger = logging.getLogger(__name__)
 
 # Create prompts directory for easy copy-paste access
-PROMPTS_DIR = Path(__file__).parent.parent.parent.parent / "logs" / "prompts"
+# Allow override via env var, default to logs/prompts in current working directory
+_prompts_dir_str = os.environ.get("PLANNER_PROMPTS_DIR")
+if _prompts_dir_str:
+    PROMPTS_DIR = Path(_prompts_dir_str)
+else:
+    PROMPTS_DIR = Path.cwd() / "logs" / "prompts"
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Common LLM hallucinations mapped to valid use_case values

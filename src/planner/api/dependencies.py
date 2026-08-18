@@ -86,7 +86,6 @@ def _sync_model_catalog_async(
 
 def init_app_state(app: FastAPI) -> None:
     """Initialize all singletons on app.state during lifespan startup."""
-    from pathlib import Path
 
     from planner.knowledge_base.benchmarks import BenchmarkRepository
     from planner.recommendation.config_finder import ConfigFinder
@@ -109,15 +108,12 @@ def init_app_state(app: FastAPI) -> None:
     app.state.cluster_managers = {}  # dict[str, KubernetesClusterManager]
 
     # Build quality scoring engine (shared across both code paths)
+    from planner.data._resolver import data_path as resolve_data_path
+
     engine, quality_metadata = build_scoring_engine()
     app.state.scoring_engine = engine
     app.state.quality_metadata = quality_metadata
-    weights_path = (
-        Path(__file__).parent.parent.parent.parent
-        / "data"
-        / "configuration"
-        / "quality_weights.json"
-    )
+    weights_path = resolve_data_path("configuration/quality_weights.json")
     quality_weights = load_quality_weights(weights_path)
     validate_quality_weights(quality_weights)
 

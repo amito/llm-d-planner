@@ -6,6 +6,8 @@ import json
 import logging
 from pathlib import Path
 
+from planner.data._resolver import data_path as resolve_data_path
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,12 +117,7 @@ class ModelCatalog:
                               in the same directory as data_path)
         """
         if data_path is None:
-            data_path = (
-                Path(__file__).parent.parent.parent.parent
-                / "data"
-                / "configuration"
-                / "model_catalog.json"
-            )
+            data_path = resolve_data_path("configuration/model_catalog.json")
 
         self.data_path = data_path
         self.gpu_catalog_path = gpu_catalog_path or data_path.parent / "gpu_catalog.json"
