@@ -51,7 +51,6 @@ def _make_intent(use_case: str = "chatbot_conversational") -> DeploymentIntent:
     return DeploymentIntent(
         use_case=use_case,  # type: ignore[arg-type]
         user_count=100,
-        experience_class="conversational",
     )
 
 
@@ -65,9 +64,9 @@ def _make_traffic() -> TrafficProfile:
 
 def _make_slo() -> SLOTargets:
     return SLOTargets(
-        ttft_p95_target_ms=200,
-        itl_p95_target_ms=50,
-        e2e_p95_target_ms=7000,
+        ttft_target_ms=200,
+        itl_target_ms=50,
+        e2e_target_ms=7000,
     )
 
 

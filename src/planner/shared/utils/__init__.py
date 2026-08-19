@@ -3,5 +3,6 @@
 from .gpu_normalizer import (
     CATALOG_TO_OPTIMIZER_GPU,
     catalog_to_optimizer_gpu_name,
+    extract_gpu_max_counts,
     normalize_gpu_types,
 )

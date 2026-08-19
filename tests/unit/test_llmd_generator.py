@@ -14,6 +14,7 @@ from planner.configuration import DeploymentGenerator, YAMLValidator
 from planner.configuration.llmd_generator import LlmdDeploymentGenerator
 from planner.shared.schemas.intent import DeploymentIntent
 from planner.shared.schemas.recommendation import (
+    DeploymentConfiguration,
     DeploymentRecommendation,
     GPUConfig,
 )
@@ -44,14 +45,13 @@ def sample_recommendation() -> DeploymentRecommendation:
     return DeploymentRecommendation(
         intent=DeploymentIntent(
             use_case="chatbot_conversational",
-            experience_class="conversational",
             user_count=100,
         ),
         traffic_profile=TrafficProfile(prompt_tokens=512, output_tokens=256, expected_qps=9.0),
         slo_targets=SLOTargets(
-            ttft_p95_target_ms=150,
-            itl_p95_target_ms=25,
-            e2e_p95_target_ms=7000,
+            ttft_target_ms=150,
+            itl_target_ms=25,
+            e2e_target_ms=7000,
         ),
         model_id="meta-llama/Llama-3-8B-Instruct",
         model_name="Llama-3-8B-Instruct",
@@ -68,6 +68,26 @@ def sample_recommendation() -> DeploymentRecommendation:
 
 
 @pytest.fixture
+def sample_config() -> DeploymentConfiguration:
+    return DeploymentConfiguration(
+        model_id="meta-llama/Llama-3-8B-Instruct",
+        model_name="Llama-3-8B-Instruct",
+        model_uri=None,
+        gpu_config=GPUConfig(
+            gpu_type="NVIDIA-A100-80GB",
+            gpu_count=6,
+            tensor_parallel=2,
+            replicas=3,
+        ),
+        use_case="chatbot_conversational",
+        expected_qps=9.0,
+        prompt_tokens=512,
+        output_tokens=256,
+        e2e_target_ms=7000,
+    )
+
+
+@pytest.fixture
 def llmd_generator(tmp_path) -> LlmdDeploymentGenerator:
     """Create an LlmdDeploymentGenerator writing to a temporary directory."""
     return LlmdDeploymentGenerator(output_dir=str(tmp_path))
@@ -77,70 +97,54 @@ def llmd_generator(tmp_path) -> LlmdDeploymentGenerator:
 class TestLlmdGeneratorOutput:
     def test_invalid_model_id_raises(self, llmd_generator: LlmdDeploymentGenerator) -> None:
         """Test that invalid model_id format raises ValueError."""
-        rec = DeploymentRecommendation(
-            intent=DeploymentIntent(
-                use_case="chatbot_conversational",
-                experience_class="conversational",
-                user_count=100,
-            ),
-            traffic_profile=TrafficProfile(prompt_tokens=512, output_tokens=256, expected_qps=9.0),
-            slo_targets=SLOTargets(
-                ttft_p95_target_ms=150,
-                itl_p95_target_ms=25,
-                e2e_p95_target_ms=7000,
-            ),
+        config = DeploymentConfiguration(
             model_id='bad-model"\nmalicious: code',
             model_name="bad-model",
             model_uri=None,
-            meets_slo=False,
             gpu_config=GPUConfig(
                 gpu_type="NVIDIA-A100-80GB",
                 gpu_count=2,
                 tensor_parallel=2,
                 replicas=3,
             ),
-            reasoning="test",
+            use_case="chatbot_conversational",
+            expected_qps=9.0,
+            prompt_tokens=512,
+            output_tokens=256,
+            e2e_target_ms=7000,
         )
         with pytest.raises(ValueError, match="Invalid model_id format"):
-            llmd_generator.generate_all(rec)
+            llmd_generator.generate_all(config)
 
     def test_invalid_namespace_raises(self, llmd_generator: LlmdDeploymentGenerator) -> None:
         """Test that invalid namespace format raises ValueError."""
-        rec = DeploymentRecommendation(
-            intent=DeploymentIntent(
-                use_case="chatbot_conversational",
-                experience_class="conversational",
-                user_count=100,
-            ),
-            traffic_profile=TrafficProfile(prompt_tokens=512, output_tokens=256, expected_qps=9.0),
-            slo_targets=SLOTargets(
-                ttft_p95_target_ms=150,
-                itl_p95_target_ms=25,
-                e2e_p95_target_ms=7000,
-            ),
+        config = DeploymentConfiguration(
             model_id="meta-llama/Llama-3-8B-Instruct",
             model_name="Llama-3-8B-Instruct",
             model_uri=None,
-            meets_slo=True,
             gpu_config=GPUConfig(
                 gpu_type="NVIDIA-A100-80GB",
                 gpu_count=2,
                 tensor_parallel=2,
                 replicas=3,
             ),
-            reasoning="test",
+            use_case="chatbot_conversational",
+            expected_qps=9.0,
+            prompt_tokens=512,
+            output_tokens=256,
+            e2e_target_ms=7000,
         )
         with pytest.raises(ValueError, match="Invalid namespace format"):
-            llmd_generator.generate_all(rec, namespace="INVALID NS!")
+            llmd_generator.generate_all(config, namespace="INVALID NS!")
 
     def test_generate_all_returns_three_files(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
         from pathlib import Path
 
-        result = llmd_generator.generate_all(sample_recommendation, namespace="prod")
+        result = llmd_generator.generate_all(sample_config, namespace="prod")
 
         assert set(result["files"].keys()) == {
             "kustomization",
@@ -158,9 +162,9 @@ class TestLlmdGeneratorOutput:
     def test_generate_all_returns_deployment_id_and_namespace(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation, namespace="myns")
+        result = llmd_generator.generate_all(sample_config, namespace="myns")
 
         assert result["deployment_id"]
         assert result["namespace"] == "myns"
@@ -168,9 +172,9 @@ class TestLlmdGeneratorOutput:
     def test_all_outputs_are_valid_yaml(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
 
         for key in ("kustomization", "patch_vllm", "helm_values"):
             parsed = yaml.safe_load(result["contents"][key])
@@ -182,9 +186,9 @@ class TestKustomizationOutput:
     def test_references_llmd_base(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["kustomization"])
 
         assert any("llm-d/llm-d" in r for r in parsed["resources"])
@@ -192,9 +196,9 @@ class TestKustomizationOutput:
     def test_sets_name_prefix_from_deployment_id(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["kustomization"])
 
         assert parsed["namePrefix"].startswith("chatbot")
@@ -203,9 +207,9 @@ class TestKustomizationOutput:
     def test_sets_app_label(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["kustomization"])
 
         label_pairs = parsed["labels"][0]["pairs"]
@@ -217,9 +221,9 @@ class TestPatchVllmOutput:
     def test_uses_model_id(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["patch_vllm"])
 
         container = parsed["spec"]["template"]["spec"]["containers"][0]
@@ -228,9 +232,9 @@ class TestPatchVllmOutput:
     def test_uses_tensor_parallel(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["patch_vllm"])
 
         container = parsed["spec"]["template"]["spec"]["containers"][0]
@@ -239,9 +243,9 @@ class TestPatchVllmOutput:
     def test_uses_replicas(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["patch_vllm"])
 
         assert parsed["spec"]["replicas"] == 3
@@ -249,9 +253,9 @@ class TestPatchVllmOutput:
     def test_sets_gpu_resources_per_replica(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["patch_vllm"])
 
         container = parsed["spec"]["template"]["spec"]["containers"][0]
@@ -265,9 +269,9 @@ class TestHelmValuesOutput:
     def test_contains_inference_extension(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["helm_values"])
 
         assert "inferenceExtension" in parsed
@@ -278,9 +282,9 @@ class TestHelmValuesOutput:
     def test_contains_inference_pool_selector(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["helm_values"])
 
         pool = parsed["inferencePool"]
@@ -289,9 +293,9 @@ class TestHelmValuesOutput:
     def test_contains_default_epp_config(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["helm_values"])
 
         custom_config = parsed["inferenceExtension"]["pluginsCustomConfig"]
@@ -304,44 +308,43 @@ class TestHelmValuesOutput:
     def test_target_ports(
         self,
         llmd_generator: LlmdDeploymentGenerator,
-        sample_recommendation: DeploymentRecommendation,
+        sample_config: DeploymentConfiguration,
     ) -> None:
-        result = llmd_generator.generate_all(sample_recommendation)
+        result = llmd_generator.generate_all(sample_config)
         parsed = yaml.safe_load(result["contents"]["helm_values"])
 
         assert parsed["inferencePool"]["targetPorts"] == [{"number": 8000}]
 
 
 @pytest.mark.unit
-class TestDeployEndpointStack:
-    def test_deploy_with_stack_llmd(
-        self, client: TestClient, sample_recommendation: DeploymentRecommendation
+class TestGenerateDeploymentEndpointStack:
+    def test_generate_deployment_with_stack_llmd(
+        self, client: TestClient, sample_config: DeploymentConfiguration
     ) -> None:
         response = client.post(
-            "/api/v1/deploy",
+            "/api/v1/generate-deployment",
             json={
-                "recommendation": sample_recommendation.model_dump(),
+                "configuration": sample_config.model_dump(),
                 "namespace": "test-ns",
                 "stack": "llm-d",
             },
         )
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert "kustomization" in data["yaml_contents"]
-        assert "helm_values" in data["yaml_contents"]
-        assert "patch_vllm" in data["yaml_contents"]
+        assert "kustomization" in data["files"]
+        assert "helm_values" in data["files"]
+        assert "patch_vllm" in data["files"]
 
-    def test_deploy_with_stack_vllm_is_default(
-        self, client: TestClient, sample_recommendation: DeploymentRecommendation
+    def test_generate_deployment_with_stack_vllm_is_default(
+        self, client: TestClient, sample_config: DeploymentConfiguration
     ) -> None:
         response = client.post(
-            "/api/v1/deploy",
+            "/api/v1/generate-deployment",
             json={
-                "recommendation": sample_recommendation.model_dump(),
+                "configuration": sample_config.model_dump(),
                 "namespace": "test-ns",
             },
         )
         assert response.status_code == 200
         data = response.json()
-        assert "inferenceservice" in data["yaml_contents"]
+        assert "inferenceservice" in data["files"]

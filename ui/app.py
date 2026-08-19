@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 from api_client import (
+    check_llm_available,
     extract_business_context,
     fetch_priority_weights,
     fetch_ranked_recommendations,
@@ -33,6 +34,7 @@ from components.extraction import (
     render_extraction_result,
     render_extraction_with_approval,
 )
+from components.intent_form import render_intent_form
 from components.recommendations import render_recommendation_result
 from components.settings import render_configuration_tab
 from components.slo import render_slo_with_approval
@@ -129,6 +131,34 @@ def render_use_case_input_tab(priority: str):
         st.session_state.show_winner_dialog = False
         st.session_state.show_options_list_expanded = False
 
+    # Mode toggle: Chat (LLM extraction) vs Form (manual intent)
+    if "intent_mode" not in st.session_state:
+        st.session_state.intent_mode = "Chat" if check_llm_available() else "Form"
+
+    mode_col1, mode_col2 = st.columns([1, 4])
+    with mode_col1:
+        mode = st.radio(
+            "Input Mode",
+            options=["Chat", "Form"],
+            index=0 if st.session_state.intent_mode == "Chat" else 1,
+            horizontal=True,
+            key="intent_mode_radio",
+        )
+        if mode != st.session_state.intent_mode:
+            if mode == "Chat" and not check_llm_available():
+                st.warning(
+                    "LLM is not available. Please start Ollama or configure an LLM provider, then try again."
+                )
+            else:
+                st.session_state.intent_mode = mode
+                st.rerun()
+
+    # Show form mode
+    if st.session_state.intent_mode == "Form":
+        render_intent_form()
+        return
+
+    # Chat mode (existing flow)
     # Transfer pending input from button clicks before rendering the text_area widget
     if "pending_user_input" in st.session_state:
         st.session_state.user_input = st.session_state.pending_user_input
@@ -256,6 +286,7 @@ def render_use_case_input_tab(priority: str):
                 "custom_qps",
                 "used_priority",
                 "_last_spec_fingerprint",
+                "_specification_populated",
             ]:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -274,6 +305,7 @@ def render_use_case_input_tab(priority: str):
         st.session_state.recommendation_result = None
         st.session_state.edited_extraction = None
         st.session_state.pop("_last_spec_fingerprint", None)
+        st.session_state.pop("_specification_populated", None)  # Clear spec cache
         # Clear previous recommendation selection and deployment state
         st.session_state.deployment_selected_config = None
         st.session_state.deployment_selected_category = None
@@ -486,6 +518,11 @@ def render_results_tab(priority: str):
     )
     enable_estimated = st.session_state.get("enable_estimated", True)
 
+    # Get priorities from session state
+    quality_priority = st.session_state.get("quality_priority", "medium")
+    cost_priority = st.session_state.get("cost_priority", "medium")
+    latency_priority = st.session_state.get("latency_priority", "medium")
+
     # Build a fingerprint of all spec values so we only re-fetch when inputs change
     spec_fingerprint = (
         use_case,
@@ -498,9 +535,12 @@ def render_results_tab(priority: str):
         int(e2e_target),
         tuple(sorted(weights.items())),
         percentile,
-        tuple(sorted(preferred_gpu_types)),
+        tuple(str(g) for g in preferred_gpu_types),
         tuple(sorted(preferred_models)),
         enable_estimated,
+        quality_priority,
+        cost_priority,
+        latency_priority,
     )
 
     # Only fetch recommendations if specs changed or no cached result
@@ -524,6 +564,9 @@ def render_results_tab(priority: str):
                 preferred_gpu_types=preferred_gpu_types,
                 preferred_models=preferred_models,
                 enable_estimated=enable_estimated,
+                quality_priority=quality_priority,
+                cost_priority=cost_priority,
+                latency_priority=latency_priority,
             )
 
         if recommendation is None:

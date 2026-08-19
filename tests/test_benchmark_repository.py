@@ -202,16 +202,6 @@ class TestSLOTemplates:
         assert template.prompt_tokens > 0
         assert template.output_tokens > 0
 
-    def test_template_has_experience_class(self, repo):
-        """Test that templates include experience class."""
-        template = repo.get_template("chatbot_conversational")
-
-        assert template is not None
-        assert hasattr(template, "experience_class")
-
-        valid_classes = ["instant", "conversational", "interactive", "deferred", "batch"]
-        assert template.experience_class in valid_classes
-
     def test_template_has_p95_slo_targets(self, repo):
         """Test that SLO templates use p95 targets."""
         template = repo.get_template("chatbot_conversational")

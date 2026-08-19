@@ -104,7 +104,8 @@ integrated views:
 
 #### a. Conversational Interface
 
-- Accepts natural language description of use case
+- Accepts natural language description of use case (Chat mode)
+- Alternative Form mode allows skip-LLM intent specification
 - Displays extracted intent for user review
 - Allows clarification and refinement through multi-turn dialogue
 - Obtains user approval before proceeding to specification
@@ -200,7 +201,7 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
 - Priority preferences (quality vs. cost vs. latency)
 - Subject matter domain (optional)
 
-**Interface**: REST endpoint `/api/v1/extract`
+**Interface**: REST endpoint `/api/v1/extract-intent`
 
 **Notes**:
 
@@ -258,7 +259,7 @@ Backend components interact with the UI via **FastAPI** REST endpoints.
   trade-offs
 - **Future**: Power budget, cooling budget thresholds
 
-**Interface**: Called internally after Intent Extraction; specification
+**Interface**: REST endpoint `/api/v1/generate-specification`; specification
 displayed in UI Spec Editor for user review and modification
 
 **Design Principle**: Specifications are **always editable** - users can adjust
@@ -384,7 +385,7 @@ without real benchmark data
 - Quality/latency scores
 - Trade-off analysis vs. alternatives
 
-**Interface**: REST endpoint `/api/v1/ranked-recommend-from-spec`
+**Interface**: REST endpoint `/api/v1/generate-recommendations`
 
 ---
 
@@ -425,7 +426,7 @@ without real benchmark data
 - Configuration files ready for user to deploy via `kubectl apply -f`
 - Files available for download or copy from UI
 
-**Interface**: REST endpoint `/api/v1/deploy`
+**Interface**: REST endpoints `/api/v1/generate-deployment` (generate YAML files) and `/api/v1/deploy-bundle-to-cluster` (deploy to cluster)
 
 **Initial Target**: KServe on Kubernetes **Future Options**: Direct Linux server
 deployment, other orchestration platforms

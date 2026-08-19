@@ -32,7 +32,7 @@ def assert_intent_matches(intent: DeploymentIntent, expected: dict) -> None:
     """Validate a DeploymentIntent against flexible expected values.
 
     Supported matchers per field type:
-      - str fields (use_case, experience_class):
+      - str fields (use_case):
           plain string              — exact match
           {"one_of": [...]}         — value must be in the list
       - user_count: {"min": N, "max": M} range check
@@ -53,19 +53,6 @@ def assert_intent_matches(intent: DeploymentIntent, expected: dict) -> None:
             )
         else:
             assert intent.use_case == exp, f"use_case: got '{intent.use_case}', expected '{exp}'"
-
-    # experience_class: exact match or one_of
-    if "experience_class" in expected:
-        exp = expected["experience_class"]
-        if isinstance(exp, dict) and "one_of" in exp:
-            assert intent.experience_class in exp["one_of"], (
-                f"experience_class: got '{intent.experience_class}', "
-                f"expected one of {exp['one_of']}"
-            )
-        else:
-            assert intent.experience_class == exp, (
-                f"experience_class: got '{intent.experience_class}', expected '{exp}'"
-            )
 
     # user_count: range check
     if "user_count" in expected:

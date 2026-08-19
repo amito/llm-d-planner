@@ -4,6 +4,7 @@ Creates a temporary SQLite database for database tests, loading
 a small static fixture dataset. No external infrastructure needed.
 """
 
+import json
 import logging
 import tempfile
 from pathlib import Path
@@ -34,3 +35,19 @@ def test_db_path():
     Path(db_path).unlink(missing_ok=True)
     Path(db_path + "-wal").unlink(missing_ok=True)
     Path(db_path + "-shm").unlink(missing_ok=True)
+
+
+@pytest.fixture(scope="session")
+def test_quality_data():
+    """Load test quality score fixture data for Arena and AA.
+
+    Returns a dict with 'arena_rows' and 'aa_models' keys.
+    """
+    fixture_path = FIXTURES_DIR / "test_quality_scores.json"
+    with open(fixture_path) as f:
+        data = json.load(f)
+
+    return {
+        "arena_rows": data["arena_rows"],
+        "aa_models": data["aa_models"],
+    }

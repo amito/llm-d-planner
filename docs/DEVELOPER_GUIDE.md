@@ -290,10 +290,10 @@ make logs-ui
 
 **Test API endpoints:**
 ```bash
-# Get recommendation
-curl -X POST http://localhost:8000/api/v1/recommend \
+# Generate specification
+curl -X POST http://localhost:8000/api/v1/generate-specification \
   -H "Content-Type: application/json" \
-  -d '{"message": "I need a chatbot for 1000 users"}'
+  -d '{"use_case": "chatbot_conversational", "user_count": 1000}'
 ```
 
 ### Database Management
@@ -808,10 +808,10 @@ Test the API:
 # Health check
 curl http://localhost:8000/health
 
-# Full recommendation
-curl -X POST http://localhost:8000/api/v1/recommend \
+# Generate specification
+curl -X POST http://localhost:8000/api/v1/generate-specification \
   -H "Content-Type: application/json" \
-  -d '{"message": "I need a chatbot for 5000 users with low latency"}'
+  -d '{"use_case": "chatbot_conversational", "user_count": 5000}'
 ```
 
 ### Option 4: Test Individual Components

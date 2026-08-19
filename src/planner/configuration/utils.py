@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from planner.shared.schemas import DeploymentRecommendation
+from planner.shared.schemas import DeploymentConfiguration
 
 _MODEL_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._/-]*$")
 _NAMESPACE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
@@ -23,16 +23,16 @@ def validate_namespace(namespace: str) -> None:
         raise ValueError(f"Invalid namespace format: {namespace}")
 
 
-def generate_deployment_id(recommendation: DeploymentRecommendation) -> str:
+def generate_deployment_id(config: DeploymentConfiguration) -> str:
     """Generate a Kubernetes-safe deployment ID.
 
     Must start with a letter, only lowercase alphanumeric and hyphens,
     max 44 characters (KServe adds "-predictor-default" suffix, total must be <= 63).
     """
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    use_case = recommendation.intent.use_case.replace("_", "-")
+    use_case = config.use_case.replace("_", "-")
 
-    model_name = (recommendation.model_id or "unknown").split("/")[-1].lower()
+    model_name = (config.model_id or "unknown").split("/")[-1].lower()
     model_name = re.sub(r"[^a-z0-9-]", "-", model_name)
     model_name = re.sub(r"-+", "-", model_name).strip("-")
 

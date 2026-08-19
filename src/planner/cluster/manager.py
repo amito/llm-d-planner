@@ -117,6 +117,42 @@ class KubernetesClusterManager:
         except subprocess.TimeoutExpired as e:
             raise KubernetesDeploymentError(f"Timeout applying {yaml_path}") from e
 
+    def apply_yaml_content(self, yaml_content: str) -> dict[str, Any]:
+        """
+        Apply YAML content via kubectl stdin (no intermediate files).
+
+        Args:
+            yaml_content: YAML content as a string
+
+        Returns:
+            Dict with status and output
+        """
+        try:
+            result = subprocess.run(
+                ["kubectl", "apply", "-f", "-", "-n", self.namespace],
+                input=yaml_content,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            if result.returncode != 0:
+                return {
+                    "success": False,
+                    "error": result.stderr,
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+            logger.info(f"Applied YAML content to namespace {self.namespace}")
+            return {
+                "success": True,
+                "output": result.stdout,
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        except subprocess.TimeoutExpired as e:
+            raise KubernetesDeploymentError("Timeout applying YAML content") from e
+
     def deploy_all(self, yaml_files: list[str]) -> dict[str, Any]:
         """
         Deploy all YAML files to the cluster.

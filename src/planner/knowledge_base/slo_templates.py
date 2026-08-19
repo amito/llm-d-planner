@@ -20,9 +20,6 @@ class SLOTemplate:
         self.prompt_tokens = traffic["prompt_tokens"]
         self.output_tokens = traffic["output_tokens"]
 
-        # Experience class
-        self.experience_class = data["experience_class"]
-
         # SLO targets (p95)
         slo = data["slo_targets"]
         self.ttft_p95_target_ms = slo["ttft_p95_ms"]
@@ -47,7 +44,6 @@ class SLOTemplate:
                 "prompt_tokens": self.prompt_tokens,
                 "output_tokens": self.output_tokens,
             },
-            "experience_class": self.experience_class,
             "slo_targets": {
                 "ttft_p95_ms": self.ttft_p95_target_ms,
                 "itl_p95_ms": self.itl_p95_target_ms,
@@ -133,20 +129,4 @@ class SLOTemplateRepository:
             template
             for template in self._templates.values()
             if template.prompt_tokens == prompt_tokens and template.output_tokens == output_tokens
-        ]
-
-    def get_templates_by_experience_class(self, experience_class: str) -> list[SLOTemplate]:
-        """
-        Get all templates for a specific experience class.
-
-        Args:
-            experience_class: Experience class (instant, conversational, interactive, deferred, batch)
-
-        Returns:
-            List of templates for this experience class
-        """
-        return [
-            template
-            for template in self._templates.values()
-            if template.experience_class == experience_class
         ]

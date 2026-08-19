@@ -4,7 +4,9 @@ Extraction result display, approval workflow, and edit form.
 """
 
 import streamlit as st
-from api_client import fetch_catalog_model_ids, fetch_gpu_types
+from api_client import generate_specification
+
+from components.shared_intent_form import render_intent_fields
 
 
 def _format_priorities(extraction: dict) -> str:
@@ -112,141 +114,73 @@ def render_extraction_with_approval(extraction: dict):
 
 
 def render_extraction_edit_form(extraction: dict):
-    """Render editable form for extraction correction."""
+    """Render editable form for extraction correction using shared intent fields."""
     st.subheader("Edit Business Context")
-    st.info('Review and adjust the extracted values below, then click "Apply Changes" to continue.')
+    st.info(
+        'Review and adjust the extracted values below, then click "Apply Changes" '
+        "to regenerate the specification."
+    )
 
-    use_cases = [
-        "chatbot_conversational",
-        "code_completion",
-        "code_generation_detailed",
-        "document_analysis_rag",
-        "summarization_short",
-        "long_document_summarization",
-        "translation",
-        "content_generation",
-        "research_legal_analysis",
-    ]
-    use_case_labels = {
-        "chatbot_conversational": "Chatbot / Conversational AI",
-        "code_completion": "Code Completion (IDE autocomplete)",
-        "code_generation_detailed": "Code Generation (full implementations)",
-        "document_analysis_rag": "Document RAG / Q&A",
-        "summarization_short": "Short Summarization (<10 pages)",
-        "long_document_summarization": "Long Document Summarization (10+ pages)",
-        "translation": "Translation",
-        "content_generation": "Content Generation",
-        "research_legal_analysis": "Research / Legal Analysis",
-    }
-
-    current_use_case = extraction.get("use_case", "chatbot_conversational")
-    current_idx = use_cases.index(current_use_case) if current_use_case in use_cases else 0
-
-    col1, col2 = st.columns(2, gap="medium")
-    with col1:
-        new_use_case = st.selectbox(
-            "Use Case",
-            use_cases,
-            index=current_idx,
-            format_func=lambda x: use_case_labels.get(x, x),
-            key="edit_use_case",
-        )
-
-        new_user_count = st.number_input(
-            "User Count",
-            min_value=1,
-            max_value=1000000,
-            value=extraction.get("user_count", 1000),
-            step=100,
-            key="edit_user_count",
-        )
-
-    with col2:
-        priorities = ["balanced", "low_latency", "cost_saving", "high_quality", "high_throughput"]
-        priority_labels = {
-            "balanced": "Balanced",
-            "low_latency": "Low Latency",
-            "cost_saving": "Cost Saving",
-            "high_quality": "High Quality",
-            "high_throughput": "High Throughput",
-        }
-        current_priority = extraction.get("priority", "balanced")
-        priority_idx = priorities.index(current_priority) if current_priority in priorities else 0
-
-        new_priority = st.selectbox(
-            "Priority",
-            priorities,
-            index=priority_idx,
-            format_func=lambda x: priority_labels.get(x, x),
-            key="edit_priority",
-        )
-
-        # GPU multi-select from catalog
-        gpu_catalog = fetch_gpu_types()
-        gpu_options = sorted(gpu_catalog.keys()) if gpu_catalog else []
-        current_gpus = extraction.get("preferred_gpu_types", [])
-        # Ensure current values are valid options
-        valid_current_gpus = [g for g in current_gpus if g in gpu_options]
-
-        new_gpu_types = st.multiselect(
-            "Hardware (GPUs)",
-            gpu_options,
-            default=valid_current_gpus,
-            key="edit_gpu_types",
-            help="Select one or more GPU types, or leave empty for any GPU",
-        )
-
-    # Model selection
-    st.markdown("**Model Preferences** (optional)")
-    col_models, col_custom = st.columns(2, gap="medium")
-    with col_models:
-        # Get catalog models for multiselect
-        catalog_model_ids = fetch_catalog_model_ids()
-        current_models = extraction.get("preferred_models", [])
-        catalog_current = [m for m in current_models if m in catalog_model_ids]
-
-        new_catalog_models = st.multiselect(
-            "Catalog Models",
-            catalog_model_ids,
-            default=catalog_current,
-            key="edit_catalog_models",
-            help="Select from approved model catalog",
-        )
-    with col_custom:
-        custom_current = [m for m in current_models if m not in catalog_model_ids]
-        new_custom_models_str = st.text_input(
-            "Custom HuggingFace Model IDs",
-            value=", ".join(custom_current),
-            key="edit_custom_models",
-            help="Comma-separated HuggingFace model IDs (e.g., meta-llama/Llama-3.3-70B-Instruct)",
-        )
-
-    # Merge catalog + custom models
-    custom_models_list = [m.strip() for m in new_custom_models_str.split(",") if m.strip()]
-    all_preferred_models = list(dict.fromkeys(new_catalog_models + custom_models_list))
+    intent = render_intent_fields(defaults=extraction, key_prefix="edit")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     col1, col2 = st.columns(2, gap="medium")
     with col1:
         if st.button("Apply Changes", type="primary", width="stretch", key="apply_edit"):
-            edited = {
-                "use_case": new_use_case,
-                "user_count": new_user_count,
-                "priority": new_priority,
-                "hardware": ", ".join(new_gpu_types) if new_gpu_types else None,
-                "preferred_gpu_types": new_gpu_types,
-                "preferred_models": all_preferred_models,
-            }
-            st.session_state.preferred_models = all_preferred_models
-            st.session_state.edited_extraction = edited
-            # Apply edits back to extraction_result so the approval view shows updated values
-            st.session_state.extraction_result.update(edited)
-            st.session_state.used_priority = new_priority
-            # Return to approval view (not approved yet) so buttons remain visible
-            st.session_state.extraction_approved = None
-            st.rerun()
+            with st.spinner("Regenerating specification..."):
+                specification = generate_specification(intent)
+
+            if specification:
+                edited = {
+                    "use_case": specification["intent"]["use_case"],
+                    "user_count": specification["intent"]["user_count"],
+                    "quality_priority": specification["intent"]["quality_priority"],
+                    "cost_priority": specification["intent"]["cost_priority"],
+                    "latency_priority": specification["intent"]["latency_priority"],
+                    "preferred_gpu_types": specification["intent"]["preferred_gpu_types"],
+                    "preferred_models": specification["intent"]["preferred_models"],
+                }
+
+                # Store SLO targets
+                slo = specification["slo_targets"]
+                st.session_state.input_ttft = slo["ttft_target_ms"]
+                st.session_state.custom_ttft = slo["ttft_target_ms"]
+                st.session_state.input_itl = slo["itl_target_ms"]
+                st.session_state.custom_itl = slo["itl_target_ms"]
+                st.session_state.input_e2e = slo["e2e_target_ms"]
+                st.session_state.custom_e2e = slo["e2e_target_ms"]
+                st.session_state.slo_percentile = slo["percentile"]
+
+                # Store workload profile
+                workload = specification["workload_profile"]
+                st.session_state.spec_prompt_tokens = workload["prompt_tokens"]
+                st.session_state.spec_output_tokens = workload["output_tokens"]
+                st.session_state.spec_expected_qps = workload["expected_qps"]
+
+                # Store priorities
+                priorities = specification["priorities"]
+                st.session_state.weight_quality = priorities["quality"]["weight"]
+                st.session_state.weight_cost = priorities["cost"]["weight"]
+                st.session_state.weight_latency = priorities["latency"]["weight"]
+                st.session_state.quality_priority = specification["intent"]["quality_priority"]
+                st.session_state.cost_priority = specification["intent"]["cost_priority"]
+                st.session_state.latency_priority = specification["intent"]["latency_priority"]
+
+                st.session_state.preferred_models = edited["preferred_models"]
+                st.session_state.edited_extraction = edited
+                st.session_state.extraction_result.update(edited)
+                st.session_state.extraction_approved = True
+                st.session_state.slo_approved = None
+                st.session_state.recommendation_result = None
+                st.session_state.pop("_last_spec_fingerprint", None)
+                st.session_state.pop("_specification_populated", None)
+
+                st.session_state._pending_tab = 1
+                st.rerun()
+            else:
+                st.error("Failed to regenerate specification. Check backend logs.")
     with col2:
-        if st.button("🔙 Cancel", width="stretch", key="cancel_edit"):
+        if st.button("Cancel", width="stretch", key="cancel_edit"):
             st.session_state.extraction_approved = None
             st.rerun()

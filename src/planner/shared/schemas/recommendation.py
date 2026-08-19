@@ -29,6 +29,24 @@ class ConfigurationScores(BaseModel):
     )
 
 
+class DeploymentConfiguration(BaseModel):
+    """Deployment parameters needed to generate YAML files.
+
+    This is the input to generate-deployment. Embedded in each
+    DeploymentRecommendation for easy pipeline composition.
+    """
+
+    model_id: str = Field(..., description="Model identifier (HuggingFace format)")
+    model_name: str | None = Field(None, description="Human-readable model name")
+    model_uri: str | None = Field(None, description="Model artifact URI")
+    gpu_config: GPUConfig = Field(..., description="GPU type, count, tensor parallelism, replicas")
+    use_case: str = Field(..., description="Use case (determines max_model_len)")
+    expected_qps: float = Field(..., description="Expected queries per second")
+    prompt_tokens: int = Field(..., description="Mean input token length per request")
+    output_tokens: int = Field(..., description="Mean output token length per request")
+    e2e_target_ms: int = Field(..., description="End-to-end latency target (ms)")
+
+
 class DeploymentRecommendation(BaseModel):
     """Complete deployment recommendation with all specifications."""
 
@@ -74,6 +92,11 @@ class DeploymentRecommendation(BaseModel):
         default=None, description="Multi-criteria scores for ranking"
     )
 
+    # Deployment configuration (for YAML generation)
+    configuration: DeploymentConfiguration | None = Field(
+        default=None, description="Deployment parameters for YAML generation"
+    )
+
     def to_alternative_dict(self) -> dict:
         """
         Convert recommendation to alternative option format.
@@ -101,7 +124,55 @@ class DeploymentRecommendation(BaseModel):
         }
 
 
-class RankedRecommendationsResponse(BaseModel):
+class DeploymentBundle(BaseModel):
+    """Generated deployment files — output of generate-deployment."""
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "deployment_id": "chatbot-1000-users-abc123",
+                    "namespace": "default",
+                    "stack": "vllm",
+                    "configuration": {
+                        "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+                        "model_name": "Llama 3.1 8B Instruct",
+                        "model_uri": None,
+                        "gpu_config": {
+                            "gpu_type": "H100",
+                            "gpu_count": 1,
+                            "tensor_parallel": 1,
+                            "replicas": 1,
+                        },
+                        "use_case": "chatbot_conversational",
+                        "expected_qps": 0.87,
+                        "prompt_tokens": 512,
+                        "output_tokens": 256,
+                        "e2e_target_ms": 6280,
+                    },
+                    "files": {
+                        "inferenceservice": "apiVersion: serving.kserve.io/v1beta1\nkind: InferenceService\n...",
+                        "autoscaling": "apiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\n...",
+                    },
+                }
+            ]
+        }
+    }
+
+    deployment_id: str = Field(..., description="Unique deployment identifier")
+    namespace: str = Field(..., description="Kubernetes namespace")
+    stack: str = Field(..., description="Deployment stack (vllm or llm-d)")
+    configuration: DeploymentConfiguration = Field(
+        ..., description="The configuration used to generate these files"
+    )
+    files: dict[str, str] = Field(
+        ...,
+        description="Map of filename to YAML content. Files are applied in iteration order "
+        "by deploy-bundle-to-cluster, so order matters if resources have dependencies.",
+    )
+
+
+class RankedRecommendations(BaseModel):
     """Response containing multiple ranked recommendation lists.
 
     Provides 4 different views of the same configurations, each sorted

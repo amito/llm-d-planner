@@ -9,14 +9,25 @@ organized by domain:
 
 from enum import StrEnum
 
-from .intent import ConversationMessage, DeploymentIntent
+from .intent import ConversationMessage, DeploymentIntent, GpuPreference
 from .recommendation import (
     ConfigurationScores,
+    DeploymentBundle,
+    DeploymentConfiguration,
     DeploymentRecommendation,
     GPUConfig,
-    RankedRecommendationsResponse,
+    RankedRecommendations,
 )
-from .specification import DeploymentSpecification, SLOTargets, TrafficProfile
+from .specification import (
+    DeploymentSpecification,
+    Priorities,
+    PriorityEntry,
+    QualityWeights,
+    SLORange,
+    SLOTargets,
+    TrafficProfile,
+    WorkloadProfile,
+)
 
 
 class DeploymentMode(StrEnum):

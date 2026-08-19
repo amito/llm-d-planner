@@ -16,7 +16,6 @@ def _base_intent(**overrides) -> dict:
     """Build a minimal valid raw LLM output dict with overrides."""
     data = {
         "use_case": "chatbot_conversational",
-        "experience_class": "conversational",
         "user_count": 500,
         "quality_priority": "medium",
         "cost_priority": "medium",

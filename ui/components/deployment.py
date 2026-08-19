@@ -88,10 +88,14 @@ def render_deployment_tab():
             with st.spinner("Generating deployment files..."):
                 try:
                     stack = st.session_state.get("deployment_stack", "vllm")
+                    configuration = selected_config.get("configuration")
+                    if not configuration:
+                        st.error("Selected configuration is missing deployment configuration data.")
+                        return
                     response = requests.post(
-                        f"{API_BASE_URL}/api/v1/deploy",
+                        f"{API_BASE_URL}/api/v1/generate-deployment",
                         json={
-                            "recommendation": selected_config,
+                            "configuration": configuration,
                             "namespace": "default",
                             "stack": stack,
                         },
@@ -100,9 +104,10 @@ def render_deployment_tab():
                     response.raise_for_status()
                     result = response.json()
 
-                    if result.get("success"):
+                    if result.get("deployment_id"):
                         st.session_state.deployment_id = result.get("deployment_id")
-                        st.session_state.deployment_yaml_files = result.get("yaml_contents", {})
+                        # New endpoint returns 'files' instead of 'yaml_contents'
+                        st.session_state.deployment_yaml_files = result.get("files", {})
                         st.session_state.deployment_yaml_generated = True
                         st.rerun()
                     else:

@@ -19,6 +19,7 @@ from planner.configuration import DeploymentGenerator, LlmdDeploymentGenerator, 
 from planner.knowledge_base.model_catalog import ModelCatalog
 from planner.knowledge_base.slo_templates import SLOTemplateRepository
 from planner.orchestration.workflow import RecommendationWorkflow
+from planner.specification.traffic_profile import TrafficProfileGenerator
 
 # Configure logging
 debug_mode = os.getenv("PLANNER_DEBUG", "false").lower() == "true"
@@ -101,6 +102,7 @@ def init_app_state(app: FastAPI) -> None:
     app.state.benchmark_repo = BenchmarkRepository()
     app.state.model_catalog = ModelCatalog()
     app.state.slo_repo = SLOTemplateRepository()
+    app.state.traffic_generator = TrafficProfileGenerator()
     app.state.deployment_generator = DeploymentGenerator(simulator_mode=False)
     app.state.llmd_deployment_generator = LlmdDeploymentGenerator()
     app.state.yaml_validator = YAMLValidator()
@@ -166,6 +168,11 @@ def get_model_catalog(request: Request) -> ModelCatalog:
 def get_slo_repo(request: Request) -> SLOTemplateRepository:
     """Get the SLO template repository singleton."""
     return cast(SLOTemplateRepository, request.app.state.slo_repo)
+
+
+def get_traffic_generator(request: Request) -> TrafficProfileGenerator:
+    """Get the traffic profile generator singleton."""
+    return cast(TrafficProfileGenerator, request.app.state.traffic_generator)
 
 
 def get_deployment_generator(request: Request) -> DeploymentGenerator:

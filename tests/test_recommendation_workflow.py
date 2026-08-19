@@ -1,18 +1,21 @@
-"""Test script for end-to-end recommendation workflow."""
+"""Integration test for end-to-end recommendation workflow via API pipeline.
+
+Requires Ollama running for intent extraction.
+"""
 
 import json
 import logging
 from pathlib import Path
 
 import pytest
+import requests
 
-from planner.orchestration.workflow import RecommendationWorkflow
-
-# Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+API_BASE = "http://localhost:8000"
 
 
 def _load_scenarios():
@@ -23,72 +26,86 @@ def _load_scenarios():
     return data["scenarios"]
 
 
-@pytest.fixture(scope="module")
-def workflow():
-    """Create a shared RecommendationWorkflow instance."""
-    return RecommendationWorkflow()
-
-
 @pytest.mark.integration
 @pytest.mark.parametrize("scenario", _load_scenarios(), ids=lambda s: s["id"])
-def test_scenario(workflow, scenario):
-    """Test a single demo scenario."""
+def test_scenario(scenario):
+    """Test a single demo scenario through the pipeline."""
     print("\n" + "=" * 80)
     print(f"SCENARIO: {scenario['name']}")
     print("=" * 80)
     print(f"\nDescription: {scenario['description']}")
     print(f"\nUser Message: {scenario['user_description']}\n")
 
-    # Generate recommendation
-    recommendation = workflow.generate_recommendation(user_message=scenario["user_description"])
+    # Stage 1: Extract intent via LLM
+    response = requests.post(
+        f"{API_BASE}/api/v1/extract-intent",
+        json={"text": scenario["user_description"]},
+        timeout=60,
+    )
+    assert response.status_code == 200, f"Intent extraction failed: {response.text}"
+    intent = response.json()
+    print(f"Extracted intent: use_case={intent['use_case']}, users={intent['user_count']}")
 
-    # Verify we got a recommendation back
-    assert recommendation is not None
-    assert recommendation.model_name
-    assert recommendation.gpu_config.gpu_count >= 1
+    # Stage 2: Generate specification
+    response = requests.post(
+        f"{API_BASE}/api/v1/generate-specification",
+        json=intent,
+        timeout=30,
+    )
+    assert response.status_code == 200, f"Specification generation failed: {response.text}"
+    spec = response.json()
+
+    # Stage 3: Generate recommendations
+    response = requests.post(
+        f"{API_BASE}/api/v1/generate-recommendations",
+        json={"specification": spec, "enable_estimated": False},
+        timeout=90,
+    )
+    assert response.status_code == 200, f"Recommendation generation failed: {response.text}"
+    recommendations = response.json()
+
+    assert recommendations["total_configs_evaluated"] > 0, "No configurations evaluated"
+    assert len(recommendations["balanced"]) > 0, "No balanced recommendations"
+
+    rec = recommendations["balanced"][0]
 
     # Display results
     print("\n--- RECOMMENDATION ---")
-    print(f"Model: {recommendation.model_name}")
-    print(
-        f"GPU Config: {recommendation.gpu_config.gpu_count}x {recommendation.gpu_config.gpu_type}"
-    )
-    print(f"  - Tensor Parallel: {recommendation.gpu_config.tensor_parallel}")
-    print(f"  - Replicas: {recommendation.gpu_config.replicas}")
+    print(f"Model: {rec['model_name']}")
+    gpu = rec.get("gpu_config", {})
+    print(f"GPU Config: {gpu.get('gpu_count', '?')}x {gpu.get('gpu_type', '?')}")
+    print(f"  - Tensor Parallel: {gpu.get('tensor_parallel', '?')}")
+    print(f"  - Replicas: {gpu.get('replicas', '?')}")
 
-    print("\nCost:")
-    print(f"  - Per Hour: ${recommendation.cost_per_hour_usd:.2f}")
-    print(f"  - Per Month: ${recommendation.cost_per_month_usd:.2f}")
+    if rec.get("cost_per_month_usd"):
+        print(f"\nCost: ${rec['cost_per_month_usd']:,.0f}/month")
 
     print("\nPredicted Performance:")
-    print(
-        f"  - TTFT p95: {recommendation.predicted_ttft_p95_ms}ms (target: {recommendation.slo_targets.ttft_p95_target_ms}ms)"
-    )
-    print(
-        f"  - ITL p95: {recommendation.predicted_itl_p95_ms}ms (target: {recommendation.slo_targets.itl_p95_target_ms}ms)"
-    )
-    print(
-        f"  - E2E p95: {recommendation.predicted_e2e_p95_ms}ms (target: {recommendation.slo_targets.e2e_p95_target_ms}ms)"
-    )
-    print(f"  - Throughput: {recommendation.predicted_throughput_qps:.1f} QPS")
+    slo = spec["slo_targets"]
+    print(f"  - TTFT p95: {rec.get('predicted_ttft_p95_ms')}ms (target: {slo['ttft_target_ms']}ms)")
+    print(f"  - ITL p95: {rec.get('predicted_itl_p95_ms')}ms (target: {slo['itl_target_ms']}ms)")
+    print(f"  - E2E p95: {rec.get('predicted_e2e_p95_ms')}ms (target: {slo['e2e_target_ms']}ms)")
 
-    print("\nTraffic Profile:")
-    print(f"  - Expected QPS: {recommendation.traffic_profile.expected_qps:.1f}")
-    print(f"  - Prompt Tokens: {recommendation.traffic_profile.prompt_tokens} tokens")
-    print(f"  - Output Tokens: {recommendation.traffic_profile.output_tokens} tokens")
+    print(f"\nMeets SLO: {'YES' if rec.get('meets_slo') else 'NO'}")
 
-    print(f"\nMeets SLO: {'YES' if recommendation.meets_slo else 'NO'}")
-    print(f"\nReasoning: {recommendation.reasoning}")
+    if rec.get("scores"):
+        scores = rec["scores"]
+        print(
+            f"Scores: Quality={scores['quality_score']:.1f}, "
+            f"Price={scores['price_score']}, "
+            f"Latency={scores['latency_score']}, "
+            f"Balanced={scores['balanced_score']:.1f}"
+        )
 
     # Check against expected recommendation if provided
     if "expected_recommendation" in scenario:
         expected = scenario["expected_recommendation"]
         print("\n--- COMPARISON WITH EXPECTED ---")
-
-        model_match = recommendation.model_id == expected["model_id"]
-        print(f"Model Match: {'yes' if model_match else 'no'} (expected: {expected['model_id']})")
-
-        gpu_match = recommendation.gpu_config.gpu_type == expected["gpu_config"]["gpu_type"]
         print(
-            f"GPU Type Match: {'yes' if gpu_match else 'no'} (expected: {expected['gpu_config']['gpu_type']})"
+            f"Model Match: {'yes' if rec.get('model_id') == expected['model_id'] else 'no'} "
+            f"(expected: {expected['model_id']})"
+        )
+        print(
+            f"GPU Type Match: {'yes' if gpu.get('gpu_type') == expected['gpu_config']['gpu_type'] else 'no'} "
+            f"(expected: {expected['gpu_config']['gpu_type']})"
         )

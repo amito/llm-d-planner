@@ -23,9 +23,9 @@ def _make_traffic() -> TrafficProfile:
 
 def _make_slo() -> SLOTargets:
     return SLOTargets(
-        ttft_p95_target_ms=500,
-        itl_p95_target_ms=50,
-        e2e_p95_target_ms=15000,
+        ttft_target_ms=500,
+        itl_target_ms=50,
+        e2e_target_ms=15000,
     )
 
 

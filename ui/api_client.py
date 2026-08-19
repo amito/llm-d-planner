@@ -76,10 +76,8 @@ def fetch_workload_profile(use_case: str) -> dict | None:
     """Fetch workload profile for a use case from the backend API.
 
     Returns dict with workload_profile containing:
-    - prompt_tokens: average input token count
-    - output_tokens: average output token count
-    - peak_multiplier: peak traffic multiplier
-    - distribution: workload distribution type
+    - prompt_tokens: mean input token count
+    - output_tokens: mean output token count
 
     Cached for 5 minutes.
     """
@@ -300,6 +298,28 @@ def fetch_gpu_recommender_estimate(
     return None
 
 
+def generate_specification(intent: dict) -> dict | None:
+    """Generate deployment specification from intent.
+
+    Args:
+        intent: DeploymentIntent dict with use_case, user_count, priorities, etc.
+
+    Returns:
+        DeploymentSpecification dict, or None on error
+    """
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/api/v1/generate-specification",
+            json=intent,
+            timeout=30,
+        )
+        response.raise_for_status()
+        return cast(dict[Any, Any], response.json())
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to generate specification: {e}")
+        return None
+
+
 def fetch_ranked_recommendations(
     use_case: str,
     user_count: int,
@@ -315,6 +335,9 @@ def fetch_ranked_recommendations(
     preferred_gpu_types: list[str] | None = None,
     preferred_models: list[str] | None = None,
     enable_estimated: bool = True,
+    quality_priority: str = "medium",
+    cost_priority: str = "medium",
+    latency_priority: str = "medium",
 ) -> dict | None:
     """Fetch ranked recommendations from the backend API.
 
@@ -333,33 +356,62 @@ def fetch_ranked_recommendations(
         preferred_gpu_types: Optional list of GPU types to filter by (empty = any GPU)
         preferred_models: Optional list of HuggingFace model IDs to include via estimation
         enable_estimated: Whether to run roofline estimation for missing benchmarks
+        quality_priority: Quality priority level (low/medium/high)
+        cost_priority: Cost priority level (low/medium/high)
+        latency_priority: Latency priority level (low/medium/high)
 
     Returns:
         RankedRecommendationsResponse as dict, or None on error
     """
-    # Build request payload
-    payload = {
-        "use_case": use_case,
-        "user_count": user_count,
-        "prompt_tokens": prompt_tokens,
-        "output_tokens": output_tokens,
-        "expected_qps": expected_qps,
-        "ttft_target_ms": ttft_target_ms,
-        "itl_target_ms": itl_target_ms,
-        "e2e_target_ms": e2e_target_ms,
-        "percentile": percentile,
-        "include_near_miss": include_near_miss,
-        "preferred_gpu_types": preferred_gpu_types or [],
-        "preferred_models": preferred_models or [],
-        "enable_estimated": enable_estimated,
+    # Build DeploymentSpecification payload
+    specification = {
+        "intent": {
+            "use_case": use_case,
+            "user_count": user_count,
+            "quality_priority": quality_priority,
+            "cost_priority": cost_priority,
+            "latency_priority": latency_priority,
+            "preferred_gpu_types": preferred_gpu_types or [],
+            "preferred_models": preferred_models or [],
+        },
+        "slo_targets": {
+            "ttft_target_ms": ttft_target_ms,
+            "itl_target_ms": itl_target_ms,
+            "e2e_target_ms": e2e_target_ms,
+            "percentile": percentile,
+        },
+        "workload_profile": {
+            "prompt_tokens": prompt_tokens,
+            "output_tokens": output_tokens,
+            "expected_qps": expected_qps,
+        },
+        "priorities": {
+            "quality": {
+                "priority": quality_priority,
+                "weight": weights.get("quality", 4) if weights else 4,
+            },
+            "cost": {
+                "priority": cost_priority,
+                "weight": weights.get("price", 4) if weights else 4,
+            },
+            "latency": {
+                "priority": latency_priority,
+                "weight": weights.get("latency", 1) if weights else 1,
+            },
+        },
     }
 
-    if weights:
-        payload["weights"] = weights
+    payload = {
+        "specification": specification,
+        "enable_estimated": enable_estimated,
+        "min_quality": None,
+        "max_cost": None,
+        "include_near_miss": include_near_miss,
+    }
 
     try:
         response = requests.post(
-            f"{API_BASE_URL}/api/v1/ranked-recommend-from-spec",
+            f"{API_BASE_URL}/api/v1/generate-recommendations",
             json=payload,
             timeout=90,  # Backend estimation timeout (60s default) + buffer
         )
@@ -370,15 +422,26 @@ def fetch_ranked_recommendations(
         return None
 
 
+def check_llm_available() -> bool:
+    """Check whether the backend's LLM provider is reachable."""
+    try:
+        response = requests.get(f"{API_BASE_URL}/api/v1/llm-status", timeout=5)
+        if response.status_code == 200:
+            return bool(response.json().get("available", False))
+    except Exception:
+        pass
+    return False
+
+
 def extract_business_context(user_input: str) -> dict | None:
     """Extract business context using the backend LLM extraction API.
 
     Returns None on failure — caller is responsible for showing errors.
     """
     try:
-        logger.info(f"Calling LLM extraction API at {API_BASE_URL}/api/v1/extract")
+        logger.info(f"Calling LLM extraction API at {API_BASE_URL}/api/v1/extract-intent")
         response = requests.post(
-            f"{API_BASE_URL}/api/v1/extract",
+            f"{API_BASE_URL}/api/v1/extract-intent",
             json={"text": user_input},
             timeout=300,
         )
@@ -387,7 +450,11 @@ def extract_business_context(user_input: str) -> dict | None:
             # Map preferred_gpu_types (list) to hardware for UI compatibility
             if "preferred_gpu_types" in result:
                 gpu_list = result["preferred_gpu_types"]
-                result["hardware"] = ", ".join(gpu_list) if gpu_list else None
+                gpu_names = [
+                    g["gpu_type"] if isinstance(g, dict) and "gpu_type" in g else str(g)
+                    for g in gpu_list
+                ]
+                result["hardware"] = ", ".join(gpu_names) if gpu_names else None
             logger.info(f"LLM extraction successful: {result.get('use_case')}")
             return cast(dict[Any, Any], result)
         else:
@@ -405,23 +472,29 @@ def extract_business_context(user_input: str) -> dict | None:
 
 
 def deploy_and_generate_yaml(recommendation: dict, stack: str = "vllm") -> dict | None:
-    """Deploy a recommendation and return generated YAML contents.
+    """Generate deployment YAML from a recommendation's configuration.
 
     Returns dict with deployment_id, yaml_contents, and success status, or None on error.
     """
     try:
+        configuration = recommendation.get("configuration")
+        if not configuration:
+            return {"success": False, "message": "Recommendation missing configuration field"}
         response = requests.post(
-            f"{API_BASE_URL}/api/v1/deploy",
-            json={"recommendation": recommendation, "namespace": "default", "stack": stack},
+            f"{API_BASE_URL}/api/v1/generate-deployment",
+            json={"configuration": configuration, "namespace": "default", "stack": stack},
             timeout=30,
         )
         response.raise_for_status()
         result = response.json()
-        if result.get("success"):
+        # New endpoint returns DeploymentBundle with 'files' instead of 'yaml_contents'
+        if result.get("deployment_id"):
             return {
                 "success": True,
                 "deployment_id": result.get("deployment_id"),
-                "yaml_contents": result.get("yaml_contents", {}),
+                "yaml_contents": result.get(
+                    "files", {}
+                ),  # Map 'files' to 'yaml_contents' for UI compatibility
             }
         else:
             return {"success": False, "message": result.get("message", "Unknown error")}
@@ -479,20 +552,42 @@ def load_all_deployments() -> list | None:
 def deploy_to_cluster(recommendation: dict, namespace: str = "default") -> dict:
     """Deploy a recommendation to the Kubernetes cluster.
 
-    Returns dict with deployment_id, yaml_contents, deployment_result, and success status.
+    Two-step flow: generate-deployment → deploy-bundle-to-cluster.
+    Returns dict with deployment_id, yaml_contents, and success status.
     """
     try:
-        response = requests.post(
-            f"{API_BASE_URL}/api/v1/deploy-to-cluster",
-            json={"recommendation": recommendation, "namespace": namespace},
+        config = recommendation.get("configuration")
+        if not config:
+            return {"success": False, "message": "Recommendation missing configuration field"}
+
+        stack = recommendation.get("_stack", "vllm")
+
+        gen_response = requests.post(
+            f"{API_BASE_URL}/api/v1/generate-deployment",
+            json={"configuration": config, "namespace": namespace, "stack": stack},
+            timeout=30,
+        )
+        if gen_response.status_code != 200:
+            return {
+                "success": False,
+                "message": f"Failed to generate deployment: {gen_response.text}",
+            }
+        bundle = gen_response.json()
+
+        deploy_response = requests.post(
+            f"{API_BASE_URL}/api/v1/deploy-bundle-to-cluster",
+            json={"bundle": bundle},
             timeout=60,
         )
-        if response.status_code == 200:
-            return cast(dict[Any, Any], response.json())
-        elif response.status_code == 503:
+        if deploy_response.status_code == 200:
+            result = deploy_response.json()
+            result["yaml_contents"] = bundle.get("files", {})
+            result["deployment_id"] = bundle.get("deployment_id")
+            return cast(dict[Any, Any], result)
+        elif deploy_response.status_code == 503:
             return {"success": False, "message": "Kubernetes cluster not accessible"}
         else:
-            return {"success": False, "message": response.text}
+            return {"success": False, "message": deploy_response.text}
     except requests.exceptions.ConnectionError:
         return {"success": False, "message": "Cannot connect to backend API"}
     except Exception as e:

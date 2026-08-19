@@ -185,36 +185,6 @@ class IntentExtractor:
                         "Unrecognized use_case '%s' — no alias or fuzzy match found", use_case
                     )
 
-        # Normalize experience_class to lowercase if provided by LLM
-        if "experience_class" in cleaned and isinstance(cleaned["experience_class"], str):
-            cleaned["experience_class"] = cleaned["experience_class"].lower()
-
-        # Infer experience_class if not provided
-        if "experience_class" not in cleaned or not cleaned.get("experience_class"):
-            # Infer from use_case based on traffic_and_slos.md definitions
-            use_case = cleaned.get("use_case", "")
-            if use_case == "code_completion":
-                cleaned["experience_class"] = "instant"  # Sub-200ms TTFT
-            elif use_case in [
-                "chatbot_conversational",
-                "code_generation_detailed",
-                "translation",
-                "content_generation",
-                "summarization_short",
-            ]:
-                cleaned["experience_class"] = "conversational"  # Interactive real-time
-            elif use_case == "document_analysis_rag":
-                cleaned["experience_class"] = "interactive"  # Can tolerate slight delay
-            elif use_case == "long_document_summarization":
-                cleaned["experience_class"] = "deferred"  # Quality over speed
-            elif use_case == "research_legal_analysis":
-                cleaned["experience_class"] = "batch"  # Background processing
-            else:
-                cleaned["experience_class"] = "conversational"  # Default
-            logger.info(
-                f"Inferred experience_class='{cleaned['experience_class']}' from use_case='{use_case}'"
-            )
-
         # Fix user_count if it's a descriptive string instead of integer
         if "user_count" in cleaned and isinstance(cleaned["user_count"], str):
             # Extract integer from strings like "thousands of users (estimated: 5,000 - 10,000)"
