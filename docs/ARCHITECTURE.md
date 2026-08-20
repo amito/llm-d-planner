@@ -471,7 +471,7 @@ components:
   profile) combinations
 - **Quality Data**: Model quality scores from dual sources (Arena human
   preferences + Artificial Analysis automated benchmarks), cached in
-  `data/quality/` and `.quality_cache/`
+  `src/quality_scoring/data/` and `.quality_cache/`
 - **Use Case SLO Templates**: Default targets for 9 standard use cases
 - **Quality Weights**: Per-use-case category weights for quality scoring
   (e.g., code_generation: 80% coding, 10% overall, 10% math)

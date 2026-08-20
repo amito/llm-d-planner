@@ -80,7 +80,6 @@ class Planner:
         catalog_path = data_path("configuration/model_catalog.json", data_dir)
         gpu_catalog_path = data_path("configuration/gpu_catalog.json", data_dir)
         quality_weights_path = data_path("configuration/quality_weights.json", data_dir)
-        quality_data_dir = data_path("quality", data_dir)
 
         # Initialize components
         self._model_catalog = ModelCatalog(
@@ -90,8 +89,8 @@ class Planner:
         self._slo_repo = SLOTemplateRepository(data_path=slo_path)
         self._spec_service = SpecificationService(data_dir=data_dir)
 
-        # Build quality scoring engine
-        self._scoring_engine, _ = build_scoring_engine(cache_dir=quality_data_dir)
+        # Build quality scoring engine (uses bundled data from quality_scoring package)
+        self._scoring_engine, _ = build_scoring_engine()
         self._quality_weights = load_quality_weights(quality_weights_path)
 
         # Initialize config finder with scoring engine

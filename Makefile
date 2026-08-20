@@ -489,16 +489,16 @@ db-reset: db-start ## Reset database (clear all benchmark data, safe while backe
 
 quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
 	@printf "$(BLUE)Syncing Arena leaderboard (no API key needed)...$(NC)\n"
-	@LLM_QUALITY_CACHE_DIR=src/planner/data/quality uv run python -c "from quality_scoring.arena_client import sync; count, path = sync(); print(f'Arena: {count} rows')"
+	@LLM_QUALITY_CACHE_DIR=src/quality_scoring/data uv run python -c "from quality_scoring.arena_client import sync; count, path = sync(); print(f'Arena: {count} rows')"
 	@printf "$(BLUE)Syncing AA models (requires AA_API_KEY)...$(NC)\n"
 	@if [ -n "$$AA_API_KEY" ]; then \
-		LLM_QUALITY_CACHE_DIR=src/planner/data/quality uv run python -c "from quality_scoring.aa_client import sync; count, path = sync(api_key='$$AA_API_KEY'); print(f'AA: {count} models')"; \
+		LLM_QUALITY_CACHE_DIR=src/quality_scoring/data uv run python -c "from quality_scoring.aa_client import sync; count, path = sync(api_key='$$AA_API_KEY'); print(f'AA: {count} models')"; \
 	else \
 		printf "$(YELLOW)⚠ AA_API_KEY not set — skipping AA sync$(NC)\n"; \
 	fi
 	@printf "$(BLUE)Formatting JSON files for readable diffs...$(NC)\n"
-	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['src/planner/data/quality/arena_models.json', 'src/planner/data/quality/aa_models.json', 'src/planner/data/quality/arena_dist.json', 'src/planner/data/quality/aa_dist.json'] if pathlib.Path(f).is_file()]"
-	@printf "$(GREEN)✓ Quality data synced to src/planner/data/quality/$(NC)\n"
+	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['src/quality_scoring/data/arena_models.json', 'src/quality_scoring/data/aa_models.json', 'src/quality_scoring/data/arena_dist.json', 'src/quality_scoring/data/aa_dist.json'] if pathlib.Path(f).is_file()]"
+	@printf "$(GREEN)✓ Quality data synced to src/quality_scoring/data/$(NC)\n"
 
 ##@ Testing
 

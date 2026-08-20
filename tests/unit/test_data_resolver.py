@@ -15,9 +15,9 @@ class TestDataPath:
         assert path.name == "model_catalog.json"
 
     def test_resolves_bundled_quality_file(self):
-        from planner.data._resolver import data_path
+        from quality_scoring.data._resolver import quality_data_path
 
-        path = data_path("quality/arena_models.json")
+        path = quality_data_path("arena_models.json")
         assert path.exists()
 
     def test_resolves_bundled_performance_file(self):

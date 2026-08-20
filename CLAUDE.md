@@ -281,7 +281,7 @@ make db-shell           # Open sqlite3 shell
 ### Quality Data Management
 
 ```bash
-make quality-sync       # Fetch fresh Arena + AA data, update data/quality/ snapshots (requires AA_API_KEY)
+make quality-sync       # Fetch fresh Arena + AA data, update src/quality_scoring/data/ snapshots (requires AA_API_KEY)
 ```
 
 Environment variables:

@@ -131,7 +131,7 @@ p = Planner(llm_provider="openai", api_key="sk-...")
 
 **Parameters:**
 
-- `data_dir: Path | None` - Override bundled config and quality data files (default: uses bundled data from wheel)
+- `data_dir: Path | None` - Override bundled config data files (default: uses bundled data from wheel). Quality scoring data is bundled with the `quality_scoring` package separately.
 - `llm_provider: str | None` - LLM provider for intent extraction: `"ollama"`, `"openai"`, or `"vertex"` (default: `None`)
 - `**llm_kwargs` - Provider-specific arguments (e.g., `api_key`, `model`, `base_url`)
 
@@ -1022,13 +1022,13 @@ PlannerError: No LLM provider configured. Pass llm_provider to Planner(), e.g.:
 
 ## Data Override
 
-The `data_dir` parameter on `Planner()` allows overriding bundled config and quality data files:
+The `data_dir` parameter on `Planner()` allows overriding bundled configuration data files:
 
 ```python
 p = Planner(data_dir="/custom/data")
 ```
 
-If provided, config files (`configuration/`) and quality data files (`quality/`) load from the custom directory instead of bundled defaults.
+If provided, config files (`configuration/`) load from the custom directory instead of bundled defaults. Quality scoring data (Arena/AA benchmarks) is bundled with the `quality_scoring` package separately and is not affected by `data_dir`.
 
 **Note:** `load_bundled_benchmarks()` always loads from bundled wheel data regardless of `data_dir` — it's a known, fixed dataset. Custom benchmarks are loaded via `load_benchmarks(path)` from any path.
 
@@ -1043,9 +1043,4 @@ Expected directory structure for custom data:
     usecase_slo_workload.json
     quality_weights.json
     priority_weights.json
-  quality/
-    arena_models.json
-    aa_models.json
-    arena_dist.json
-    aa_dist.json
 ```

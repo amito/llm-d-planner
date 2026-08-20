@@ -8,7 +8,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from planner.data._resolver import data_path
 from quality_scoring import aa_client, arena_client
 from quality_scoring.cache import is_cache_stale
 from quality_scoring.categories import CATEGORY_MAP
@@ -94,7 +93,9 @@ def build_scoring_engine(
         and ``fetched_at`` timestamps for each data source so callers
         can cache them without re-reading the full files.
     """
-    checked_in_dir = data_path("quality")
+    from quality_scoring.data._resolver import quality_data_path
+
+    checked_in_dir = quality_data_path()
     # Runtime cache is in the project root, not in the data directory
     # Default to .quality_cache in the current working directory
     runtime_cache_dir = cache_dir or Path.cwd() / ".quality_cache"
