@@ -117,23 +117,42 @@ The `Planner` class is the main entry point for the library. It provides methods
 #### Initialization
 
 ```python
-from planner import Planner
+from planner import Planner, PlannerConfig
 
 # Default — bundled config and quality data, empty benchmark DB
 p = Planner()
 
-# Custom data directory for config/quality files
+# Keyword shorthand — any PlannerConfig field works as a kwarg
 p = Planner(data_dir="/custom/data")
+p = Planner(llm_provider="openai", llm_api_key="sk-...")
 
-# With LLM configured for extract_intent()
-p = Planner(llm_provider="openai", api_key="sk-...")
+# Config object — groups all settings, serializable, IDE-friendly
+config = PlannerConfig(
+    llm_provider="openai",
+    llm_api_key="sk-...",
+    quality_auto_update=True,
+    aa_api_key="aa-...",
+)
+p = Planner(config)
 ```
 
-**Parameters:**
+#### `PlannerConfig` Fields
 
-- `data_dir: Path | None` - Override bundled config data files (default: uses bundled data from wheel). Quality scoring data is bundled with the `quality_scoring` package separately.
-- `llm_provider: str | None` - LLM provider for intent extraction: `"ollama"`, `"openai"`, or `"vertex"` (default: `None`)
-- `**llm_kwargs` - Provider-specific arguments (e.g., `api_key`, `model`, `base_url`)
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `data_dir` | `Path \| None` | `None` | Custom data directory (default: bundled package data) |
+| `llm_provider` | `str \| None` | `None` | LLM provider: `"ollama"`, `"openai"`, or `"vertex"` |
+| `llm_api_key` | `str \| None` | `None` | API key for OpenAI/Vertex provider |
+| `llm_base_url` | `str \| None` | `None` | Base URL for OpenAI-compatible endpoints or Ollama host |
+| `llm_model` | `str \| None` | `None` | Model name override |
+| `quality_auto_update` | `bool` | `False` | Fetch fresh Arena/AA data on init when cache is stale |
+| `quality_cache_dir` | `Path \| None` | `None` | Directory for runtime quality cache (default: `.quality_cache/`) |
+| `aa_api_key` | `str \| None` | `None` | Artificial Analysis API key (for quality data refresh) |
+| `hf_token` | `str \| None` | `None` | HuggingFace token (for model config lookups) |
+| `model_catalog_url` | `str \| None` | `None` | Model Catalog API URL (for `sync_model_catalog()`) |
+| `model_catalog_token` | `str \| None` | `None` | Auth token for Model Catalog API |
+
+All fields are optional. `Planner()` with no arguments uses bundled data and works without any external services.
 
 **Thread safety:** The `Planner` class holds mutable state (SQLite connection, scoring engine). It is not thread-safe. Each thread or async task should use its own `Planner` instance, or callers must synchronize access externally.
 
@@ -175,7 +194,7 @@ Extract structured intent from natural language using an LLM.
 **Example:**
 
 ```python
-p = Planner(llm_provider="openai", api_key="sk-...")
+p = Planner(llm_provider="openai", llm_api_key="sk-...")
 intent = p.extract_intent("I need a chatbot for 1000 users, low latency is critical")
 ```
 
@@ -305,15 +324,16 @@ print(f"Deployed: {result['deployment_id']}")
 class Planner:
     def __init__(
         self,
-        data_dir: Path | None = None,
-        llm_provider: str | None = None,
-        **llm_kwargs,
+        config: PlannerConfig | None = None,
+        **kwargs,  # shorthand for PlannerConfig fields
     ) -> None: ...
 
     # Data loading
     def load_bundled_benchmarks(self) -> None: ...
     def load_benchmarks(self, path: str | Path) -> None: ...
-    def sync_model_catalog(self) -> None: ...
+    def sync_model_catalog(
+        self, url: str | None = None, token: str | None = None,
+    ) -> dict: ...
 
     # Pipeline
     def extract_intent(self, text: str) -> DeploymentIntent: ...
@@ -383,7 +403,7 @@ Requires `pip install llm-d-planner[openai]` (or `llm-d-planner[llm]` for Ollama
 ```python
 from planner import Planner
 
-p = Planner(llm_provider="openai", api_key="sk-...")
+p = Planner(llm_provider="openai", llm_api_key="sk-...")
 p.load_bundled_benchmarks()
 
 intent = p.extract_intent("I need a code completion service for 500 developers")
@@ -421,7 +441,7 @@ Requires `pip install llm-d-planner[openai,kubernetes]`.
 ```python
 from planner import Planner
 
-p = Planner(llm_provider="openai", api_key="sk-...")
+p = Planner(llm_provider="openai", llm_api_key="sk-...")
 p.load_bundled_benchmarks()
 
 intent = p.extract_intent("I need a chatbot for 1000 users, low latency is critical")
@@ -1015,17 +1035,19 @@ If `extract_intent()` is called without `llm_provider` set:
 
 ```
 PlannerError: No LLM provider configured. Pass llm_provider to Planner(), e.g.:
-  Planner(llm_provider="openai", api_key="...")
+  Planner(llm_provider="openai", llm_api_key="sk-...")
 ```
 
 ---
 
 ## Data Override
 
-The `data_dir` parameter on `Planner()` allows overriding bundled configuration data files:
+The `data_dir` field on `PlannerConfig` (or kwarg on `Planner()`) allows overriding bundled configuration data files:
 
 ```python
 p = Planner(data_dir="/custom/data")
+# or
+p = Planner(PlannerConfig(data_dir="/custom/data"))
 ```
 
 If provided, config files (`configuration/`) load from the custom directory instead of bundled defaults. Quality scoring data (Arena/AA benchmarks) is bundled with the `quality_scoring` package separately and is not affected by `data_dir`.

@@ -17,6 +17,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from planner.config import PlannerConfig
 from planner.data._resolver import data_path
 from planner.errors import PlannerError
 from planner.knowledge_base.benchmarks import BenchmarkRepository
@@ -53,24 +54,26 @@ class Planner:
         bundle = p.generate_deployment(recs.best_quality[0].configuration)
     """
 
-    def __init__(
-        self,
-        data_dir: Path | None = None,
-        llm_provider: str | None = None,
-        **llm_kwargs,
-    ):
-        """Initialize Planner with optional custom data directory and LLM provider.
+    def __init__(self, config: PlannerConfig | None = None, **kwargs):
+        """Initialize Planner.
 
         Args:
-            data_dir: Custom data directory (default: bundled package data)
-            llm_provider: LLM provider for intent extraction ("ollama", "vertex", "openai")
-            **llm_kwargs: Additional keyword args passed to LLM client (e.g., api_key)
+            config: Configuration object. If None, uses defaults (bundled data,
+                    no LLM, no quality auto-update).
+            **kwargs: Shorthand — any PlannerConfig field can be passed as a
+                      keyword argument instead of constructing a config object.
+                      e.g. Planner(llm_provider="openai", llm_api_key="sk-...")
         """
-        self._data_dir = data_dir
-        self._llm_provider = llm_provider
-        self._llm_kwargs = llm_kwargs
+        if config is None:
+            config = PlannerConfig(**kwargs)
+        elif kwargs:
+            raise PlannerError("Pass either a PlannerConfig object or keyword arguments, not both.")
+        self._config = config
+
         self._llm_client: LLMClient | None = None
         self._extractor: IntentExtractor | None = None
+
+        data_dir = config.data_dir
 
         # Initialize in-memory SQLite database for benchmark data
         self._benchmark_repo = BenchmarkRepository(db_path=":memory:")
@@ -89,8 +92,12 @@ class Planner:
         self._slo_repo = SLOTemplateRepository(data_path=slo_path)
         self._spec_service = SpecificationService(data_dir=data_dir)
 
-        # Build quality scoring engine (uses bundled data from quality_scoring package)
-        self._scoring_engine, _ = build_scoring_engine()
+        # Build quality scoring engine
+        self._scoring_engine, _ = build_scoring_engine(
+            cache_dir=config.quality_cache_dir,
+            auto_update=config.quality_auto_update,
+            aa_api_key=config.aa_api_key,
+        )
         self._quality_weights = load_quality_weights(quality_weights_path)
 
         # Initialize config finder with scoring engine
@@ -290,10 +297,10 @@ class Planner:
             PlannerError: If LLM provider not configured
             ImportError: If required LLM dependencies not installed
         """
-        if not self._llm_provider:
+        if not self._config.llm_provider:
             raise PlannerError(
                 "No LLM provider configured. Pass llm_provider to Planner(), e.g.:\n"
-                "  Planner(llm_provider='openai', api_key='...')"
+                "  Planner(llm_provider='openai', llm_api_key='sk-...')"
             )
 
         # Lazy-initialize LLM client and extractor
@@ -301,7 +308,12 @@ class Planner:
             from planner.intent_extraction import IntentExtractor
             from planner.llm.factory import create_llm_client
 
-            self._llm_client = create_llm_client(provider=self._llm_provider)
+            self._llm_client = create_llm_client(
+                provider=self._config.llm_provider,
+                api_key=self._config.llm_api_key,
+                base_url=self._config.llm_base_url,
+                model=self._config.llm_model,
+            )
             self._extractor = IntentExtractor(self._llm_client)
 
         intent = self._extractor.extract_intent(text)
@@ -347,27 +359,36 @@ class Planner:
             "files_applied": list(bundle.files.keys()),
         }
 
-    def sync_model_catalog(self) -> dict:
+    def sync_model_catalog(
+        self,
+        url: str | None = None,
+        token: str | None = None,
+    ) -> dict:
         """Sync benchmark data from external Model Catalog API.
 
-        Fetches latest benchmarks and merges into the in-memory database.
-        Requires MODEL_CATALOG_API_URL environment variable.
+        Args:
+            url: Model Catalog API URL. Falls back to config, then
+                 MODEL_CATALOG_URL env var.
+            token: Auth token. Falls back to config, then
+                   MODEL_CATALOG_TOKEN env var.
 
         Returns:
             Sync result with counts and errors
 
         Raises:
             ImportError: If httpx not installed
-            ValueError: If MODEL_CATALOG_API_URL not set
+            ValueError: If no URL provided
         """
         import os
 
-        api_url = os.getenv("MODEL_CATALOG_API_URL")
+        api_url = url or self._config.model_catalog_url or os.getenv("MODEL_CATALOG_URL")
         if not api_url:
             raise ValueError(
-                "MODEL_CATALOG_API_URL environment variable not set.\n"
-                "Set it to the Model Catalog API endpoint URL."
+                "No Model Catalog URL. Pass url= to sync_model_catalog(), "
+                "set model_catalog_url in PlannerConfig, or set MODEL_CATALOG_URL env var."
             )
+
+        api_token = token or self._config.model_catalog_token or os.getenv("MODEL_CATALOG_TOKEN")
 
         try:
             from planner.knowledge_base.model_catalog_client import ModelCatalogClient
@@ -377,14 +398,13 @@ class Planner:
                 "Model Catalog sync requires httpx.\nInstall with: pip install llm-d-planner[api]"
             ) from None
 
-        client = ModelCatalogClient(base_url=api_url)
+        client = ModelCatalogClient(base_url=api_url, token=api_token)
         result = sync_model_catalog(
             client=client,
             benchmark_repo=self._benchmark_repo,
             model_catalog=self._model_catalog,
         )
 
-        # result is a SyncResult from model_catalog_sync
         benchmarks_added = getattr(result, "benchmarks_added", 0)
         models_added = getattr(result, "models_added", 0)
         errors = getattr(result, "errors", [])
