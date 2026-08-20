@@ -2,7 +2,7 @@
 
 import pytest
 
-from planner import Planner, PlannerError
+from planner import Planner, PlannerConfig, PlannerError
 from planner.shared.schemas import DeploymentIntent
 
 
@@ -14,24 +14,34 @@ class TestPlannerInit:
         planner = Planner()
         assert planner is not None
 
+    def test_planner_accepts_config_object(self):
+        """Planner(PlannerConfig()) creates with explicit config."""
+        config = PlannerConfig()
+        planner = Planner(config)
+        assert planner is not None
+        assert planner._config is config
+
+    def test_planner_accepts_kwargs_shorthand(self):
+        """Planner(llm_provider=...) forwards kwargs to PlannerConfig."""
+        planner = Planner(llm_provider="openai")
+        assert planner._config.llm_provider == "openai"
+
+    def test_planner_rejects_config_plus_kwargs(self):
+        """Planner(config, data_dir=...) raises PlannerError."""
+        config = PlannerConfig()
+        with pytest.raises(PlannerError, match="Pass either"):
+            Planner(config, data_dir="/foo")
+
     def test_planner_creates_with_custom_data_dir(self, tmp_path):
         """Planner(data_dir=valid_dir) accepts custom data directory."""
-        # Create minimal required data structure
         config_dir = tmp_path / "configuration"
         config_dir.mkdir(parents=True)
 
-        # Create minimal required files
         (config_dir / "slo_templates.json").write_text('{"use_cases":{}}')
         (config_dir / "model_catalog.json").write_text('{"models":[]}')
         (config_dir / "gpu_catalog.json").write_text('{"gpu_types":[]}')
         (config_dir / "quality_weights.json").write_text("{}")
         (config_dir / "usecase_slo_workload.json").write_text('{"use_case_slo_workload":{}}')
-
-        # Quality data dir
-        quality_dir = tmp_path / "quality"
-        quality_dir.mkdir(parents=True)
-        (quality_dir / "arena_models.json").write_text('{"rows":[],"fetched_at":"2024-01-01"}')
-        (quality_dir / "aa_models.json").write_text('{"models":[],"fetched_at":"2024-01-01"}')
 
         planner = Planner(data_dir=tmp_path)
         assert planner is not None

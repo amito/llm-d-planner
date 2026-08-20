@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -31,7 +32,7 @@ class PlannerConfig(BaseModel):
     )
 
     # Intent extraction (optional — only needed for extract_intent())
-    llm_provider: str | None = Field(
+    llm_provider: Literal["ollama", "openai", "vertex"] | None = Field(
         default=None,
         description='LLM provider: "ollama", "openai", or "vertex"',
     )
