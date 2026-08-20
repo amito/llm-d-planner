@@ -98,7 +98,7 @@ def build_scoring_engine(
     checked_in_dir = quality_data_path()
     # Runtime cache is in the project root, not in the data directory
     # Default to .quality_cache in the current working directory
-    runtime_cache_dir = cache_dir or Path.cwd() / ".quality_cache"
+    runtime_cache_dir = cache_dir or Path(os.environ.get("LLM_QUALITY_CACHE_DIR", ".quality_cache"))
 
     if auto_update is None:
         auto_update = os.environ.get("QUALITY_AUTO_UPDATE", "false").lower() in (

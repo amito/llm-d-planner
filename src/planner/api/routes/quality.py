@@ -89,7 +89,7 @@ async def refresh_quality_data(request: Request) -> RefreshResult:
     errors: list[str] = []
 
     # Determine runtime cache dir (same logic as build_scoring_engine default)
-    runtime_cache_dir = Path.cwd() / ".quality_cache"
+    runtime_cache_dir = Path(os.environ.get("LLM_QUALITY_CACHE_DIR", ".quality_cache"))
     runtime_cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Sync Arena (no key needed)

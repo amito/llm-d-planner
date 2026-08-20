@@ -109,13 +109,28 @@ class Planner:
 
         logger.info("Planner initialized with data_dir=%s", data_dir or "<bundled>")
 
+    @staticmethod
+    def enable_prompt_logging(directory: str | Path) -> None:
+        """Enable saving LLM prompts to disk for debugging.
+
+        Off by default. Call this before extract_intent() to save
+        prompts for inspection.
+
+        Args:
+            directory: Directory where prompt files will be written.
+                       Created if it doesn't exist.
+        """
+        from planner.intent_extraction.extractor import enable_prompt_logging
+
+        enable_prompt_logging(directory)
+
     def load_bundled_benchmarks(self) -> None:
         """Load bundled BLIS benchmark data.
 
         This is the simplest way to get started. The bundled benchmarks
         cover the 4 GuideLLM traffic profiles for a curated set of models.
         """
-        bundled = data_path("performance/benchmarks_BLIS.json", self._data_dir)
+        bundled = data_path("performance/benchmarks_BLIS.json")
         self._load_benchmark_file(bundled)
         logger.info("Loaded bundled BLIS benchmarks")
 

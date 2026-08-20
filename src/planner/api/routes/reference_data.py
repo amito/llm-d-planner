@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1", tags=["reference-data"])
 
 def _get_data_path() -> Path:
     """Get the base data directory path."""
-    return Path(str(data_path("")))
+    return data_path("")
 
 
 @router.get("/models")

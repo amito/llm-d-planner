@@ -15,14 +15,26 @@ from planner.shared.schemas import ConversationMessage, DeploymentIntent
 
 logger = logging.getLogger(__name__)
 
-# Create prompts directory for easy copy-paste access
-# Allow override via env var, default to logs/prompts in current working directory
-_prompts_dir_str = os.environ.get("PLANNER_PROMPTS_DIR")
-if _prompts_dir_str:
-    PROMPTS_DIR = Path(_prompts_dir_str)
-else:
-    PROMPTS_DIR = Path.cwd() / "logs" / "prompts"
-PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+# Prompt logging directory — None means logging is disabled.
+# Set via enable_prompt_logging() or PLANNER_PROMPTS_DIR env var.
+_prompts_dir_env = os.environ.get("PLANNER_PROMPTS_DIR")
+PROMPTS_DIR: Path | None = Path(_prompts_dir_env) if _prompts_dir_env else None
+if PROMPTS_DIR:
+    PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def enable_prompt_logging(directory: str | Path) -> None:
+    """Enable saving LLM prompts to disk for debugging.
+
+    Args:
+        directory: Directory where prompt files will be written.
+                   Created if it doesn't exist.
+    """
+    global PROMPTS_DIR
+    PROMPTS_DIR = Path(directory)
+    PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Prompt logging enabled: {PROMPTS_DIR}")
+
 
 # Common LLM hallucinations mapped to valid use_case values
 _PRIORITY_ALIASES: dict[str, str] = {
@@ -89,27 +101,29 @@ class IntentExtractor:
         # Build extraction prompt
         prompt = build_intent_extraction_prompt(user_message, history_dicts)
 
-        # Save prompt to file for easy copy-paste testing
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        prompt_file = PROMPTS_DIR / f"intent_extraction_{timestamp}.txt"
+        # Save prompt to file for easy copy-paste testing (if logging enabled)
+        if PROMPTS_DIR is not None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            prompt_file = PROMPTS_DIR / f"intent_extraction_{timestamp}.txt"
 
-        with open(prompt_file, "w") as f:
-            f.write("=" * 80 + "\n")
-            f.write("INTENT EXTRACTION PROMPT\n")
-            f.write(f"Generated: {datetime.now().isoformat()}\n")
-            f.write(f"User Message: {user_message}\n")
-            f.write("=" * 80 + "\n\n")
-            f.write(prompt)
-            f.write("\n\n" + "=" * 80 + "\n")
-            f.write("Copy everything above this line to test in other LLMs\n")
-            f.write("=" * 80 + "\n")
+            with open(prompt_file, "w") as f:
+                f.write("=" * 80 + "\n")
+                f.write("INTENT EXTRACTION PROMPT\n")
+                f.write(f"Generated: {datetime.now().isoformat()}\n")
+                f.write(f"User Message: {user_message}\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(prompt)
+                f.write("\n\n" + "=" * 80 + "\n")
+                f.write("Copy everything above this line to test in other LLMs\n")
+                f.write("=" * 80 + "\n")
 
         # Log the complete prompt being sent to LLM (always show at INFO level)
         logger.info("=" * 80)
         logger.info("[FULL INTENT EXTRACTION PROMPT - START]")
         logger.info(prompt)
         logger.info("[FULL INTENT EXTRACTION PROMPT - END]")
-        logger.info(f"💾 Prompt saved to: {prompt_file}")
+        if PROMPTS_DIR is not None:
+            logger.info("Prompt saved to: %s", PROMPTS_DIR)
         logger.info("=" * 80)
 
         try:
