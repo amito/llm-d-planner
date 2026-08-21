@@ -297,10 +297,14 @@ class Planner:
             PlannerError: If LLM provider not configured
             ImportError: If required LLM dependencies not installed
         """
-        if not self._config.llm_provider:
+        import os
+
+        provider = self._config.llm_provider or os.environ.get("LLM_PROVIDER")
+        if not provider:
             raise PlannerError(
                 "No LLM provider configured. Pass llm_provider to Planner(), e.g.:\n"
-                "  Planner(llm_provider='openai', llm_api_key='sk-...')"
+                "  Planner(llm_provider='openai', llm_api_key='sk-...')\n"
+                "Or set LLM_PROVIDER environment variable."
             )
 
         # Lazy-initialize LLM client and extractor
@@ -309,7 +313,7 @@ class Planner:
             from planner.llm.factory import create_llm_client
 
             self._llm_client = create_llm_client(
-                provider=self._config.llm_provider,
+                provider=provider,
                 api_key=self._config.llm_api_key,
                 base_url=self._config.llm_base_url,
                 model=self._config.llm_model,
@@ -325,7 +329,7 @@ class Planner:
     ) -> dict:
         """Deploy a bundle to Kubernetes cluster.
 
-        Requires kubernetes package (install with: pip install llm-d-planner[kubernetes])
+        Requires kubectl in PATH and a configured kubeconfig.
 
         Args:
             bundle: Deployment bundle (from generate_deployment)
@@ -334,16 +338,9 @@ class Planner:
             Result dictionary with success status and applied files
 
         Raises:
-            ImportError: If kubernetes package not installed
             PlannerError: If deployment fails
         """
-        try:
-            from planner.cluster.manager import KubernetesClusterManager
-        except ImportError:
-            raise ImportError(
-                "Kubernetes deployment requires kubernetes package.\n"
-                "Install with: pip install llm-d-planner[kubernetes]"
-            ) from None
+        from planner.cluster.manager import KubernetesClusterManager
 
         manager = KubernetesClusterManager(namespace=bundle.namespace)
         manager.create_namespace_if_not_exists()
@@ -395,7 +392,7 @@ class Planner:
             from planner.knowledge_base.model_catalog_sync import sync_model_catalog
         except ImportError:
             raise ImportError(
-                "Model Catalog sync requires httpx.\nInstall with: pip install llm-d-planner[api]"
+                "Model Catalog sync requires httpx.\nInstall with: pip install llm-d-planner[quality-sync]"
             ) from None
 
         client = ModelCatalogClient(base_url=api_url, token=api_token)

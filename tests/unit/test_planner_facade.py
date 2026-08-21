@@ -162,8 +162,9 @@ class TestGenerateDeployment:
 class TestExtractIntent:
     """Test intent extraction."""
 
-    def test_extract_intent_raises_without_llm_configured(self):
+    def test_extract_intent_raises_without_llm_configured(self, monkeypatch):
         """extract_intent() raises PlannerError without LLM provider configured."""
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
         planner = Planner()
 
         with pytest.raises(PlannerError, match="No LLM provider configured"):

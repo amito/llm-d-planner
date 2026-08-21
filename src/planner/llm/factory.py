@@ -32,15 +32,14 @@ def create_llm_client(
     provider = provider.lower()
 
     if provider == "ollama":
-        try:
-            from planner.llm.ollama_client import OllamaClient
+        from planner.llm.ollama_client import OLLAMA_AVAILABLE, OllamaClient
 
-            logger.info("Using Ollama LLM provider")
-            return OllamaClient(model=model, host=base_url)
-        except ImportError as e:
+        if not OLLAMA_AVAILABLE:
             raise ImportError(
                 "Ollama provider requires ollama. Install with: pip install llm-d-planner[llm]"
-            ) from e
+            )
+        logger.info("Using Ollama LLM provider")
+        return OllamaClient(model=model, host=base_url)
 
     if provider == "vertex":
         try:

@@ -27,8 +27,9 @@ class PlannerConfig(BaseModel):
     # Data directory override (default: bundled package data)
     data_dir: Path | None = Field(
         default=None,
-        description="Custom data directory for config/quality files. "
-        "If None, uses data bundled in the wheel.",
+        description="Custom data directory for configuration files (SLO templates, "
+        "model catalog, quality weights). If None, uses data bundled in the wheel. "
+        "Quality scoring data (Arena/AA) is always bundled with quality_scoring.",
     )
 
     # Intent extraction (optional — only needed for extract_intent())
