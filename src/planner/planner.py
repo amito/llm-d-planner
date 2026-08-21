@@ -261,14 +261,20 @@ class Planner:
         Raises:
             ValueError: If stack is unknown
         """
+        import tempfile
+
         from planner.configuration.generator import DeploymentGenerator
         from planner.configuration.llmd_generator import LlmdDeploymentGenerator
 
+        # Use a temp dir for output_dir — the facade returns YAML strings,
+        # not files, so we don't want to create dirs in the user's CWD.
+        output_dir = tempfile.mkdtemp()
+
         if stack == "llm-d":
-            llmd_gen = LlmdDeploymentGenerator()
+            llmd_gen = LlmdDeploymentGenerator(output_dir=output_dir)
             result = llmd_gen.generate_all(config=config, namespace=namespace)
         elif stack == "vllm":
-            vllm_gen = DeploymentGenerator(simulator_mode=False)
+            vllm_gen = DeploymentGenerator(output_dir=output_dir, simulator_mode=False)
             result = vllm_gen.generate_all(config=config, namespace=namespace)
         else:
             raise ValueError(f"Unknown deployment stack: {stack}. Valid options: 'vllm', 'llm-d'")

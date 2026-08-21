@@ -2,24 +2,13 @@
 
 import logging
 
+from planner.cluster.gpu_detector import detect_cluster_gpus
 from planner.recommendation.analyzer import Analyzer
 from planner.recommendation.config_finder import ConfigFinder
 from planner.shared.schemas import DeploymentSpecification, RankedRecommendations
 from planner.specification.service import SpecificationService
 
 logger = logging.getLogger(__name__)
-
-# Optional cluster GPU detection (requires kubernetes package)
-try:
-    from planner.cluster.gpu_detector import detect_cluster_gpus
-
-    _HAS_GPU_DETECTION = True
-except ImportError:
-    _HAS_GPU_DETECTION = False
-
-    def detect_cluster_gpus() -> list[str]:
-        """Fallback when kubernetes package is not installed."""
-        return []
 
 
 class RecommendationWorkflow:

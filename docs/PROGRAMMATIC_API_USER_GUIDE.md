@@ -145,9 +145,9 @@ p = Planner(config)
 | `llm_api_key` | `str \| None` | `None` | API key for OpenAI/Vertex provider |
 | `llm_base_url` | `str \| None` | `None` | Base URL for OpenAI-compatible endpoints or Ollama host |
 | `llm_model` | `str \| None` | `None` | Model name override |
-| `quality_auto_update` | `bool` | `False` | Fetch fresh Arena/AA data on init when cache is stale |
-| `quality_cache_dir` | `Path \| None` | `None` | Directory for runtime quality cache (default: `.quality_cache/`) |
-| `aa_api_key` | `str \| None` | `None` | Artificial Analysis API key (for quality data refresh) |
+| `quality_auto_update` | `bool` | `False` | Fetch fresh Arena/AA data on init when cache is stale. Cache is written to `quality_cache_dir` (or `.quality_cache/` in CWD). Requires `aa_api_key` for AA data. |
+| `quality_cache_dir` | `Path \| None` | `None` | Directory for runtime quality cache. Default: `.quality_cache/` in current working directory, or `LLM_QUALITY_CACHE_DIR` env var. Only used when `quality_auto_update=True`. |
+| `aa_api_key` | `str \| None` | `None` | Artificial Analysis API key (for quality data refresh). Falls back to `AA_API_KEY` env var. |
 | `hf_token` | `str \| None` | `None` | HuggingFace token (for model config lookups) |
 | `model_catalog_url` | `str \| None` | `None` | Model Catalog API URL (for `sync_model_catalog()`) |
 | `model_catalog_token` | `str \| None` | `None` | Auth token for Model Catalog API |
@@ -301,7 +301,7 @@ if recs.balanced:
 
 Deploy a deployment bundle to a Kubernetes cluster.
 
-**Requires:** `pip install llm-d-planner[kubernetes]` and cluster access (kubeconfig)
+**Requires:** `kubectl` in PATH and a configured kubeconfig
 
 **Parameters:**
 
@@ -367,7 +367,7 @@ class Planner:
 | `generate_recommendations()` | Yes | Yes | No | — |
 | `generate_deployment()` | Yes | No | No | — |
 | `extract_intent()` | — | No | Yes | `[llm]`, `[openai]`, or `[vertex]` |
-| `deploy_bundle_to_cluster()` | — | No | No | `[kubernetes]` |
+| `deploy_bundle_to_cluster()` | — | No | No | `kubectl` in PATH |
 
 ---
 
@@ -436,7 +436,7 @@ recs = p.generate_recommendations(spec)
 
 #### Full pipeline with deployment
 
-Requires `pip install llm-d-planner[openai,kubernetes]`.
+Requires `pip install llm-d-planner[openai]` and `kubectl` in PATH.
 
 ```python
 from planner import Planner
@@ -1019,7 +1019,7 @@ ImportError: Install llm-d-planner[openai] for OpenAI support: pip install llm-d
 **Kubernetes** — error raised when `deploy_bundle_to_cluster()` is called:
 
 ```
-ImportError: Install llm-d-planner[kubernetes] for cluster deployment: pip install llm-d-planner[kubernetes]
+PlannerError: Failed to apply inferenceservice: kubectl not found in PATH
 ```
 
 **llm-optimizer** — warning logged, estimation skipped (not an error):

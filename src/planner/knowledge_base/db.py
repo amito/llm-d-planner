@@ -36,7 +36,8 @@ def create_connection(db_path: str | None = None) -> sqlite3.Connection:
     Uses check_same_thread=False for FastAPI's async thread pool.
     """
     path = db_path or get_db_path()
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    if path != ":memory:":
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
