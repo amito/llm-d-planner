@@ -68,7 +68,7 @@ def test_vertex_client_chat():
     mock_client.messages.create.assert_called_once()
     call_kwargs = mock_client.messages.create.call_args[1]
     assert call_kwargs["messages"] == [{"role": "user", "content": "Hi"}]
-    assert call_kwargs["temperature"] == 0.7
+    assert call_kwargs["extra_body"] == {"temperature": 0.7}
 
 
 @pytest.mark.unit
