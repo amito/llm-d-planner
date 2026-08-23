@@ -3,10 +3,10 @@
 Regenerate synthetic benchmark data from exported PSV file.
 
 This script:
-1. Reads real benchmarks from data/real_benchmarks.psv
+1. Reads real benchmarks from src/planner/data/performance/real_benchmarks.psv
 2. Applies random variation (±15%) to TTFT and ITL values
 3. Recalculates E2E from TTFT + (ITL × output_tokens)
-4. Writes to data/benchmarks.json
+4. Writes to src/planner/data/performance/benchmarks.json
 """
 
 import json
@@ -110,7 +110,7 @@ def main():
     print()
 
     # Read PSV file
-    psv_path = Path(__file__).parent.parent / "data" / "real_benchmarks.psv"
+    psv_path = Path(__file__).parent.parent / "src" / "planner" / "data" / "performance" / "real_benchmarks.psv"
     print(f"Reading from {psv_path}...")
 
     real_benchmarks = []
@@ -171,7 +171,7 @@ def main():
     print()
 
     # Write to file
-    output_path = Path(__file__).parent.parent / "data" / "benchmarks.json"
+    output_path = Path(__file__).parent.parent / "src" / "planner" / "data" / "performance" / "benchmarks.json"
     print(f"Writing to {output_path}...")
 
     data = {

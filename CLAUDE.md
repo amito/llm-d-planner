@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains the architecture design for **Planner**, an open-source system that guides users from concept to production-ready LLM deployments through a conversational AI and intelligent capacity planning.
 
+Planner is available as both a **Python library** (`pip install llm-d-planner`) and a **standalone application** (REST API + Streamlit UI). The library exposes the full recommendation pipeline as Python method calls via the `Planner` class, with no FastAPI, Ollama, or Kubernetes dependencies required for core functionality.
+
 **Key Principle**: The core functionality is complete and working end-to-end. The project is preparing for release.
 
 ## Repository Structure
@@ -29,6 +31,8 @@ This repository contains the architecture design for **Planner**, an open-source
   - `variants.py`: Quantization and variant handling
 
 - **src/planner/**: Python package (PyPA src layout)
+  - `planner.py`: Main `Planner` facade class for library use
+  - `errors.py`: Custom exceptions (`PlannerError`)
   - **api/**: FastAPI REST API layer
     - `app.py`: FastAPI app factory
     - `dependencies.py`: Singleton dependency injection
@@ -71,15 +75,14 @@ This repository contains the architecture design for **Planner**, an open-source
   - **components/**: Modular UI components
     - `settings.py`: Configuration tab with benchmark database management
 
-- **data/**: Benchmark and configuration data
-  - **benchmarks/**: Benchmark data
-    - **performance/**: Latency/throughput benchmarks (JSON, loaded into database)
-      - `benchmarks_BLIS.json`: Latency/throughput benchmarks from BLIS simulator
+- **src/planner/data/**: Package data files (included in wheel)
+  - **performance/**: Latency/throughput benchmarks (JSON, loaded into database)
+    - `benchmarks_BLIS.json`: Latency/throughput benchmarks from BLIS simulator
   - **quality/**: Model quality data (checked-in snapshots, committed to git)
     - `arena_models.json`: Arena leaderboard data (human preference rankings)
     - `aa_models.json`: Artificial Analysis benchmark data
-    - `arena_categories.json`: Arena category metadata and population stats
-    - `aa_categories.json`: AA category metadata and population stats
+    - `arena_dist.json`: Arena category metadata and population stats
+    - `aa_dist.json`: AA category metadata and population stats
   - **configuration/**: Runtime configuration files (JSON)
     - `model_catalog.json`: 47 curated models with task/domain metadata
     - `slo_templates.json`: 9 use case templates with SLO targets
@@ -87,6 +90,10 @@ This repository contains the architecture design for **Planner**, an open-source
     - `priority_weights.json`: Scoring priority weights
     - `quality_weights.json`: Per-use-case category weights for quality scoring
     - `usecase_slo_workload.json`: Use case SLO and workload profiles
+  - `_resolver.py`: Path resolver for bundled data (works in source checkouts and installed wheels)
+
+- **data/**: Runtime data directory (database, not included in wheel)
+  - `planner.db`: SQLite benchmark database
 
 - **.quality_cache/**: Runtime auto-update cache (gitignored)
   - Fresh data from Arena/AA APIs when `QUALITY_AUTO_UPDATE=true`
@@ -175,7 +182,7 @@ The recommendation engine uses **multi-criteria scoring** to rank configurations
 1. **Quality**: Use-case specific model capability from dual-source scoring (Arena + Artificial Analysis)
    - Sources: Arena human preference rankings (27 categories) + AA automated benchmarks (indices + 7 individual tests)
    - Normalization: Percentile ranks computed via tied-rank method across full population
-   - Weighting: Per-use-case category weights from `data/configuration/quality_weights.json`
+   - Weighting: Per-use-case category weights from `src/planner/data/configuration/quality_weights.json`
    - Composite: Weighted average of Arena/AA percentiles for specified categories
    - Fallback: Overall percentile for categories without model-specific data
 2. **Price**: Cost efficiency (inverse of monthly cost, normalized)
@@ -199,15 +206,19 @@ The recommendation engine uses **multi-criteria scoring** to rank configurations
 
 ## Development Environment
 
-**Requirements**: Python 3.11+ (3.13 recommended on macOS), uv, kubectl, kind. Docker or Podman required for container builds and KIND. Ollama required when `LLM_PROVIDER=ollama` (default). For `vertex` or `openai` providers, see docs/DEPLOYMENT_GUIDE.md.
+**Requirements**:
 
-This project uses **uv** (by Astral) for Python package management. **Do not use `pip` or `pip install`.**
+For **library use**: Python 3.11+ only. Install with `pip install llm-d-planner` and optional extras as needed (e.g., `[llm]`, `[kubernetes]`, `[estimation]`).
 
-- **Install dependencies**: `uv sync --extra ui --extra dev` (reads from `pyproject.toml` + `uv.lock`)
+For **development** (standalone app): Python 3.11+ (3.13 recommended on macOS), uv, kubectl, kind. Docker or Podman required for container builds and KIND. Ollama required when `LLM_PROVIDER=ollama` (default). For `vertex` or `openai` providers, see docs/DEPLOYMENT_GUIDE.md.
+
+This project uses **uv** (by Astral) for development. **Do not use `pip` or `pip install` for development tasks.**
+
+- **Install dependencies**: `uv sync --extra server --extra ui --extra llm --extra dev` (reads from `pyproject.toml` + `uv.lock`)
 - **Run Python commands**: `uv run python ...` (not bare `python`)
 - **Run tools**: `uv run pytest`, `uv run ruff`, `uv run uvicorn`, etc.
 - **Add a dependency**: `uv add <package>` (updates `pyproject.toml` and `uv.lock`)
-- **Source of truth**: `pyproject.toml` defines all dependencies; there is no top-level `requirements.txt`
+- **Source of truth**: `pyproject.toml` defines all dependencies with optional extras; there is no top-level `requirements.txt`
 
 Note: `ui/requirements.txt` and `simulator/requirements.txt` exist separately for their Docker builds.
 
@@ -217,7 +228,7 @@ Note: `ui/requirements.txt` and `simulator/requirements.txt` exist separately fo
 
 ```bash
 make setup              # Full setup (prereqs + backend + UI + Ollama)
-make setup-backend      # Python env only (uv sync --extra ui --extra dev)
+make setup-backend      # Python env only (uv sync --extra server --extra ui --extra llm --extra dev)
 ```
 
 ### Running Services
@@ -270,7 +281,7 @@ make db-shell           # Open sqlite3 shell
 ### Quality Data Management
 
 ```bash
-make quality-sync       # Fetch fresh Arena + AA data, update data/quality/ snapshots (requires AA_API_KEY)
+make quality-sync       # Fetch fresh Arena + AA data, update src/quality_scoring/data/ snapshots (requires AA_API_KEY)
 ```
 
 Environment variables:
@@ -381,7 +392,9 @@ The API is organized as a composable pipeline where each stage's output feeds as
 4. `POST /api/v1/generate-deployment` - Generate Kubernetes YAML files from selected configuration
 5. `POST /api/v1/deploy-bundle-to-cluster` - Deploy YAML bundle to Kubernetes cluster
 
-**Key schemas**:
+**Key classes and schemas**:
+- `Planner` - Main facade class for library use (in `planner.py`)
+- `PlannerError` - Custom exception for library errors (in `errors.py`)
 - `DeploymentIntent` - User intent (use case, user count, priorities, preferences)
 - `DeploymentSpecification` - Complete spec (SLO targets, workload profile, quality weights, priorities)
 - `RankedRecommendations` - Four ranked views (best quality, lowest cost, lowest latency, balanced)
@@ -400,16 +413,18 @@ The API is organized as a composable pipeline where each stage's output feeds as
 **Legacy aliases** (kept for compatibility):
 - `POST /extract` → `/extract-intent`
 
-See `docs/PROGRAMMATIC_API_DESIGN.md` for complete API pipeline documentation.
+See `docs/PROGRAMMATIC_API_USER_GUIDE.md` for complete API pipeline documentation.
 
 ### Common Editing Patterns
 
 **Adding a new use case template**:
-1. Add corresponding entry to `data/configuration/slo_templates.json`
-2. Add category weights entry to `data/configuration/quality_weights.json` (e.g., `{"use_case_name": {"overall": 10, "coding": 80, "math": 10}}`)
+1. Add corresponding entry to `src/planner/data/configuration/slo_templates.json` (bundled data file)
+2. Add category weights entry to `src/planner/data/configuration/quality_weights.json` (bundled data file)
 3. Update `docs/USE_CASE_METHODOLOGY.md` with category weighting rationale
 4. Update docs/ARCHITECTURE.md if needed
 5. Test quality scoring with the new use case: `cd src && uv run pytest ../tests/quality_scoring/test_scoring.py -v`
+
+Note: Data files are now at `src/planner/data/` and are bundled in the Python wheel.
 
 **Adding a new SLO metric**:
 1. Update DeploymentIntent schema in Intent & Specification Engine (docs/ARCHITECTURE.md)

@@ -11,8 +11,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 from quality_scoring.cache import get_cache_dir as _shared_get_cache_dir
 from quality_scoring.cache import is_cache_stale  # noqa: F401 — re-export for backward compat
 
@@ -37,6 +35,8 @@ def get_cache_path(cache_dir: Path | None = None) -> Path:
 
 def fetch_from_api(api_key: str) -> list[dict[str, Any]]:
     """Fetch all models from the AA API. Returns raw model dicts from response['data']."""
+    import httpx
+
     with httpx.Client(timeout=30) as client:
         resp = client.get(API_BASE, headers={"x-api-key": api_key})
         if resp.status_code == 401:

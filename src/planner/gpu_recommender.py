@@ -3,12 +3,21 @@
 import os
 from typing import Any
 
-from llm_optimizer.performance import (
-    PerformanceEstimationParams,
-    PerformanceEstimationResult,
-    run_performance_estimation,
-)
-from llm_optimizer.predefined.gpus import GPU_SPECS
+try:
+    from llm_optimizer.performance import (
+        PerformanceEstimationParams,
+        PerformanceEstimationResult,
+        run_performance_estimation,
+    )
+    from llm_optimizer.predefined.gpus import GPU_SPECS
+
+    _LLM_OPTIMIZER_AVAILABLE = True
+except ImportError:
+    _LLM_OPTIMIZER_AVAILABLE = False
+    # Placeholder types for type checking when llm-optimizer not installed
+    PerformanceEstimationParams = None  # type: ignore
+    PerformanceEstimationResult = None  # type: ignore
+    GPU_SPECS = {}  # type: ignore
 
 from planner.capacity_planner import (
     get_model_config_from_hf,
@@ -120,7 +129,17 @@ class GPURecommender:
             max_latency: Maximum end-to-end latency constraint (s)
             custom_gpu_costs: Optional dict mapping GPU names to custom costs
             catalog: Optional ModelCatalog instance (avoids reloading JSON files)
+
+        Raises:
+            ImportError: If llm-optimizer is not installed
         """
+        if not _LLM_OPTIMIZER_AVAILABLE:
+            raise ImportError(
+                "GPURecommender requires llm-optimizer. "
+                "This is not available as a PyPI package. "
+                "For roofline-based GPU estimation, install from source: "
+                "pip install git+https://github.com/bentoml/llm-optimizer.git"
+            )
 
         # Read HF Token from environment variable
         hf_token = os.getenv("HF_TOKEN", None)

@@ -11,6 +11,39 @@ and deployment in one workflow.**
 
 ---
 
+## Usage
+
+### As a Python Library
+
+```bash
+pip install llm-d-planner
+```
+
+```python
+from planner import Planner, DeploymentIntent
+
+p = Planner()
+p.load_bundled_benchmarks()
+
+spec = p.generate_specification(DeploymentIntent(
+    use_case="chatbot_conversational",
+    user_count=1000,
+))
+recs = p.generate_recommendations(spec)
+```
+
+See [Programmatic API User Guide](docs/PROGRAMMATIC_API_USER_GUIDE.md) for complete documentation.
+
+### As a Standalone Application
+
+```bash
+make setup && make start
+```
+
+See [Developer Guide](docs/DEVELOPER_GUIDE.md) for setup instructions.
+
+---
+
 ## Overview
 
 Deploying LLMs in production means navigating a fragmented landscape of model

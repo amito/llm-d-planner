@@ -12,8 +12,8 @@ COPY simulator/simulator_service.py .
 # Create data directory for benchmarks
 RUN mkdir -p /app/data
 
-# Copy benchmark data from main data directory
-COPY data/benchmarks/performance/benchmarks_BLIS.json /app/data/benchmarks.json
+# Copy benchmark data from package data directory
+COPY src/planner/data/performance/benchmarks_BLIS.json /app/data/benchmarks.json
 
 # Expose vLLM-compatible port
 EXPOSE 8080

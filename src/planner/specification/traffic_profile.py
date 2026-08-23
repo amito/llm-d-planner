@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 
+from planner.data._resolver import data_path as resolve_data_path
 from planner.knowledge_base.slo_templates import SLOTemplateRepository
 from planner.shared.schemas import DeploymentIntent, SLORange, SLOTargets, TrafficProfile
 
@@ -39,12 +40,7 @@ class TrafficProfileGenerator:
         """
         self.slo_repo = slo_repo or SLOTemplateRepository()
         if usecase_data_path is None:
-            usecase_data_path = (
-                Path(__file__).parent.parent.parent.parent
-                / "data"
-                / "configuration"
-                / "usecase_slo_workload.json"
-            )
+            usecase_data_path = resolve_data_path("configuration/usecase_slo_workload.json")
         self.usecase_data_path = usecase_data_path
         self._usecase_data: dict | None = None
 

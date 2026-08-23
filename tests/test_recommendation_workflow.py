@@ -20,7 +20,9 @@ API_BASE = "http://localhost:8000"
 
 def _load_scenarios():
     """Load demo scenarios from JSON file."""
-    scenarios_path = Path(__file__).parent.parent / "data" / "configuration" / "demo_scenarios.json"
+    from planner.data._resolver import data_path
+
+    scenarios_path = data_path("configuration/demo_scenarios.json")
     with open(scenarios_path) as f:
         data = json.load(f)
     return data["scenarios"]

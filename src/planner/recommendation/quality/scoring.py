@@ -77,6 +77,7 @@ def validate_quality_weights(weights: dict) -> None:
 def build_scoring_engine(
     cache_dir: Path | None = None,
     auto_update: bool | None = None,
+    aa_api_key: str | None = None,
 ) -> tuple[ScoringEngine, dict[str, Any]]:
     """Build a ScoringEngine, handling cache loading and optional auto-update.
 
@@ -87,15 +88,18 @@ def build_scoring_engine(
             variable is **never** mutated.
         auto_update: Override for the QUALITY_AUTO_UPDATE env var.
             When provided, this value is used instead of the env var.
+        aa_api_key: Artificial Analysis API key. Falls back to
+            AA_API_KEY env var.
 
     Returns:
         A ``(engine, metadata)`` tuple.  *metadata* contains counts
         and ``fetched_at`` timestamps for each data source so callers
         can cache them without re-reading the full files.
     """
-    repo_root = Path(__file__).parent.parent.parent.parent.parent
-    checked_in_dir = repo_root / "data" / "quality"
-    runtime_cache_dir = cache_dir or repo_root / ".quality_cache"
+    from quality_scoring.data._resolver import quality_data_path
+
+    checked_in_dir = quality_data_path()
+    runtime_cache_dir = cache_dir or Path(os.environ.get("LLM_QUALITY_CACHE_DIR", ".quality_cache"))
 
     if auto_update is None:
         auto_update = os.environ.get("QUALITY_AUTO_UPDATE", "false").lower() in (
@@ -103,7 +107,8 @@ def build_scoring_engine(
             "1",
             "yes",
         )
-    aa_api_key = os.environ.get("AA_API_KEY")
+    if aa_api_key is None:
+        aa_api_key = os.environ.get("AA_API_KEY")
 
     arena_rows: list = []
     aa_models: list = []

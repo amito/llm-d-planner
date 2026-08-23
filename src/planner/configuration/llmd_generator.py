@@ -39,8 +39,8 @@ class LlmdDeploymentGenerator:
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            project_root = Path(__file__).parent.parent.parent.parent
-            self.output_dir = project_root / "generated_configs"
+            # Default to generated_configs/ in current working directory
+            self.output_dir = Path.cwd() / "generated_configs"
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 

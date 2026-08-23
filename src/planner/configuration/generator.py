@@ -42,9 +42,8 @@ class DeploymentGenerator:
         if output_dir:
             self.output_dir = Path(output_dir)
         else:
-            # Default to generated_configs/ in project root
-            project_root = Path(__file__).parent.parent.parent.parent
-            self.output_dir = project_root / "generated_configs"
+            # Default to generated_configs/ in current working directory
+            self.output_dir = Path.cwd() / "generated_configs"
 
         # Create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)

@@ -84,7 +84,7 @@ class VertexClient:
             model=self.model,
             max_tokens=_MAX_TOKENS,
             messages=cast(Any, messages),
-            temperature=temperature,
+            extra_body={"temperature": temperature},
         )
 
         if not response.content:

@@ -16,7 +16,7 @@ Planner uses two independent data sources that measure model quality in fundamen
 - **Strengths**: Captures subjective qualities — helpfulness, writing style, conversational fluency
 - **Limitations**: Biased toward user-facing chat tasks; less coverage of specialized capabilities
 
-Data is fetched from the HuggingFace dataset `lmarena-ai/leaderboard-dataset` and cached in `data/quality/arena_models.json`.
+Data is fetched from the HuggingFace dataset `lmarena-ai/leaderboard-dataset` and cached in `src/quality_scoring/data/arena_models.json`.
 
 ### Artificial Analysis (Automated Benchmarks)
 
@@ -29,7 +29,7 @@ Data is fetched from the HuggingFace dataset `lmarena-ai/leaderboard-dataset` an
 - **Strengths**: Precise for measurable capabilities; reproducible; covers specific skill areas
 - **Limitations**: Less reflective of subjective qualities like writing style or helpfulness
 
-Data is fetched from the AA API and cached in `data/quality/aa_models.json` (requires `AA_API_KEY`).
+Data is fetched from the AA API and cached in `src/quality_scoring/data/aa_models.json` (requires `AA_API_KEY`).
 
 ## Model Name Resolution
 
@@ -245,7 +245,7 @@ Weights are normalized internally — only relative proportions matter. The scor
 
 ### Scoring Pipeline
 
-1. **ScoringEngine initialization**: `build_scoring_engine()` in `src/planner/recommendation/quality/scoring.py` constructs a `ScoringEngine` from cached data in `data/quality/` (or auto-updates from `.quality_cache/` if `QUALITY_AUTO_UPDATE=true`).
+1. **ScoringEngine initialization**: `build_scoring_engine()` in `src/planner/recommendation/quality/scoring.py` constructs a `ScoringEngine` from cached data in `src/quality_scoring/data/` (or auto-updates from `.quality_cache/` if `QUALITY_AUTO_UPDATE=true`).
 
 2. **Per-model scoring**: `compute_quality_score(model_name, use_case, engine, weights)` looks up the model's scores across all categories specified in the use case's quality_weights entry, applies the per-category weights, and returns a single float percentile (0–100).
 
@@ -255,7 +255,7 @@ Weights are normalized internally — only relative proportions matter. The scor
 
 Planner uses a two-tier cache:
 
-1. **Checked-in snapshots** (`data/quality/`): Committed to git, provide stable baseline data for offline use and CI/CD. Updated manually via `make quality-sync`.
+1. **Checked-in snapshots** (`src/quality_scoring/data/`): Committed to git, provide stable baseline data for offline use and CI/CD. Updated manually via `make quality-sync`.
 
 2. **Runtime auto-update cache** (`.quality_cache/`, gitignored): When `QUALITY_AUTO_UPDATE=true`, the scoring engine fetches fresh data from Arena/AA APIs on first use and stores it in `.quality_cache/`. Subsequent runs use the cached data until it expires (24-hour TTL). This keeps recommendations current without manual intervention.
 
@@ -278,7 +278,7 @@ Planner exposes quality data management via REST API:
 make quality-sync
 ```
 
-Fetches fresh data from Arena and AA (requires `AA_API_KEY`), updates `data/quality/` snapshots, and commits the changes. Run this periodically (e.g., weekly) to keep the baseline cache current.
+Fetches fresh data from Arena and AA (requires `AA_API_KEY`), updates `src/quality_scoring/data/` snapshots, and commits the changes. Run this periodically (e.g., weekly) to keep the baseline cache current.
 
 ## ScoringEngine API
 

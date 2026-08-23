@@ -10,8 +10,6 @@ import logging
 import uuid
 from datetime import datetime
 
-from planner.knowledge_base.db import find_project_root
-
 logger = logging.getLogger(__name__)
 
 
@@ -173,20 +171,14 @@ _INSERT_QUERY = (
 )
 
 
-_SCHEMA_PATH = find_project_root() / "scripts" / "schema.sql"
-
-
 def ensure_schema(conn) -> None:
-    """Create the database schema if it doesn't already exist.
+    """Create the database schema if it doesn't already exist."""
+    from planner.data._resolver import data_path
 
-    Reads and executes scripts/schema.sql, which uses CREATE TABLE IF NOT EXISTS
-    and CREATE INDEX IF NOT EXISTS throughout, so it's safe to call on every insert.
-    """
-    if not _SCHEMA_PATH.exists():
-        logger.warning("schema.sql not found at %s, skipping schema init", _SCHEMA_PATH)
-        return
+    schema_path = data_path("schema.sql")
+    schema_sql = schema_path.read_text()
     cursor = conn.cursor()
-    cursor.executescript(_SCHEMA_PATH.read_text())
+    cursor.executescript(schema_sql)
     conn.commit()
     cursor.close()
     logger.info("Database schema ensured")

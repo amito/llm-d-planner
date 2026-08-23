@@ -126,7 +126,8 @@ check-prereqs: ## Check if required tools are installed
 
 setup-backend: ## Set up Python environment (all dependencies including optional providers)
 	@printf "$(BLUE)Setting up Python environment...$(NC)\n"
-	uv sync --extra ui --extra dev --extra vertex --extra openai
+	uv sync --extra server --extra ui --extra llm --extra openai --extra vertex --extra dev --extra estimation --extra quality-sync --extra kubernetes
+	uv pip install "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git"
 	@printf "$(GREEN)✓ Python environment ready (includes all dependencies)$(NC)\n"
 
 setup-vertex: ## Install Vertex AI dependencies (only needed for LLM_PROVIDER=vertex)
@@ -440,26 +441,26 @@ db-remove: ## Remove database file
 
 db-load-blis: db-start ## Load BLIS benchmark data (appends)
 	@printf "$(BLUE)Loading BLIS benchmark data...$(NC)\n"
-	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_BLIS.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py src/planner/data/performance/benchmarks_BLIS.json
 	@printf "$(GREEN)✓ BLIS data loaded$(NC)\n"
 
 db-load-estimated: db-start ## Load estimated performance benchmarks (appends)
 	@printf "$(BLUE)Loading estimated performance data...$(NC)\n"
-	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_estimated_performance.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py src/planner/data/performance/benchmarks_estimated_performance.json
 	@printf "$(GREEN)✓ Estimated data loaded$(NC)\n"
 
 db-load-interpolated: db-start ## Load interpolated benchmark data (appends)
 	@printf "$(BLUE)Loading interpolated benchmark data...$(NC)\n"
-	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_interpolated_v2.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py src/planner/data/performance/benchmarks_interpolated_v2.json
 	@printf "$(GREEN)✓ Interpolated data loaded$(NC)\n"
 
 db-load-guidellm: db-start ## Load GuideLLM benchmark data (appends)
 	@printf "$(BLUE)Loading GuideLLM benchmark data...$(NC)\n"
-	@if [ ! -f data/benchmarks/performance/benchmarks_GuideLLM.json ]; then \
-		printf "$(RED)✗ data/benchmarks/performance/benchmarks_GuideLLM.json not found$(NC)\n"; \
+	@if [ ! -f src/planner/data/performance/benchmarks_GuideLLM.json ]; then \
+		printf "$(RED)✗ src/planner/data/performance/benchmarks_GuideLLM.json not found$(NC)\n"; \
 		exit 1; \
 	fi
-	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py data/benchmarks/performance/benchmarks_GuideLLM.json
+	@PLANNER_DB_PATH=$(DB_PATH) uv run python scripts/load_benchmarks.py src/planner/data/performance/benchmarks_GuideLLM.json
 	@printf "$(GREEN)✓ GuideLLM data loaded$(NC)\n"
 
 db-shell: ## Open database shell
@@ -488,16 +489,16 @@ db-reset: db-start ## Reset database (clear all benchmark data, safe while backe
 
 quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
 	@printf "$(BLUE)Syncing Arena leaderboard (no API key needed)...$(NC)\n"
-	@LLM_QUALITY_CACHE_DIR=data/quality uv run python -c "from quality_scoring.arena_client import sync; count, path = sync(); print(f'Arena: {count} rows')"
+	@LLM_QUALITY_CACHE_DIR=src/quality_scoring/data uv run python -c "from quality_scoring.arena_client import sync; count, path = sync(); print(f'Arena: {count} rows')"
 	@printf "$(BLUE)Syncing AA models (requires AA_API_KEY)...$(NC)\n"
 	@if [ -n "$$AA_API_KEY" ]; then \
-		LLM_QUALITY_CACHE_DIR=data/quality uv run python -c "from quality_scoring.aa_client import sync; count, path = sync(api_key='$$AA_API_KEY'); print(f'AA: {count} models')"; \
+		LLM_QUALITY_CACHE_DIR=src/quality_scoring/data uv run python -c "from quality_scoring.aa_client import sync; count, path = sync(api_key='$$AA_API_KEY'); print(f'AA: {count} models')"; \
 	else \
 		printf "$(YELLOW)⚠ AA_API_KEY not set — skipping AA sync$(NC)\n"; \
 	fi
 	@printf "$(BLUE)Formatting JSON files for readable diffs...$(NC)\n"
-	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['data/quality/arena_models.json', 'data/quality/aa_models.json', 'data/quality/arena_dist.json', 'data/quality/aa_dist.json'] if pathlib.Path(f).is_file()]"
-	@printf "$(GREEN)✓ Quality data synced to data/quality/$(NC)\n"
+	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['src/quality_scoring/data/arena_models.json', 'src/quality_scoring/data/aa_models.json', 'src/quality_scoring/data/arena_dist.json', 'src/quality_scoring/data/aa_dist.json'] if pathlib.Path(f).is_file()]"
+	@printf "$(GREEN)✓ Quality data synced to src/quality_scoring/data/$(NC)\n"
 
 ##@ Testing
 

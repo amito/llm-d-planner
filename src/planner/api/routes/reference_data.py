@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from planner.api.dependencies import get_model_catalog, get_slo_repo
+from planner.data._resolver import data_path
 from planner.knowledge_base.model_catalog import ModelCatalog
 from planner.knowledge_base.slo_templates import SLOTemplateRepository
 
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/v1", tags=["reference-data"])
 
 def _get_data_path() -> Path:
     """Get the base data directory path."""
-    return Path(__file__).parent.parent.parent.parent.parent / "data"
+    return data_path("")
 
 
 @router.get("/models")

@@ -222,29 +222,14 @@ class TestExtractMetadata:
 
 @pytest.mark.unit
 class TestEnsureSchema:
-    def test_executes_schema_sql(self, tmp_path):
-        schema_file = tmp_path / "schema.sql"
-        schema_file.write_text("CREATE TABLE IF NOT EXISTS test (id INT);")
-
+    def test_executes_bundled_schema(self):
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_conn.cursor.return_value = mock_cursor
 
-        with patch("planner.knowledge_base.loader._SCHEMA_PATH", schema_file):
-            ensure_schema(mock_conn)
+        ensure_schema(mock_conn)
 
-        mock_cursor.executescript.assert_called_once_with(
-            "CREATE TABLE IF NOT EXISTS test (id INT);"
-        )
-
-    def test_skips_when_file_missing(self):
-        mock_conn = MagicMock()
-
-        with patch(
-            "planner.knowledge_base.loader._SCHEMA_PATH",
-            __import__("pathlib").Path("/nonexistent/schema.sql"),
-        ):
-            ensure_schema(mock_conn)
-
-        mock_conn.cursor.assert_not_called()
-        mock_conn.commit.assert_not_called()
+        mock_cursor.executescript.assert_called_once()
+        mock_conn.commit.assert_called_once()
+        schema_sql = mock_cursor.executescript.call_args[0][0]
+        assert "CREATE TABLE IF NOT EXISTS exported_summaries" in schema_sql

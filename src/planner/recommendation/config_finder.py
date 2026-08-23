@@ -34,7 +34,6 @@ from planner.shared.schemas import (
 from planner.shared.utils import extract_gpu_max_counts, normalize_gpu_types
 from quality_scoring.engine import ScoringEngine
 
-from .estimator import generate_estimated_configs
 from .scorer import Scorer
 
 logger = logging.getLogger(__name__)
@@ -282,6 +281,8 @@ class ConfigFinder:
         # Estimated performance flow: generate roofline estimates for
         # preferred models (and optionally catalog models) that lack benchmark data.
         if enable_estimated and preferred_models:
+            from .estimator import generate_estimated_configs
+
             estimated_configs, estimation_warnings = generate_estimated_configs(
                 traffic_profile=traffic_profile,
                 slo_targets=slo_targets,

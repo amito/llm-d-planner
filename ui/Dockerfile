@@ -13,8 +13,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy UI source code
 COPY ui ./ui
 
-# Copy quality weights config (used by slo.py for benchmark display)
-COPY data/configuration/quality_weights.json ./data/configuration/quality_weights.json
+# Copy planner data module (used by slo.py and Capacity_Planner for config file paths).
+# Create a minimal planner package — the full __init__.py would pull in all deps.
+RUN mkdir -p src/planner/data/configuration && touch src/planner/__init__.py
+COPY src/planner/data/__init__.py ./src/planner/data/__init__.py
+COPY src/planner/data/_resolver.py ./src/planner/data/_resolver.py
+COPY src/planner/data/configuration/ ./src/planner/data/configuration/
 
 # Copy Streamlit configuration
 COPY .streamlit ./.streamlit

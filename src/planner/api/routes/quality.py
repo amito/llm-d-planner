@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from planner.data._resolver import data_path
 from quality_scoring import aa_client, arena_client
 
 logger = logging.getLogger(__name__)
@@ -73,8 +75,6 @@ async def set_auto_update(request: Request, body: AutoUpdateToggle) -> AutoUpdat
 @router.post("/quality/refresh")
 async def refresh_quality_data(request: Request) -> RefreshResult:
     """Trigger immediate sync of quality benchmark data and rebuild engine."""
-    from pathlib import Path
-
     from planner.recommendation.quality.scoring import (
         build_scoring_engine,
         load_quality_weights,
@@ -89,8 +89,7 @@ async def refresh_quality_data(request: Request) -> RefreshResult:
     errors: list[str] = []
 
     # Determine runtime cache dir (same logic as build_scoring_engine default)
-    repo_root = Path(__file__).parent.parent.parent.parent.parent
-    runtime_cache_dir = repo_root / ".quality_cache"
+    runtime_cache_dir = Path(os.environ.get("LLM_QUALITY_CACHE_DIR", ".quality_cache"))
     runtime_cache_dir.mkdir(parents=True, exist_ok=True)
 
     # Sync Arena (no key needed)
@@ -123,12 +122,7 @@ async def refresh_quality_data(request: Request) -> RefreshResult:
     request.app.state.quality_metadata = new_metadata
 
     # Reload quality weights and update config_finder via public API
-    weights_path = (
-        Path(__file__).parent.parent.parent.parent.parent
-        / "data"
-        / "configuration"
-        / "quality_weights.json"
-    )
+    weights_path = data_path("configuration/quality_weights.json")
     new_weights = load_quality_weights(weights_path)
     validate_quality_weights(new_weights)
     if hasattr(request.app.state, "workflow") and hasattr(
