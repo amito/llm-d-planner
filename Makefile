@@ -502,18 +502,22 @@ quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
 
 ##@ Testing
 
-test: test-unit test-integration ## Run all tests (requires Ollama)
+test: test-unit test-hf test-integration ## Run all tests (requires LLM)
 	@printf "$(GREEN)✓ All tests passed$(NC)\n"
 
-test-unit: ## Run unit tests (no Ollama required)
+test-unit: ## Run unit tests (no external dependencies)
 	@printf "$(BLUE)Running unit tests...$(NC)\n"
-	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m "not integration and not intent_extraction"
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m unit
 
-test-integration: setup-ollama ## Run integration tests (requires Ollama and DB)
+test-hf: ## Run HuggingFace tests (requires network, skips on failure)
+	@printf "$(BLUE)Running HuggingFace tests...$(NC)\n"
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m hf_network
+
+test-integration: setup-ollama ## Run integration tests (requires LLM)
 	@printf "$(BLUE)Running integration tests...$(NC)\n"
 	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m integration
 
-test-intent: setup-ollama ## Run intent extraction tests (requires Ollama)
+test-intent: setup-ollama ## Run intent extraction tests (requires LLM)
 	@printf "$(BLUE)Running intent extraction tests...$(NC)\n"
 	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m intent_extraction
 

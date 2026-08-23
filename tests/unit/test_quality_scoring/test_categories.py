@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from quality_scoring.categories import (
     ALL_CATEGORIES,
     CATEGORY_MAP,
@@ -9,6 +11,7 @@ from quality_scoring.categories import (
 )
 
 
+@pytest.mark.unit
 class TestCategoryMap:
     def test_overall_maps_to_both_sources(self):
         arena, aa = CATEGORY_MAP["overall"]
@@ -46,6 +49,7 @@ class TestCategoryMap:
         assert len(ALL_CATEGORIES) == 34
 
 
+@pytest.mark.unit
 class TestDisplayName:
     def test_known_category(self):
         assert display_name("overall") == "Overall"

@@ -5,7 +5,7 @@ import pytest
 from planner.gpu_recommender import GPURecommender
 
 
-@pytest.mark.integration
+@pytest.mark.unit
 class TestGPURecommenderCost:
     """Test suite for GPURecommender cost integration"""
 

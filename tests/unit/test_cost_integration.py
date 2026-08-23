@@ -8,7 +8,7 @@ import pytest
 from planner.gpu_recommender import CostManager, GPURecommender
 
 
-@pytest.mark.integration
+@pytest.mark.unit
 def test_cost_manager():
     """Test CostManager functionality"""
     print("=" * 80)
@@ -42,7 +42,7 @@ def test_cost_manager():
     print("\n✅ All CostManager tests passed!\n")
 
 
-@pytest.mark.integration
+@pytest.mark.unit
 def test_gpu_recommender():
     """Test GPURecommender cost integration"""
     print("=" * 80)

@@ -177,6 +177,7 @@ class TestBenchmarkRepository:
             assert getattr(benchmark, field) is not None, f"Field {field} is None"
 
 
+@pytest.mark.unit
 class TestSLOTemplates:
     """Tests for SLO templates with p95/ITL migration."""
 
