@@ -261,7 +261,7 @@ def sync(api_key: str, cache_dir: Path | None = None) -> tuple[int, Path]:
     )
 
     # Sort key must match scripts/format_quality_data.py for consistent ordering.
-    mapped.sort(key=lambda m: (m.get("slug") or ""))
+    mapped.sort(key=lambda m: m.get("slug") or "")
 
     cache_path = save_cache(mapped, cache_dir)
 

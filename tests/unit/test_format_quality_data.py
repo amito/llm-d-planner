@@ -29,7 +29,7 @@ class TestFmt:
         f = tmp_path / "models.json"
         f.write_text(json.dumps(data))
 
-        fmt(str(f), sort_key=lambda m: (m.get("slug") or ""))
+        fmt(str(f), sort_key=lambda m: m.get("slug") or "")
 
         result = json.loads(f.read_text())
         assert [m["slug"] for m in result["models"]] == ["alpha", "mid", "zeta"]
