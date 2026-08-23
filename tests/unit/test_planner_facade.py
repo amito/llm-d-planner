@@ -1,11 +1,17 @@
 """Tests for Planner facade class."""
 
+from pathlib import Path
+from unittest.mock import patch
+
 import pytest
 
 from planner import Planner, PlannerConfig, PlannerError
 from planner.shared.schemas import DeploymentIntent
 
+FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
+
+@pytest.mark.unit
 class TestPlannerInit:
     """Test Planner initialization."""
 
@@ -47,6 +53,7 @@ class TestPlannerInit:
         assert planner is not None
 
 
+@pytest.mark.unit
 class TestGenerateSpecification:
     """Test specification generation."""
 
@@ -65,6 +72,7 @@ class TestGenerateSpecification:
         assert spec.workload_profile is not None
 
 
+@pytest.mark.unit
 class TestGenerateRecommendations:
     """Test recommendation generation."""
 
@@ -80,22 +88,27 @@ class TestGenerateRecommendations:
         with pytest.raises(PlannerError, match="No benchmarks loaded"):
             planner.generate_recommendations(spec)
 
-    def test_generate_recommendations_works_after_load(self):
-        """generate_recommendations() works after load_bundled_benchmarks()."""
-        planner = Planner()
-        planner.load_bundled_benchmarks()
+    def test_generate_recommendations_works_after_load(self, mock_scoring_engine):
+        """generate_recommendations() works after load_benchmarks()."""
+        with patch(
+            "planner.planner.build_scoring_engine",
+            side_effect=mock_scoring_engine,
+        ):
+            planner = Planner()
+            planner.load_benchmarks(FIXTURES_DIR / "test_benchmarks.json")
 
-        intent = DeploymentIntent(
-            use_case="chatbot_conversational",
-            user_count=100,
-        )
-        spec = planner.generate_specification(intent)
+            intent = DeploymentIntent(
+                use_case="chatbot_conversational",
+                user_count=100,
+            )
+            spec = planner.generate_specification(intent)
 
-        # Should not raise
-        result = planner.generate_recommendations(spec)
-        assert result is not None
+            # Should not raise
+            result = planner.generate_recommendations(spec)
+            assert result is not None
 
 
+@pytest.mark.unit
 class TestGenerateDeployment:
     """Test deployment generation."""
 
@@ -159,6 +172,7 @@ class TestGenerateDeployment:
         assert bundle.stack == "llm-d"
 
 
+@pytest.mark.unit
 class TestExtractIntent:
     """Test intent extraction."""
 
@@ -171,6 +185,7 @@ class TestExtractIntent:
             planner.extract_intent("I need a chatbot for customer support")
 
 
+@pytest.mark.unit
 class TestLoadBenchmarks:
     """Test benchmark loading."""
 
