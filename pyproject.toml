@@ -1,9 +1,20 @@
 [project]
 name = "llm-d-planner"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Confidently navigate LLM deployments from concept to production"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     # Core dependencies - ONLY the minimal set required for library functionality
     "pydantic>=2.13.4",
@@ -60,9 +71,20 @@ dev = [
 [project.scripts]
 planner = "planner.cli.planner_cli:main"
 
+[project.urls]
+Homepage = "https://github.com/llm-d-incubation/llm-d-planner"
+Repository = "https://github.com/llm-d-incubation/llm-d-planner"
+Issues = "https://github.com/llm-d-incubation/llm-d-planner/issues"
+
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/planner/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/planner", "src/quality_scoring"]
