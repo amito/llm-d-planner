@@ -1,10 +1,10 @@
-# <img src="docs/planner-logo.ico" alt="Planner" width="32" style="vertical-align: middle;"/> llm-d Planner
+# <img src="https://raw.githubusercontent.com/llm-d-incubation/llm-d-planner/main/docs/planner-logo.ico" alt="Planner" width="32" style="vertical-align: middle;"/> llm-d Planner
 
 [![CI](https://github.com/llm-d-incubation/llm-d-planner/actions/workflows/ci.yml/badge.svg)](https://github.com/llm-d-incubation/llm-d-planner/actions/workflows/ci.yml)
 [![Python
 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org)
 [![License: Apache
-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/llm-d-incubation/llm-d-planner/blob/main/LICENSE)
 
 **From business requirements to running llm-d deployments — sizing, estimation,
 and deployment in one workflow.**
@@ -32,7 +32,7 @@ spec = p.generate_specification(DeploymentIntent(
 recs = p.generate_recommendations(spec)
 ```
 
-See [Programmatic API User Guide](docs/PROGRAMMATIC_API_USER_GUIDE.md) for complete documentation.
+See [Programmatic API User Guide](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/PROGRAMMATIC_API_USER_GUIDE.md) for complete documentation.
 
 ### As a Standalone Application
 
@@ -40,7 +40,7 @@ See [Programmatic API User Guide](docs/PROGRAMMATIC_API_USER_GUIDE.md) for compl
 make setup && make start
 ```
 
-See [Developer Guide](docs/DEVELOPER_GUIDE.md) for setup instructions.
+See [Developer Guide](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/DEVELOPER_GUIDE.md) for setup instructions.
 
 ---
 
@@ -214,7 +214,7 @@ types, ranked by cost.
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed system design.
+See [docs/ARCHITECTURE.md](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/ARCHITECTURE.md) for detailed system design.
 
 ## Implemented Features
 
@@ -342,19 +342,19 @@ tab in the UI, or via the REST API:
 - `PUT /api/v1/deployment-mode` - Set mode (`{"mode": "simulator"}` or `{"mode":
   "production"}`)
 
-See [docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md#vllm-simulator-details)
+See [docs/DEVELOPER_GUIDE.md](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/DEVELOPER_GUIDE.md#vllm-simulator-details)
 for details.
 
 ## Documentation
 
-- **[Developer Guide](docs/DEVELOPER_GUIDE.md)** - Development workflows,
+- **[Developer Guide](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/DEVELOPER_GUIDE.md)** - Development workflows,
   testing, debugging
-- **[Architecture](docs/ARCHITECTURE.md)** - Detailed system design and
+- **[Architecture](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/ARCHITECTURE.md)** - Detailed system design and
   component specifications
-- **[Traffic and SLOs](docs/traffic_and_slos.md)** - Traffic profile framework
+- **[Traffic and SLOs](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/traffic_and_slos.md)** - Traffic profile framework
   and experience-driven SLOs (Phase 2)
-- **[Logging Guide](docs/LOGGING.md)** - Logging system and debugging
-- **[Claude Code Guidance](CLAUDE.md)** - AI assistant instructions for
+- **[Logging Guide](https://github.com/llm-d-incubation/llm-d-planner/blob/main/docs/LOGGING.md)** - Logging system and debugging
+- **[Claude Code Guidance](https://github.com/llm-d-incubation/llm-d-planner/blob/main/CLAUDE.md)** - AI assistant instructions for
   contributors
 
 ## Future Enhancements
@@ -371,12 +371,12 @@ Some of these enhancements may involve collaboration with other llm-d SIGs.
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/llm-d-incubation/llm-d-planner/blob/main/CONTRIBUTING.md) for
 guidelines.
 
-See [CLAUDE.md](CLAUDE.md) for AI assistant guidance when making changes.
+See [CLAUDE.md](https://github.com/llm-d-incubation/llm-d-planner/blob/main/CLAUDE.md) for AI assistant guidance when making changes.
 
 ## License
 
 This project is licensed under Apache License 2.0. See the [LICENSE
-file](LICENSE) for details.
+file](https://github.com/llm-d-incubation/llm-d-planner/blob/main/LICENSE) for details.
