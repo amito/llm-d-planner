@@ -9,6 +9,8 @@ This script tests the complete workflow:
 
 import logging
 
+import pytest
+
 from planner.configuration.generator import DeploymentGenerator
 from planner.configuration.validator import YAMLValidator
 from planner.shared.schemas import (
@@ -79,6 +81,7 @@ def create_test_recommendation() -> DeploymentRecommendation:
     return recommendation
 
 
+@pytest.mark.unit
 def test_yaml_generation():
     """Test YAML generation and validation."""
 

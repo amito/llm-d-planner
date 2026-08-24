@@ -56,6 +56,7 @@ def _make_mock_scorecard():
     )
 
 
+@pytest.mark.unit
 class TestComputeQualityScore:
     def test_weighted_average(self):
         sc = _make_mock_scorecard()
@@ -111,6 +112,7 @@ class TestComputeQualityScore:
         assert score == 0.0  # no overall to fill in, no categories match
 
 
+@pytest.mark.unit
 class TestLoadQualityWeights:
     def test_loads_from_json(self, tmp_path):
         weights = {"chatbot": {"categories": {"overall": 5, "coding": 5}}}
@@ -124,6 +126,7 @@ class TestLoadQualityWeights:
         assert result == {}
 
 
+@pytest.mark.unit
 class TestValidateQualityWeights:
     def test_valid_categories_no_warnings(self, caplog):
         weights = {"test_case": {"categories": {"overall": 5, "coding": 5}}}

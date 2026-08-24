@@ -29,7 +29,7 @@ def _make_slo() -> SLOTargets:
     )
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestEstimatedPerformanceIntegration:
     """End-to-end tests that hit real HuggingFace API and llm_optimizer."""
 

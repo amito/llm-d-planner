@@ -49,6 +49,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
+    "pytest-rerunfailures>=15.0",
     "httpx>=0.28.1",
     "ruff>=0.16.3",
     "mypy>=2.3.1",
@@ -148,7 +149,8 @@ ignore_missing_imports = true
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "session"
 markers = [
-    "integration: marks tests as integration tests (requires Ollama)",
-    "intent_extraction: marks tests that validate LLM intent extraction (requires Ollama, run with make test-intent)",
+    "integration: marks tests as integration tests (requires LLM or cluster)",
+    "intent_extraction: marks tests that validate LLM intent extraction (requires LLM, run with make test-intent)",
     "unit: marks tests as unit tests (no external dependencies)",
+    "hf_network: marks tests that need HuggingFace API access (retried in CI via --reruns)",
 ]

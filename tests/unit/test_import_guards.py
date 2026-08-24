@@ -3,6 +3,7 @@
 import pytest
 
 
+@pytest.mark.unit
 def test_planner_error_class():
     """Test that PlannerError can be imported and used."""
     from planner.errors import PlannerError
@@ -19,6 +20,7 @@ def test_planner_error_class():
         raise PlannerError("test")
 
 
+@pytest.mark.unit
 def test_core_modules_importable():
     """Test that core modules can be imported without optional dependencies."""
     # These should always work with just core dependencies
@@ -26,6 +28,7 @@ def test_core_modules_importable():
     from planner.shared.schemas.intent import DeploymentIntent  # noqa: F401
 
 
+@pytest.mark.unit
 def test_llm_factory_import_errors():
     """Test that LLM factory provides helpful error messages for missing providers."""
     import os
@@ -54,6 +57,7 @@ def test_llm_factory_import_errors():
             os.environ["LLM_PROVIDER"] = original_provider
 
 
+@pytest.mark.unit
 def test_capacity_planner_import_errors():
     """Test that capacity planner functions raise helpful errors when HF deps missing."""
     # Import guards are tested by attempting to use functions that need optional deps

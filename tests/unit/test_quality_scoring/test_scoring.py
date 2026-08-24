@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 from quality_scoring.models import (
     CategoryFinding,
     ComparisonResult,
@@ -19,6 +21,7 @@ from quality_scoring.scoring import (
 )
 
 
+@pytest.mark.unit
 class TestNormalizeArenaCategory:
     def test_basic_ranking(self):
         rows = [
@@ -169,6 +172,7 @@ class TestNormalizeArenaCategory:
         assert result["A"].source == "arena"
 
 
+@pytest.mark.unit
 class TestNormalizeAAIndex:
     def test_basic_ranking(self):
         models = [
@@ -234,6 +238,7 @@ class TestNormalizeAAIndex:
         assert result["A"].percentile == 50.0
 
 
+@pytest.mark.unit
 class TestComputeComposite:
     def test_both_sources(self):
         arena = NormalizedScore(
@@ -278,6 +283,7 @@ class TestComputeComposite:
         assert result.percentile == 70.0
 
 
+@pytest.mark.unit
 class TestComputeScorecards:
     def test_basic_scorecard(self):
         arena_rows = [
@@ -366,6 +372,7 @@ class TestComputeScorecards:
         assert sc.overall is None
 
 
+@pytest.mark.unit
 class TestCategoryFinding:
     def test_construction(self):
         f = CategoryFinding(
@@ -405,6 +412,7 @@ class TestCategoryFinding:
         assert f.ranked_models[-1][0] == "c"
 
 
+@pytest.mark.unit
 class TestModelScorecardMatchType:
     def test_default_match_types_are_none(self):
         sc = ModelScorecard(
@@ -429,6 +437,7 @@ class TestModelScorecardMatchType:
         assert sc.aa_match_type == MatchType.EQUIVALENT
 
 
+@pytest.mark.unit
 class TestComparisonResultNewFields:
     def test_default_scorecards_empty(self):
         r = ComparisonResult(model_names=["a"])
@@ -438,6 +447,7 @@ class TestComparisonResultNewFields:
         assert r.aa_weight == 1
 
 
+@pytest.mark.unit
 class TestGenerateCategoryFindings:
     def _make_scorecard(self, name, overall_pct, coding_pct=None, provenance="both"):
         arena_score = NormalizedScore(

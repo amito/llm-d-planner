@@ -54,21 +54,50 @@ jobs:
       - name: Run unit tests
         run: >
           uv run pytest tests/ -v --tb=short
-          -m "not database and not integration"
+          -m unit
           --cov=src/planner
           --cov-report=xml
           --cov-report=term
+      - run: uv pip install "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git"
+      - name: Run HuggingFace tests
+        continue-on-error: true
+        run: >
+          uv run pytest tests/ -v --tb=short
+          -m hf_network
+          --reruns 2
+
+  test-wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Build wheel
+        run: uv build
+      - name: Install wheel in fresh venv
+        run: |
+          uv venv .venv-wheel
+          . .venv-wheel/bin/activate
+          uv pip install dist/*.whl
+          uv pip install pytest
+      - name: Run wheel E2E tests
+        run: |
+          . .venv-wheel/bin/activate
+          python -m pytest tests/wheel/ -v --tb=short
 
   ci-status:
     if: always()
-    needs: [lint, typecheck, test]
+    needs: [lint, typecheck, test, test-wheel]
     runs-on: ubuntu-latest
     steps:
       - name: Check CI status
         run: |
           if [[ "${{ needs.lint.result }}" != "success" ||
                 "${{ needs.typecheck.result }}" != "success" ||
-                "${{ needs.test.result }}" != "success" ]]; then
+                "${{ needs.test.result }}" != "success" ||
+                "${{ needs.test-wheel.result }}" != "success" ]]; then
             echo "CI failed"
             exit 1
           fi

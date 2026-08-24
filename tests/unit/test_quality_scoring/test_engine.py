@@ -37,6 +37,7 @@ def _make_aa_models() -> list[dict]:
     ]
 
 
+@pytest.mark.unit
 class TestGetScores:
     def test_exact_match_both_sources(self):
         engine = ScoringEngine(
@@ -134,6 +135,7 @@ class TestGetScores:
         assert sc.overall is None
 
 
+@pytest.mark.unit
 class TestGetScoresBatch:
     def test_multiple_models(self):
         engine = ScoringEngine(
@@ -167,6 +169,7 @@ class TestGetScoresBatch:
         assert engine.get_scores_batch([]) == []
 
 
+@pytest.mark.unit
 class TestWeights:
     def test_arena_only_weight(self):
         engine = ScoringEngine(
@@ -223,6 +226,7 @@ class TestWeights:
         assert sc_equal.overall.percentile != sc_heavy.overall.percentile
 
 
+@pytest.mark.unit
 class TestCacheLoading:
     def test_loads_from_cache_when_data_not_provided(self, monkeypatch):
         arena_rows = _make_arena_rows()
@@ -242,6 +246,7 @@ class TestCacheLoading:
         assert sc.overall is not None
 
 
+@pytest.mark.unit
 class TestPercentileOrdering:
     def test_higher_score_gets_higher_percentile(self):
         engine = ScoringEngine(
@@ -270,6 +275,7 @@ class TestPercentileOrdering:
         assert sc.overall.aa_score.raw_score == 90
 
 
+@pytest.mark.unit
 class TestVariantAdjustment:
     def test_quantized_variant_gets_discounted(self):
         engine = ScoringEngine(
@@ -298,6 +304,7 @@ class TestVariantAdjustment:
         assert sc.overall.arena_score.raw_score == 1500
 
 
+@pytest.mark.unit
 class TestEmptyData:
     def test_both_sources_empty(self):
         engine = ScoringEngine(
@@ -309,6 +316,7 @@ class TestEmptyData:
         assert engine.get_scores_batch(["a", "b"]) == []
 
 
+@pytest.mark.unit
 class TestMixedMatchTypes:
     def test_exact_in_one_fuzzy_in_other_without_flag(self):
         """Model is EXACT in AA but FUZZY in Arena — Arena match rejected."""
@@ -328,6 +336,7 @@ class TestMixedMatchTypes:
         assert sc.arena_name is None
 
 
+@pytest.mark.unit
 class TestWeightValidation:
     def test_negative_weight_rejected(self):
         with pytest.raises(ValueError, match="non-negative"):

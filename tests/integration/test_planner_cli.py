@@ -34,24 +34,7 @@ def parse_cli_json_output(stdout):
     return json.loads(json_output)
 
 
-@pytest.mark.integration
-class TestHelp:
-    """Test help and usage commands"""
-
-    def test_help(self):
-        """Test help command"""
-        result = run_cli("--help")
-        assert result.returncode == 0
-        assert "planner" in result.stdout.lower()
-
-    def test_plan_help(self):
-        """Test plan help"""
-        result = run_cli("plan", "--help")
-        assert result.returncode == 0
-        assert "--model" in result.stdout
-
-
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestBasicPlan:
     """Test basic capacity planning functionality"""
 
@@ -93,7 +76,7 @@ class TestBasicPlan:
         assert data["kv_cache_detail"]["batch_size"] == 32
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestGPUCalculations:
     """Test GPU-related calculations"""
 
@@ -165,7 +148,7 @@ class TestGPUCalculations:
         assert data["input_parameters"]["gpu_mem_util"] == 0.85
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestTPValidation:
     """Test tensor parallelism validation"""
 
@@ -198,7 +181,7 @@ class TestTPValidation:
         assert "Invalid --tp value" in result.stdout or "Invalid --tp value" in result.stderr
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestOutputFormats:
     """Test output format and file writing"""
 
@@ -227,7 +210,7 @@ class TestOutputFormats:
         assert isinstance(data, dict)
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestKVCacheDetails:
     """Test KV cache detail calculations"""
 
@@ -272,7 +255,7 @@ class TestKVCacheDetails:
         )
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestErrorHandling:
     """Test error handling and validation"""
 
@@ -294,7 +277,7 @@ class TestErrorHandling:
         assert len(result.stderr) > 0 or len(result.stdout) > 0
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestModelInfo:
     """Test model information output"""
 
@@ -310,7 +293,7 @@ class TestModelInfo:
         assert data["model_info"]["total_parameters"] > 0
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestIntegration:
     """Integration tests with multiple parameters"""
 
@@ -358,7 +341,7 @@ class TestIntegration:
         assert "allocatable_kv_cache_memory_gb" in data
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestAutoMaxModelLen:
     """Test auto max-model-len feature"""
 
@@ -391,7 +374,7 @@ class TestAutoMaxModelLen:
         assert data["input_parameters"]["max_model_len_auto"] is True
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestEstimateCommand:
     """Test GPU performance estimation command"""
 

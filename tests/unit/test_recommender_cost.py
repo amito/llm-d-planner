@@ -1,11 +1,11 @@
-"""Integration tests for GPURecommender cost features"""
+"""Tests for GPURecommender cost features (requires HuggingFace API)."""
 
 import pytest
 
 from planner.gpu_recommender import GPURecommender
 
 
-@pytest.mark.integration
+@pytest.mark.hf_network
 class TestGPURecommenderCost:
     """Test suite for GPURecommender cost integration"""
 
