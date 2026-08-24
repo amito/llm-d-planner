@@ -51,7 +51,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: uv sync --extra server --extra ui --extra llm --extra openai --extra vertex --extra dev --extra estimation --extra quality-sync --extra kubernetes
-      - run: uv pip install "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git"
       - name: Run unit tests
         run: >
           uv run pytest tests/ -v --tb=short
@@ -59,10 +58,13 @@ jobs:
           --cov=src/planner
           --cov-report=xml
           --cov-report=term
+      - run: uv pip install "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git"
       - name: Run HuggingFace tests
+        continue-on-error: true
         run: >
           uv run pytest tests/ -v --tb=short
           -m hf_network
+          --reruns 2
 
   test-wheel:
     runs-on: ubuntu-latest

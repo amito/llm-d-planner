@@ -104,6 +104,8 @@ class TestE2EPipelineLibrary:
         recs = p.generate_recommendations(spec, enable_estimated=True)
         assert recs.total_configs_evaluated > 0
 
+        assert recs.balanced, "expected at least one ranked config"
+
         if recs.balanced:
             bundle = p.generate_deployment(
                 config=recs.balanced[0].configuration,

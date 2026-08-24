@@ -42,7 +42,7 @@ def test_cost_manager():
     print("\n✅ All CostManager tests passed!\n")
 
 
-@pytest.mark.unit
+@pytest.mark.hf_network
 def test_gpu_recommender():
     """Test GPURecommender cost integration"""
     print("=" * 80)

@@ -7,45 +7,27 @@ a small static fixture dataset. No external infrastructure needed.
 import json
 import logging
 import tempfile
-import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from planner.capacity_planner import get_model_config_from_hf
 from planner.knowledge_base.benchmarks import BenchmarkRepository
 
 logger = logging.getLogger(__name__)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
-_hf_available: bool | None = None
-
-
-def _check_hf_available() -> bool:
-    """Check HuggingFace availability with retry."""
-    global _hf_available
-    if _hf_available is not None:
-        return _hf_available
-
-    for attempt in range(3):
-        try:
-            get_model_config_from_hf("Qwen/Qwen2.5-0.5B")
-            _hf_available = True
-            return True
-        except Exception:
-            if attempt < 2:
-                time.sleep(2**attempt)
-    _hf_available = False
-    return False
-
 
 @pytest.fixture(autouse=True)
-def _require_hf_network(request):
-    """Auto-skip hf_network tests when HuggingFace is unreachable."""
-    if request.node.get_closest_marker("hf_network") and not _check_hf_available():
-        pytest.skip("HuggingFace API unavailable after 3 retries")
+def _disable_cluster_gpu_detection(request, monkeypatch):
+    """Prevent unit tests from contacting a real Kubernetes cluster.
+
+    Skipped for test_gpu_detector which tests detection itself with mocked K8s.
+    """
+    if "test_gpu_detector" in request.fspath.basename:
+        return
+    monkeypatch.setenv("PLANNER_DETECT_CLUSTER_GPUS", "false")
 
 
 @pytest.fixture(scope="session")
