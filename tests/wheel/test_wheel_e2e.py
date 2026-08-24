@@ -17,6 +17,14 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 class TestWheelE2E:
     """Verify the installed wheel works for the full pipeline."""
 
+    def test_package_version_is_valid(self):
+        """Verify hatch-vcs resolved a real version, not a fallback."""
+        from importlib.metadata import version
+
+        v = version("llm-d-planner")
+        assert v != "0.0.0", "Version is fallback '0.0.0' — hatch-vcs may not have git history"
+        assert "unknown" not in v.lower(), f"Version contains 'unknown': {v}"
+
     def test_import_and_data_resolution(self):
         """Verify core imports work and bundled data files are accessible."""
         from planner import Planner
