@@ -18,7 +18,6 @@ from planner.shared.schemas.recommendation import DeploymentBundle
 def e2e_client(test_db_path, mock_scoring_engine, mock_llm_client, monkeypatch):
     """Create a test client with mocked LLM, canned benchmarks, and canned quality data."""
     monkeypatch.setenv("PLANNER_DB_PATH", test_db_path)
-    monkeypatch.setenv("PLANNER_DETECT_CLUSTER_GPUS", "false")
 
     with (
         patch(

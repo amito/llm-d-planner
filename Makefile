@@ -509,9 +509,9 @@ test-unit: ## Run unit tests (no external dependencies)
 	@printf "$(BLUE)Running unit tests...$(NC)\n"
 	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m unit
 
-test-hf: ## Run HuggingFace tests (requires network, skips on failure)
+test-hf: ## Run HuggingFace tests (requires network, retries flaky failures)
 	@printf "$(BLUE)Running HuggingFace tests...$(NC)\n"
-	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m hf_network
+	cd $(SRC_DIR) && uv run pytest ../tests/ -v -m hf_network --reruns 2
 
 test-integration: setup-ollama ## Run integration tests (requires LLM)
 	@printf "$(BLUE)Running integration tests...$(NC)\n"

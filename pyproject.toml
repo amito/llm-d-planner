@@ -152,5 +152,5 @@ markers = [
     "integration: marks tests as integration tests (requires LLM or cluster)",
     "intent_extraction: marks tests that validate LLM intent extraction (requires LLM, run with make test-intent)",
     "unit: marks tests as unit tests (no external dependencies)",
-    "hf_network: marks tests that need HuggingFace API access (retry/skip on network failure)",
+    "hf_network: marks tests that need HuggingFace API access (retried in CI via --reruns)",
 ]

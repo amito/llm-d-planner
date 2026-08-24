@@ -1,6 +1,5 @@
 """Pipeline integration tests: output of each stage feeds to the next."""
 
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -15,9 +14,9 @@ from planner.shared.schemas.specification import DeploymentSpecification
 
 
 @pytest.fixture
-def client(test_db_path, mock_scoring_engine):
+def client(test_db_path, mock_scoring_engine, monkeypatch):
     """Create a test client with test database and quality data."""
-    os.environ["PLANNER_DB_PATH"] = test_db_path
+    monkeypatch.setenv("PLANNER_DB_PATH", test_db_path)
 
     with patch(
         "planner.recommendation.quality.scoring.build_scoring_engine",
@@ -26,8 +25,6 @@ def client(test_db_path, mock_scoring_engine):
         app = create_app()
         with TestClient(app) as test_client:
             yield test_client
-
-    os.environ.pop("PLANNER_DB_PATH", None)
 
 
 @pytest.mark.unit

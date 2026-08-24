@@ -16,10 +16,8 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.fixture
-def e2e_planner(mock_scoring_engine, mock_llm_client, monkeypatch):
+def e2e_planner(mock_scoring_engine, mock_llm_client):
     """Create a Planner instance with canned data and mocked LLM."""
-    monkeypatch.setenv("PLANNER_DETECT_CLUSTER_GPUS", "false")
-
     with patch(
         "planner.planner.build_scoring_engine",
         side_effect=mock_scoring_engine,
@@ -106,10 +104,9 @@ class TestE2EPipelineLibrary:
 
         assert recs.balanced, "expected at least one ranked config"
 
-        if recs.balanced:
-            bundle = p.generate_deployment(
-                config=recs.balanced[0].configuration,
-                namespace="test-ns",
-                stack="vllm",
-            )
-            assert len(bundle.files) >= 2
+        bundle = p.generate_deployment(
+            config=recs.balanced[0].configuration,
+            namespace="test-ns",
+            stack="vllm",
+        )
+        assert len(bundle.files) >= 2

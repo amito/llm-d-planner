@@ -14,7 +14,6 @@ import pytest
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
 
-@pytest.mark.unit
 class TestWheelE2E:
     """Verify the installed wheel works for the full pipeline."""
 

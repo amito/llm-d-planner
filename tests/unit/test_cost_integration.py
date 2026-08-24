@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Quick test script to verify cost integration implementation"""
-
-import sys
+"""Unit and HuggingFace-network tests for CostManager and GPURecommender cost features."""
 
 import pytest
 
@@ -90,40 +88,3 @@ def test_gpu_recommender():
     print("✅ New cost methods available")
 
     print("\n✅ All GPURecommender integration tests passed!\n")
-
-
-def main():
-    """Run all tests"""
-    print("\n")
-    print("=" * 80)
-    print("Cost Integration Verification Tests")
-    print("=" * 80)
-    print()
-
-    try:
-        test_cost_manager()
-        test_gpu_recommender()
-
-        print("=" * 80)
-        print("✅ ALL TESTS PASSED!")
-        print("=" * 80)
-        print("\nCost integration implementation is working correctly.")
-        print("\nKey features verified:")
-        print("  ✅ Default GPU costs loaded from JSON")
-        print("  ✅ Custom cost override functionality")
-        print("  ✅ Multi-GPU cost calculation")
-        print("  ✅ CostManager integrated into GPURecommender")
-        print("  ✅ New cost methods available")
-        print()
-        return 0
-
-    except Exception as e:
-        print(f"\n❌ TEST FAILED: {e}")
-        import traceback
-
-        traceback.print_exc()
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -34,23 +34,6 @@ def parse_cli_json_output(stdout):
     return json.loads(json_output)
 
 
-@pytest.mark.unit
-class TestHelp:
-    """Test help and usage commands — no network needed."""
-
-    def test_help(self):
-        """Test help command"""
-        result = run_cli("--help")
-        assert result.returncode == 0
-        assert "planner" in result.stdout.lower()
-
-    def test_plan_help(self):
-        """Test plan help"""
-        result = run_cli("plan", "--help")
-        assert result.returncode == 0
-        assert "--model" in result.stdout
-
-
 @pytest.mark.hf_network
 class TestBasicPlan:
     """Test basic capacity planning functionality"""

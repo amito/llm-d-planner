@@ -21,7 +21,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 @pytest.fixture(autouse=True)
 def _disable_cluster_gpu_detection(request, monkeypatch):
-    """Prevent unit tests from contacting a real Kubernetes cluster.
+    """Prevent tests from contacting a real Kubernetes cluster.
 
     Skipped for test_gpu_detector which tests detection itself with mocked K8s.
     """

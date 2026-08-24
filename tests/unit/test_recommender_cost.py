@@ -1,4 +1,4 @@
-"""Integration tests for GPURecommender cost features"""
+"""Tests for GPURecommender cost features (requires HuggingFace API)."""
 
 import pytest
 
