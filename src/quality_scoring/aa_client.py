@@ -77,7 +77,7 @@ def _safe_int(val: object) -> int | None:
 
 
 def _map_api_model(api_obj: dict) -> dict:
-    """Map a single API model object to an AAModel-compatible dict."""
+    """Map a single API model object to a normalized model dict."""
     evals = api_obj.get("evaluations") or {}
     pricing = api_obj.get("pricing") or {}
     creator = api_obj.get("model_creator") or {}
@@ -108,7 +108,6 @@ def _map_api_model(api_obj: dict) -> dict:
         "params_active_b": _safe_float(api_obj.get("params_active_b")),
         "reasoning": api_obj.get("reasoning") if "reasoning" in api_obj else _infer_reasoning(name),
         "url": f"https://artificialanalysis.ai/models/{slug}" if slug else None,
-        "accessed_date": datetime.now(UTC).strftime("%Y-%m-%d"),
     }
 
 
@@ -248,7 +247,7 @@ def load_dist_cache(cache_dir: Path | None = None) -> dict | None:
 
 
 def sync(api_key: str, cache_dir: Path | None = None) -> tuple[int, Path]:
-    """Fetch from API, map models, save to cache. Returns (model_count, cache_path)."""
+    """Fetch from API, map and sort models, save cache and distribution stats. Returns (model_count, cache_path)."""
     logger.info("Fetching models from AA API...")
     raw_models = fetch_from_api(api_key)
     logger.info("Received %d models from API", len(raw_models))
@@ -260,6 +259,9 @@ def sync(api_key: str, cache_dir: Path | None = None) -> tuple[int, Path]:
         len(with_index),
         len(mapped),
     )
+
+    # Sort key must match scripts/format_quality_data.py for consistent ordering.
+    mapped.sort(key=lambda m: m.get("slug") or "")
 
     cache_path = save_cache(mapped, cache_dir)
 

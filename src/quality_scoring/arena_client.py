@@ -138,10 +138,12 @@ def load_dist_cache(cache_dir: Path | None = None) -> dict | None:
 
 
 def sync(cache_dir: Path | None = None) -> tuple[int, Path]:
-    """Fetch from HuggingFace and save to cache. Returns (row_count, cache_path)."""
+    """Fetch from HuggingFace, sort rows, save cache and distribution stats. Returns (row_count, cache_path)."""
     logger.info("Fetching Arena leaderboard from HuggingFace...")
     rows = fetch_from_hf()
     logger.info("Received %d rows", len(rows))
+    # Sort key must match scripts/format_quality_data.py for consistent ordering.
+    rows.sort(key=lambda r: (r.get("model_name") or "", r.get("category") or ""))
     cache_path = save_cache(rows, cache_dir)
 
     dist = compute_distribution(rows)

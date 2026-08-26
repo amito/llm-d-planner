@@ -51,6 +51,7 @@ class TestMapApiModel:
         assert result["output_price_per_1m"] == 3.0
         assert result["blended_price_api"] == 1.5
         assert result["url"] == "https://artificialanalysis.ai/models/test-model"
+        assert "accessed_date" not in result
 
     def test_missing_fields(self) -> None:
         api_obj = {"name": "Minimal", "slug": "minimal"}

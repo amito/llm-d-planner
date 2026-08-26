@@ -495,8 +495,8 @@ quality-sync: ## Refresh checked-in quality benchmark data (Arena + AA)
 	else \
 		printf "$(YELLOW)⚠ AA_API_KEY not set — skipping AA sync$(NC)\n"; \
 	fi
-	@printf "$(BLUE)Formatting JSON files for readable diffs...$(NC)\n"
-	@uv run python -c "import json, pathlib; [pathlib.Path(f).write_text(json.dumps(json.loads(pathlib.Path(f).read_text()), indent=2, ensure_ascii=False) + '\n') for f in ['src/quality_scoring/data/arena_models.json', 'src/quality_scoring/data/aa_models.json', 'src/quality_scoring/data/arena_dist.json', 'src/quality_scoring/data/aa_dist.json'] if pathlib.Path(f).is_file()]"
+	@printf "$(BLUE)Formatting and sorting JSON files for readable diffs...$(NC)\n"
+	@uv run python scripts/format_quality_data.py
 	@printf "$(GREEN)✓ Quality data synced to src/quality_scoring/data/$(NC)\n"
 
 ##@ Testing
