@@ -13,7 +13,7 @@ UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_S),Darwin)
     PLATFORM := macos
     OPEN_CMD := open
-    PYTHON := python3.13
+    PYTHON := python3
 else ifeq ($(UNAME_S),Linux)
     PLATFORM := linux
     OPEN_CMD := xdg-open
@@ -110,14 +110,13 @@ check-prereqs: ## Check if required tools are installed
 	@command -v ollama >/dev/null 2>&1 || (printf "$(RED)✗ ollama not found$(NC). Run: brew install ollama\n" && exit 1)
 	@printf "$(GREEN)✓ ollama found$(NC)\n"
 	@command -v $(PYTHON) >/dev/null 2>&1 || (printf "$(RED)✗ $(PYTHON) not found$(NC). Run: brew install python@3.13\n" && exit 1)
-	@printf "$(GREEN)✓ $(PYTHON) found$(NC)\n"
+	@PY_MINOR=$$($(PYTHON) -c 'import sys; print(sys.version_info.minor)' 2>/dev/null || echo "0"); \
+	if [ "$$PY_MINOR" -lt "13" ]; then \
+		printf "$(RED)✗ Python >= 3.13 required, found 3.$$PY_MINOR$(NC). Run: brew install python@3.13\n" && exit 1; \
+	fi
+	@printf "$(GREEN)✓ $(PYTHON) found ($$($(PYTHON) --version 2>&1))$(NC)\n"
 	@command -v uv >/dev/null 2>&1 || (printf "$(RED)✗ uv not found$(NC). Run: curl -LsSf https://astral.sh/uv/install.sh | sh\n" && exit 1)
 	@printf "$(GREEN)✓ uv found$(NC)\n"
-	@# Check Python version and warn if 3.14+
-	@PY_VERSION=$$($(PYTHON) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || echo "0.0"); \
-	if [ "$$(echo "$$PY_VERSION" | cut -d. -f1)" = "3" ] && [ "$$(echo "$$PY_VERSION" | cut -d. -f2)" -ge "14" ]; then \
-		printf "$(YELLOW)  Recommend using Python 3.13 for best compatibility.$(NC)\n"; \
-	fi
 	@$(CONTAINER_TOOL) info >/dev/null 2>&1 || (printf "$(RED)✗ Docker or Podman daemon not running$(NC).\n" && exit 1)
 	@printf "$(GREEN)✓ $(CONTAINER_TOOL) daemon running$(NC)\n"
 	@command -v docker-compose >/dev/null 2>&1 || docker compose version >/dev/null 2>&1 || (printf "$(RED)✗ docker compose not found$(NC). Install Docker Compose or update Docker Desktop\n" && exit 1)
