@@ -5,23 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from quality_scoring.cache import get_cache_dir as _shared_get_cache_dir
 from quality_scoring.cache import is_cache_stale  # noqa: F401 — re-export for backward compat
 
 logger = logging.getLogger(__name__)
 
-API_BASE = "https://artificialanalysis.ai/api/v2/data/llms/models"
-
-REASONING_PATTERNS = re.compile(
-    r"(?i)\b(reasoning|thinking|think)\b|"
-    r"\((?:high|medium|low|xhigh)\)"
-)
+API_BASE = "https://artificialanalysis.ai/api/v2/language/models/free"
 
 
 def get_cache_dir(cache_dir: Path | None = None) -> Path:
@@ -33,37 +27,59 @@ def get_cache_path(cache_dir: Path | None = None) -> Path:
     return get_cache_dir(cache_dir) / "aa_models.json"
 
 
+_MAX_PAGES = 100
+
+
+class AAModelRecord(TypedDict):
+    name: str
+    slug: str
+    intelligence_index: int | None
+    coding_index: int | None
+    agentic_index: int | None
+
+
 def fetch_from_api(api_key: str) -> list[dict[str, Any]]:
-    """Fetch all models from the AA API. Returns raw model dicts from response['data']."""
+    """Fetch all models from the AA free API, handling pagination."""
     import httpx
 
+    all_models: list[dict[str, Any]] = []
+    page = 1
+
     with httpx.Client(timeout=30) as client:
-        resp = client.get(API_BASE, headers={"x-api-key": api_key})
-        if resp.status_code == 401:
-            raise RuntimeError("AA API authentication failed (401). Check your API key.")
-        if resp.status_code == 429:
-            raise RuntimeError("AA API rate limit exceeded (429). Try again later.")
-        resp.raise_for_status()
-        data = resp.json()
-    if isinstance(data, dict) and "data" in data:
-        result: list[dict[str, Any]] = data["data"]
-        return result
-    if isinstance(data, list):
-        return data  # type: ignore[return-value]
-    raise RuntimeError(f"Unexpected API response structure: {type(data)}")
+        while page <= _MAX_PAGES:
+            resp = client.get(
+                API_BASE,
+                headers={"x-api-key": api_key},
+                params={"page": page},
+            )
+            if resp.status_code == 401:
+                raise RuntimeError("AA API authentication failed (401). Check your API key.")
+            if resp.status_code == 429:
+                raise RuntimeError("AA API rate limit exceeded (429). Try again later.")
+            resp.raise_for_status()
 
+            body = resp.json()
+            if not isinstance(body, dict) or "data" not in body:
+                raise RuntimeError(f"Unexpected API response structure: {type(body)}")
+            if not isinstance(body["data"], list):
+                raise RuntimeError(f"Expected list for 'data' field, got {type(body['data'])}")
 
-def _infer_reasoning(name: str) -> bool:
-    return bool(REASONING_PATTERNS.search(name))
+            all_models.extend(body["data"])
 
+            pagination = body.get("pagination", {})
+            if not pagination.get("has_more", False):
+                break
+            page += 1
 
-def _safe_float(val: object) -> float | None:
-    if val is None:
-        return None
-    try:
-        return float(val)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return None
+    if page > _MAX_PAGES:
+        logger.warning(
+            "Pagination capped at %d pages (%d models fetched). "
+            "Some models may be missing from quality data.",
+            _MAX_PAGES,
+            len(all_models),
+        )
+
+    return all_models
 
 
 def _safe_int(val: object) -> int | None:
@@ -76,42 +92,23 @@ def _safe_int(val: object) -> int | None:
         return None
 
 
-def _map_api_model(api_obj: dict) -> dict:
-    """Map a single API model object to a normalized model dict."""
+def _map_api_model(api_obj: dict) -> AAModelRecord:
+    """Map a single API model object to a normalized model dict.
+
+    Only fields consumed by the scoring engine are saved.
+    """
     evals = api_obj.get("evaluations") or {}
-    pricing = api_obj.get("pricing") or {}
-    creator = api_obj.get("model_creator") or {}
-    slug = api_obj.get("slug", "")
-    name = api_obj.get("name", "")
 
     return {
-        "name": name,
-        "slug": slug,
-        "organization": creator.get("name", "Unknown"),
+        "name": api_obj.get("name", ""),
+        "slug": api_obj.get("slug", ""),
         "intelligence_index": _safe_int(evals.get("artificial_analysis_intelligence_index")),
         "coding_index": _safe_int(evals.get("artificial_analysis_coding_index")),
-        "math_index": _safe_int(evals.get("artificial_analysis_math_index")),
-        "mmlu_pro": _safe_float(evals.get("mmlu_pro")),
-        "gpqa": _safe_float(evals.get("gpqa")),
-        "hle": _safe_float(evals.get("hle")),
-        "livecodebench": _safe_float(evals.get("livecodebench")),
-        "scicode": _safe_float(evals.get("scicode")),
-        "math_500": _safe_float(evals.get("math_500")),
-        "aime": _safe_float(evals.get("aime")),
-        "speed_tps": _safe_float(api_obj.get("median_output_tokens_per_second")),
-        "ttft_s": _safe_float(api_obj.get("median_time_to_first_token_seconds")),
-        "input_price_per_1m": _safe_float(pricing.get("price_1m_input_tokens")),
-        "output_price_per_1m": _safe_float(pricing.get("price_1m_output_tokens")),
-        "blended_price_api": _safe_float(pricing.get("price_1m_blended_3_to_1")),
-        "context_window": _safe_int(api_obj.get("context_window")),
-        "params_total_b": _safe_float(api_obj.get("params_total_b")),
-        "params_active_b": _safe_float(api_obj.get("params_active_b")),
-        "reasoning": api_obj.get("reasoning") if "reasoning" in api_obj else _infer_reasoning(name),
-        "url": f"https://artificialanalysis.ai/models/{slug}" if slug else None,
+        "agentic_index": _safe_int(evals.get("artificial_analysis_agentic_index")),
     }
 
 
-def save_cache(models: list[dict], cache_dir: Path | None = None) -> Path:
+def save_cache(models: list[dict[str, Any]], cache_dir: Path | None = None) -> Path:
     """Write models to cache file using atomic write."""
     cache_path = get_cache_path(cache_dir)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +176,7 @@ def get_dist_cache_path(cache_dir: Path | None = None) -> Path:
     return get_cache_dir(cache_dir) / "aa_dist.json"
 
 
-def compute_distribution(models: list[dict]) -> dict:
+def compute_distribution(models: list[dict[str, Any]]) -> dict:
     """Compute distribution stats from intelligence_index values."""
     import statistics
 
@@ -263,9 +260,9 @@ def sync(api_key: str, cache_dir: Path | None = None) -> tuple[int, Path]:
     # Sort key must match scripts/format_quality_data.py for consistent ordering.
     mapped.sort(key=lambda m: m.get("slug") or "")
 
-    cache_path = save_cache(mapped, cache_dir)
+    cache_path = save_cache(mapped, cache_dir)  # type: ignore[arg-type]
 
-    dist = compute_distribution(mapped)
+    dist = compute_distribution(mapped)  # type: ignore[arg-type]
     dist_path = save_dist_cache(dist, cache_dir)
     logger.info("Distribution stats cached to %s (%d models)", dist_path, dist["stats"]["count"])
 

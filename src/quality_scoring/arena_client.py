@@ -13,6 +13,9 @@ from quality_scoring.cache import get_cache_dir
 
 logger = logging.getLogger(__name__)
 
+# Only these fields are used by the scoring engine
+SCORING_FIELDS = {"model_name", "category", "rating", "rating_lower", "rating_upper"}
+
 
 def get_cache_path(cache_dir: Path | None = None) -> Path:
     return get_cache_dir(cache_dir) / "arena_models.json"
@@ -144,6 +147,8 @@ def sync(cache_dir: Path | None = None) -> tuple[int, Path]:
     logger.info("Received %d rows", len(rows))
     # Sort key must match scripts/format_quality_data.py for consistent ordering.
     rows.sort(key=lambda r: (r.get("model_name") or "", r.get("category") or ""))
+    # Strip to scoring-relevant fields only
+    rows = [{k: v for k, v in r.items() if k in SCORING_FIELDS} for r in rows]
     cache_path = save_cache(rows, cache_dir)
 
     dist = compute_distribution(rows)
