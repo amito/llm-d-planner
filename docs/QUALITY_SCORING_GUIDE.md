@@ -22,14 +22,13 @@ Data is fetched from the HuggingFace dataset `lmarena-ai/leaderboard-dataset` an
 
 [Artificial Analysis](https://artificialanalysis.ai/) evaluates models using **automated benchmark suites** — standardized tests with known correct answers, run programmatically.
 
-- **Score range**: 0–100 for aggregate indices; 0–1 for individual benchmarks
-- **Aggregate indices**: Intelligence Index (overall), Coding Index, Math Index
-- **Intelligence Index (v4.0)** aggregates scores from 10 evaluations: GPQA Diamond (science), Humanity's Last Exam (cross-domain), SciCode (scientific coding), Terminal-Bench Hard (CLI tasks), IFBench (instruction following), AA-LCR (long-context retrieval), AA-Omniscience (broad knowledge), GDPval-AA (quantitative reasoning), tau2-Bench Telecom (agent tasks), CritPt (critical thinking). See [AA's methodology](https://artificialanalysis.ai/methodology) for the current composition — AA may update this list over time.
-- **Individually tracked benchmarks** (7): Planner tracks these as separate per-model scores: GPQA Diamond, Humanity's Last Exam, SciCode, LiveCodeBench, MMLU-Pro, MATH-500, AIME. Three of these (GPQA Diamond, HLE, SciCode) are also part of the Intelligence Index v4.0; the other four are independent benchmarks not included in the index.
+- **Score range**: 0–100 for aggregate indices
+- **Aggregate indices**: Intelligence Index (overall), Coding Index, Agentic Index
+- **Intelligence Index (v4.0+)** aggregates scores from 10 evaluations: GPQA Diamond (science), Humanity's Last Exam (cross-domain), SciCode (scientific coding), Terminal-Bench Hard (CLI tasks), IFBench (instruction following), AA-LCR (long-context retrieval), AA-Omniscience (broad knowledge), GDPval-AA (quantitative reasoning), tau2-Bench Telecom (agent tasks), CritPt (critical thinking). See [AA's methodology](https://artificialanalysis.ai/methodology) for the current composition — AA may update this list over time.
 - **Strengths**: Precise for measurable capabilities; reproducible; covers specific skill areas
 - **Limitations**: Less reflective of subjective qualities like writing style or helpfulness
 
-Data is fetched from the AA API and cached in `src/quality_scoring/data/aa_models.json` (requires `AA_API_KEY`).
+Data is sourced from the free V2 API (`/api/v2/language/models/free`) and cached in `src/quality_scoring/data/aa_models.json` (requires `AA_API_KEY`).
 
 ## Model Name Resolution
 
@@ -113,7 +112,7 @@ When both sources have data for a model in a category, the composite score is a 
 composite = arena_weight × arena_percentile + aa_weight × aa_percentile
 ```
 
-Default weights are `arena=50,aa=50`, configurable per use case via `data/configuration/quality_weights.json`. Values are pure weights, normalized internally. When only one source has data, the composite equals that source's percentile.
+Default source weights are equal (`arena_weight=1, aa_weight=1` in the ScoringEngine constructor). Per-category weights for each use case are defined in `src/planner/data/configuration/quality_weights.json`. Values are pure weights, normalized internally. When only one source has data, the composite equals that source's percentile.
 
 ### Provenance Flags
 
@@ -200,23 +199,15 @@ Adjusted scores display `*` next to the percentile and a footnote explaining the
 
 ## Missing Category Handling
 
-When a model lacks scores for a specific category (e.g., a model has an overall score but no coding-specific score), the scoring engine currently falls back to the **overall percentile** as a fill-in value. This provides a reasonable baseline but may not accurately reflect the model's performance in that specific category.
+When a model lacks scores for a specific category (e.g., a model has an overall score but no coding-specific score), the scoring engine applies a **discounted fallback** to the overall percentile.
 
 ### Current Approach
 
-- **Fallback**: Use the model's overall composite percentile for missing categories
-- **Rationale**: Overall scores are available for most models and provide a rough approximation
-- **Limitations**: May overestimate or underestimate category-specific performance
+- **Fallback**: Use 0.8× the model's overall composite percentile for missing categories
+- **Rationale**: Correlation analysis shows coding r=0.976 with overall, and all Arena categories show r>0.93. 93% of top-quartile-overall models are also top-quartile coding; 0% fall in bottom-quartile coding. The 0.8× discount provides fairness to models with measured category-specific scores, not correction of a prediction error.
+- **Coverage**: Intelligence Index (overall) has 98% coverage, Coding Index 38%, Agentic Index 28%. The fallback ensures all models can be scored while incentivizing measurement.
 
-### Future Alternatives
-
-1. **Minimum-by-size estimation**: For a missing category, scan the population for models with similar parameter counts and use the minimum score from that cohort. This provides a conservative estimate based on peer performance.
-
-2. **Pre-computed fill-ins**: At cache refresh time, compute category-specific fill-in values (e.g., median score for models of that size/family) and store them in the cache. This avoids runtime computation overhead.
-
-3. **Explicit "no data" handling**: Return `None` for missing categories and require downstream consumers (recommendation engine, UI) to handle the absence explicitly, possibly excluding the model from category-specific rankings.
-
-The project may implement one or more of these approaches in future iterations.
+This approach was chosen over alternatives like peer-minimum estimation or pre-computed fill-ins for its simplicity and empirical grounding in the correlation structure of the data.
 
 ## Planner Integration
 
@@ -224,30 +215,40 @@ Planner's quality scoring system integrates the dual-source ScoringEngine into t
 
 ### Quality Weights Configuration
 
-Per-use-case category weights are defined in `data/configuration/quality_weights.json`. Each use case maps to integer weights for categories like `overall`, `coding`, `math`, `creative_writing`, etc.
+Per-use-case category weights are defined in `src/planner/data/configuration/quality_weights.json`. Each use case maps to integer weights for categories like `overall`, `coding`, `math`, `creative_writing`, etc.
 
 Example:
 
 ```json
 {
-  "code_generation": {
-    "overall": 10,
-    "coding": 80,
-    "math": 10
+  "code_completion": {
+    "categories": {
+      "coding": 5,
+      "math": 3,
+      "overall": 2,
+      "agentic": 2,
+      "hard_prompts": 2
+    }
   },
-  "general_chat": {
-    "overall": 100
+  "chatbot_conversational": {
+    "categories": {
+      "overall": 4,
+      "instruction_following": 3,
+      "multi_turn": 3,
+      "creative_writing": 2,
+      "hard_prompts": 2
+    }
   }
 }
 ```
 
-Weights are normalized internally — only relative proportions matter. The scoring engine computes a weighted composite percentile across all specified categories.
+Every use case includes `overall` to ensure at least one high-coverage dual-source signal. Weights are normalized internally — only relative proportions matter. The scoring engine computes a weighted composite percentile across all specified categories.
 
 ### Scoring Pipeline
 
 1. **ScoringEngine initialization**: `build_scoring_engine()` in `src/planner/recommendation/quality/scoring.py` constructs a `ScoringEngine` from cached data in `src/quality_scoring/data/` (or auto-updates from `.quality_cache/` if `QUALITY_AUTO_UPDATE=true`).
 
-2. **Per-model scoring**: `compute_quality_score(model_name, use_case, engine, weights)` looks up the model's scores across all categories specified in the use case's quality_weights entry, applies the per-category weights, and returns a single float percentile (0–100).
+2. **Per-model scoring**: `compute_quality_score(scorecard, category_weights)` takes a `ModelScorecard` from the engine and a dict of category weights, applies the per-category weights (with 0.8× fallback discount for missing categories), and returns a single float percentile (0–100).
 
 3. **Integration with ConfigurationScores**: The quality score becomes `ConfigurationScores.quality_score`, replacing the old `accuracy_score`. This score is used in multi-criteria ranking alongside `price_score`, `latency_score`, and `complexity_score`.
 
@@ -257,7 +258,7 @@ Planner uses a two-tier cache:
 
 1. **Checked-in snapshots** (`src/quality_scoring/data/`): Committed to git, provide stable baseline data for offline use and CI/CD. Updated manually via `make quality-sync`.
 
-2. **Runtime auto-update cache** (`.quality_cache/`, gitignored): When `QUALITY_AUTO_UPDATE=true`, the scoring engine fetches fresh data from Arena/AA APIs on first use and stores it in `.quality_cache/`. Subsequent runs use the cached data until it expires (24-hour TTL). This keeps recommendations current without manual intervention.
+2. **Runtime auto-update cache** (`.quality_cache/`, gitignored): When `QUALITY_AUTO_UPDATE=true`, the scoring engine fetches fresh data from Arena (HuggingFace) and AA (free V2 API) on first use and stores it in `.quality_cache/`. Subsequent runs use the cached data until it expires (24-hour TTL). This keeps recommendations current without manual intervention.
 
 Environment variables:
 - `QUALITY_AUTO_UPDATE`: Enable/disable auto-update (default: `false` for stability)
@@ -278,17 +279,15 @@ Planner exposes quality data management via REST API:
 make quality-sync
 ```
 
-Fetches fresh data from Arena and AA (requires `AA_API_KEY`), updates `src/quality_scoring/data/` snapshots, and commits the changes. Run this periodically (e.g., weekly) to keep the baseline cache current.
+Fetches fresh data from Arena (HuggingFace) and AA (free V2 API), updates `src/quality_scoring/data/` snapshots, and commits the changes. Run this periodically (e.g., weekly) to keep the baseline cache current. Requires `AA_API_KEY` environment variable.
 
 ## ScoringEngine API
 
-The `ScoringEngine` class in `src/quality_scoring/quality_scoring/engine.py` provides the primary programmatic API for external consumers. It pre-computes normalizations across the full population once, then supports cheap per-model lookups via `get_scores()` and `get_scores_batch()`. The Planner recommendation engine delegates to it internally.
+The `ScoringEngine` class in `src/quality_scoring/engine.py` provides the primary programmatic API for external consumers. It pre-computes normalizations across the full population once, then supports cheap per-model lookups via `get_scores()` and `get_scores_batch()`. The Planner recommendation engine delegates to it internally.
 
 ### Key Methods
 
-- `get_scores(model_name, categories=None, fuzzy=False)`: Returns a `ModelScorecard` with percentile scores for each category.
-- `get_scores_batch(model_names, categories=None, fuzzy=False)`: Batch version for multiple models.
-- `resolve_model(model_name, source, fuzzy=False)`: Resolves a model name to canonical form in a given source.
-- `compute_composite_score(scorecard, category_weights)`: Applies category weights to a scorecard, returning a single composite percentile.
+- `get_scores(model_name, *, fuzzy=False)`: Returns a `ModelScorecard | None` with percentile scores for each category.
+- `get_scores_batch(model_names, *, fuzzy=False)`: Batch version for multiple models, returns `list[ModelScorecard]`.
 
 See the [quality-scoring package README](../src/quality_scoring/README.md) for full API documentation.
