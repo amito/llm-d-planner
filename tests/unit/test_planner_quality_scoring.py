@@ -64,17 +64,17 @@ class TestComputeQualityScore:
         expected = (90.0 * 6 + 70.0 * 4) / (6 + 4)
         assert score == round(expected, 2)
 
-    def test_missing_category_uses_overall_fill_in(self):
+    def test_missing_category_uses_discounted_overall_fill_in(self):
         sc = _make_mock_scorecard()
-        # "nonexistent" is missing — should use overall percentile (80.0) as fill-in
+        # "nonexistent" is missing — should use 0.8 × overall percentile (80.0) = 64.0
         score = compute_quality_score(sc, {"coding": 5, "nonexistent": 5})
-        expected = (90.0 * 5 + 80.0 * 5) / (5 + 5)  # 85.0
+        expected = (90.0 * 5 + 64.0 * 5) / (5 + 5)  # 77.0
         assert score == round(expected, 2)
 
-    def test_all_categories_missing_uses_overall_for_all(self):
+    def test_all_categories_missing_uses_discounted_overall_for_all(self):
         sc = _make_mock_scorecard()
         score = compute_quality_score(sc, {"nonexistent_a": 5, "nonexistent_b": 5})
-        assert score == 80.0  # all fill-ins use overall
+        assert score == 64.0  # 0.8 × 80.0
 
     def test_empty_weights_returns_overall(self):
         sc = _make_mock_scorecard()
@@ -111,6 +111,11 @@ class TestComputeQualityScore:
         score = compute_quality_score(sc, {"coding": 5, "math": 5})
         assert score == 0.0  # no overall to fill in, no categories match
 
+    def test_fallback_discount_is_0_8(self):
+        from planner.recommendation.quality.scoring import FALLBACK_DISCOUNT
+
+        assert FALLBACK_DISCOUNT == 0.8
+
 
 @pytest.mark.unit
 class TestLoadQualityWeights:
@@ -132,6 +137,18 @@ class TestValidateQualityWeights:
         weights = {"test_case": {"categories": {"overall": 5, "coding": 5}}}
         validate_quality_weights(weights)
         assert "Unknown category" not in caplog.text
+
+    def test_all_weight_categories_are_valid(self):
+        from planner.data._resolver import data_path
+        from quality_scoring.categories import CATEGORY_MAP
+
+        weights = load_quality_weights(data_path("configuration/quality_weights.json"))
+        for use_case, config in weights.items():
+            for cat in config.get("categories", {}):
+                assert cat in CATEGORY_MAP, (
+                    f"quality_weights.json use case {use_case!r} references "
+                    f"unknown category {cat!r}"
+                )
 
     def test_unknown_category_logs_warning(self, caplog):
         import logging

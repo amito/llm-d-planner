@@ -6,10 +6,11 @@ from typing import Any
 import pytest
 
 from quality_scoring.aa_client import (
-    _infer_reasoning,
+    _MAX_PAGES,
     _map_api_model,
     cache_age_display,
     compute_distribution,
+    fetch_from_api,
     is_cache_stale,
     load_cache,
     load_dist_cache,
@@ -24,71 +25,173 @@ class TestMapApiModel:
         api_obj = {
             "name": "Test Model",
             "slug": "test-model",
+            "release_date": "2025-06-15",
             "model_creator": {"name": "TestOrg"},
             "evaluations": {
                 "artificial_analysis_intelligence_index": 42,
                 "artificial_analysis_coding_index": 35,
-                "artificial_analysis_math_index": 28,
+                "artificial_analysis_agentic_index": 30,
             },
-            "median_output_tokens_per_second": 100.5,
-            "median_time_to_first_token_seconds": 0.85,
+            "performance": {
+                "median_output_tokens_per_second": 100.5,
+                "median_time_to_first_token_seconds": 0.85,
+            },
             "pricing": {
                 "price_1m_input_tokens": 1.0,
                 "price_1m_output_tokens": 3.0,
-                "price_1m_blended_3_to_1": 1.5,
             },
         }
         result = _map_api_model(api_obj)
         assert result["name"] == "Test Model"
         assert result["slug"] == "test-model"
-        assert result["organization"] == "TestOrg"
         assert result["intelligence_index"] == 42
         assert result["coding_index"] == 35
-        assert result["math_index"] == 28
-        assert result["speed_tps"] == 100.5
-        assert result["ttft_s"] == 0.85
-        assert result["input_price_per_1m"] == 1.0
-        assert result["output_price_per_1m"] == 3.0
-        assert result["blended_price_api"] == 1.5
-        assert result["url"] == "https://artificialanalysis.ai/models/test-model"
-        assert "accessed_date" not in result
+        assert result["agentic_index"] == 30
+        # Only scoring-relevant fields should be present
+        assert set(result.keys()) == {
+            "name",
+            "slug",
+            "intelligence_index",
+            "coding_index",
+            "agentic_index",
+        }
 
     def test_missing_fields(self) -> None:
         api_obj = {"name": "Minimal", "slug": "minimal"}
         result = _map_api_model(api_obj)
         assert result["name"] == "Minimal"
-        assert result["organization"] == "Unknown"
         assert result["intelligence_index"] is None
         assert result["coding_index"] is None
-        assert result["speed_tps"] is None
-
-    def test_reasoning_from_api(self) -> None:
-        api_obj = {"name": "Test", "slug": "test", "reasoning": True}
-        result = _map_api_model(api_obj)
-        assert result["reasoning"] is True
-
-    def test_reasoning_inferred(self) -> None:
-        api_obj = {"name": "GPT-5 Thinking", "slug": "gpt-5-thinking"}
-        result = _map_api_model(api_obj)
-        assert result["reasoning"] is True
+        assert result["agentic_index"] is None
 
 
 @pytest.mark.unit
-class TestInferReasoning:
-    @pytest.mark.parametrize(
-        "name,expected",
-        [
-            ("GPT-5 Thinking", True),
-            ("Claude Reasoning", True),
-            ("o1 (high)", True),
-            ("o1 (low)", True),
-            ("o1 (xhigh)", True),
-            ("GPT-4o", False),
-            ("Gemini Pro", False),
-        ],
-    )
-    def test_patterns(self, name: str, expected: bool) -> None:
-        assert _infer_reasoning(name) == expected
+class TestFetchFromApi:
+    def _mock_response(self, data: list[dict], has_more: bool = False, page: int = 1) -> Any:
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "tier": "free",
+            "pagination": {"page": page, "page_size": 50, "total_pages": 2, "has_more": has_more},
+            "data": data,
+        }
+        return resp
+
+    def test_single_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.return_value = self._mock_response(
+            [{"name": "A", "slug": "a"}, {"name": "B", "slug": "b"}],
+            has_more=False,
+        )
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        result = fetch_from_api("test-key")
+        assert len(result) == 2
+        assert result[0]["name"] == "A"
+        client.get.assert_called_once()
+
+    def test_multi_page(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        page1 = self._mock_response([{"name": "A", "slug": "a"}], has_more=True, page=1)
+        page2 = self._mock_response([{"name": "B", "slug": "b"}], has_more=False, page=2)
+
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.side_effect = [page1, page2]
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        result = fetch_from_api("test-key")
+        assert len(result) == 2
+        assert result[0]["name"] == "A"
+        assert result[1]["name"] == "B"
+        assert client.get.call_count == 2
+
+    def test_auth_failure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.status_code = 401
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.return_value = resp
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        with pytest.raises(RuntimeError, match="401"):
+            fetch_from_api("bad-key")
+
+    def test_rate_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.status_code = 429
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.return_value = resp
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        with pytest.raises(RuntimeError, match="429"):
+            fetch_from_api("test-key")
+
+    def test_max_pages_cap(self) -> None:
+        assert _MAX_PAGES == 100
+
+    def test_unexpected_response_structure(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = [{"name": "A"}]  # bare list, not {"data": [...]}
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.return_value = resp
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        with pytest.raises(RuntimeError, match="Unexpected API response structure"):
+            fetch_from_api("test-key")
+
+    def test_data_field_not_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": "not-a-list"}
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.return_value = resp
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        with pytest.raises(RuntimeError, match="Expected list"):
+            fetch_from_api("test-key")
+
+    def test_multi_page_correct_params(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unittest.mock import MagicMock
+
+        page1 = self._mock_response([{"name": "A", "slug": "a"}], has_more=True, page=1)
+        page2 = self._mock_response([{"name": "B", "slug": "b"}], has_more=False, page=2)
+
+        client = MagicMock()
+        client.__enter__ = lambda s: s
+        client.__exit__ = MagicMock(return_value=False)
+        client.get.side_effect = [page1, page2]
+        monkeypatch.setattr("httpx.Client", lambda **kw: client)
+
+        fetch_from_api("test-key")
+
+        calls = client.get.call_args_list
+        assert calls[0].kwargs["params"] == {"page": 1}
+        assert calls[1].kwargs["params"] == {"page": 2}
 
 
 @pytest.mark.unit

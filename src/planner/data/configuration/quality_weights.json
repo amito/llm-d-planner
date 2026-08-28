@@ -1,5 +1,5 @@
 {
-  "_description": "Default category weights per use case for quality scoring. Categories map to quality_scoring benchmark dimensions (Arena + Artificial Analysis). Weights are relative integers (normalized internally). Composited categories (overall, coding, math) combine both Arena and AA data.",
+  "_description": "Default category weights per use case for quality scoring. Categories map to quality_scoring benchmark dimensions (Arena + Artificial Analysis). Composited categories (overall, coding) combine both Arena and AA data. The agentic category uses AA agentic_index only. All other categories use Arena data only. Every use case includes overall to ensure at least one high-coverage dual-source signal.",
   "chatbot_conversational": {
     "categories": {
       "overall": 4,
@@ -12,19 +12,20 @@
   "code_completion": {
     "categories": {
       "coding": 5,
-      "livecodebench": 3,
-      "math": 2,
-      "scicode": 2
+      "math": 3,
+      "overall": 2,
+      "agentic": 2,
+      "hard_prompts": 2
     }
   },
   "code_generation_detailed": {
     "categories": {
       "coding": 4,
-      "livecodebench": 3,
-      "math": 2,
+      "math": 3,
+      "overall": 2,
       "instruction_following": 2,
-      "hard_prompts": 1,
-      "scicode": 1
+      "hard_prompts": 2,
+      "agentic": 2
     }
   },
   "translation": {
@@ -56,7 +57,7 @@
       "expert": 3,
       "longer_query": 2,
       "instruction_following": 2,
-      "mmlu_pro": 1,
+      "hard_prompts": 1,
       "industry_software_and_it_services": 1
     }
   },
@@ -72,8 +73,7 @@
       "expert": 3,
       "overall": 3,
       "industry_legal_and_government": 2,
-      "hard_prompts": 2,
-      "gpqa": 1,
+      "hard_prompts": 3,
       "industry_life_and_physical_and_social_science": 1
     }
   }

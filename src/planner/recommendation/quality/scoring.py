@@ -16,6 +16,8 @@ from quality_scoring.models import ModelScorecard
 
 logger = logging.getLogger(__name__)
 
+FALLBACK_DISCOUNT = 0.8
+
 
 def compute_quality_score(
     scorecard: ModelScorecard,
@@ -27,21 +29,34 @@ def compute_quality_score(
     {"coding": 5, "math": 3}).  Weights are normalized internally.
 
     For categories where the model has no data, the model's overall
-    composite percentile is used as a fill-in.  This is a known
-    simplification — see docs/quality-scoring-guide.md for future
-    alternatives (minimum-by-size estimation, pre-computed fill-ins).
+    composite percentile is used as a fill-in, discounted by 0.8.
+    This discount provides fairness to models with actual category
+    data rather than correcting a prediction error.
     """
     overall_pct = scorecard.overall.percentile if scorecard.overall else 0.0
+    fallback_pct = overall_pct * FALLBACK_DISCOUNT
 
     total_weight = 0
     weighted_sum = 0.0
+    fallback_cats: list[str] = []
     for cat, weight in category_weights.items():
         cs = scorecard.categories.get(cat)
         if cs is not None:
             weighted_sum += weight * cs.percentile
         else:
-            weighted_sum += weight * overall_pct
+            weighted_sum += weight * fallback_pct
+            fallback_cats.append(cat)
         total_weight += weight
+
+    if fallback_cats:
+        logger.debug(
+            "Model %s: %d/%d categories used %.1fx fallback (missing: %s)",
+            scorecard.model_name,
+            len(fallback_cats),
+            len(category_weights),
+            FALLBACK_DISCOUNT,
+            ", ".join(fallback_cats),
+        )
 
     if total_weight > 0:
         return round(weighted_sum / total_weight, 2)
@@ -127,7 +142,7 @@ def build_scoring_engine(
             except Exception:
                 arena_rows = arena_rows_cached
                 arena_fetched_at = arena_fetched
-                logger.warning("Arena sync failed, falling back to cached data")
+                logger.warning("Arena sync failed, falling back to cached data", exc_info=True)
         else:
             arena_rows = arena_rows_cached
             arena_fetched_at = arena_fetched
@@ -141,7 +156,7 @@ def build_scoring_engine(
             except Exception:
                 aa_models = aa_cached
                 aa_fetched_at = aa_fetched
-                logger.warning("AA sync failed, falling back to cached data")
+                logger.warning("AA sync failed, falling back to cached data", exc_info=True)
         elif aa_cached:
             aa_models = aa_cached
             aa_fetched_at = aa_fetched

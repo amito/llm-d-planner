@@ -23,10 +23,15 @@ class TestCategoryMap:
         assert arena == "coding"
         assert aa == "coding_index"
 
-    def test_math_maps_to_both_sources(self):
+    def test_math_is_arena_only(self):
         arena, aa = CATEGORY_MAP["math"]
         assert arena == "math"
-        assert aa == "math_index"
+        assert aa is None
+
+    def test_agentic_maps_to_aa_only(self):
+        arena, aa = CATEGORY_MAP["agentic"]
+        assert arena is None
+        assert aa == "agentic_index"
 
     def test_arena_only_categories_have_no_aa_field(self):
         arena_only = [k for k, (_, aa) in CATEGORY_MAP.items() if aa is None]
@@ -42,11 +47,18 @@ class TestCategoryMap:
         assert set(DEFAULT_CATEGORIES).issubset(set(ALL_CATEGORIES))
 
     def test_default_includes_key_categories(self):
-        expected = {"overall", "coding", "math", "creative_writing", "instruction_following"}
+        expected = {
+            "overall",
+            "coding",
+            "math",
+            "creative_writing",
+            "instruction_following",
+            "agentic",
+        }
         assert expected.issubset(set(DEFAULT_CATEGORIES))
 
-    def test_all_categories_has_34_entries(self):
-        assert len(ALL_CATEGORIES) == 34
+    def test_all_categories_has_28_entries(self):
+        assert len(ALL_CATEGORIES) == 28
 
 
 @pytest.mark.unit

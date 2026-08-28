@@ -75,7 +75,7 @@ def compute_reasoning_deltas(
         r = variants.get("reasoning")
         if not nr or not r:
             continue
-        for field in ["intelligence_index", "coding_index", "math_index"]:
+        for field in ["intelligence_index", "coding_index"]:
             nr_val = nr.get(field)
             r_val = r.get(field)
             if nr_val is not None and r_val is not None:

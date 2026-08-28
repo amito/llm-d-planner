@@ -168,9 +168,9 @@ Planner is structured as a layered architecture:
 - **Model Catalog** (JSON): 47 curated models with task/domain metadata
 - **Model Quality Scores** (JSON): Dual-source quality data from Arena (human preferences) and Artificial Analysis (automated benchmarks)
   - Arena: Elo ratings across 27 categories with confidence intervals
-  - AA: Intelligence/coding/math indices and 7 individual benchmarks
+  - AA: Intelligence/coding/agentic indices
   - Normalized to percentile ranks for compositing
-- **Quality Weights** (JSON): Per-use-case category weights for quality scoring (e.g., code_generation: 80% coding, 10% overall, 10% math)
+- **Quality Weights** (JSON): Per-use-case category weights for quality scoring (e.g., code_completion: coding 5, math 3, overall 2, agentic 2, hard_prompts 2)
 - **Use Case Configs** (JSON): Scoring priority weights, SLO targets, and workload profiles per use case
 - **Deployment Outcomes** (Database, future): Actual performance data for feedback loop
 
@@ -180,11 +180,12 @@ The recommendation engine uses **multi-criteria scoring** to rank configurations
 
 **3 Scoring Dimensions** (each 0-100 scale):
 1. **Quality**: Use-case specific model capability from dual-source scoring (Arena + Artificial Analysis)
-   - Sources: Arena human preference rankings (27 categories) + AA automated benchmarks (indices + 7 individual tests)
+   - Sources: Arena human preference rankings (27 categories) + AA automated benchmarks (intelligence/coding/agentic indices)
    - Normalization: Percentile ranks computed via tied-rank method across full population
    - Weighting: Per-use-case category weights from `src/planner/data/configuration/quality_weights.json`
    - Composite: Weighted average of Arena/AA percentiles for specified categories
-   - Fallback: Overall percentile for categories without model-specific data
+   - Fallback: 0.8× discounted overall percentile for missing categories (based on correlation analysis: coding r=0.976 with overall)
+   - All use cases include `overall` category to ensure high-coverage dual-source signal
 2. **Price**: Cost efficiency (inverse of monthly cost, normalized)
 3. **Latency**: SLO compliance and headroom from performance benchmark database
 
@@ -420,7 +421,7 @@ See `docs/PROGRAMMATIC_API_USER_GUIDE.md` for complete API pipeline documentatio
 **Adding a new use case template**:
 1. Add corresponding entry to `src/planner/data/configuration/slo_templates.json` (bundled data file)
 2. Add category weights entry to `src/planner/data/configuration/quality_weights.json` (bundled data file)
-3. Update `docs/USE_CASE_METHODOLOGY.md` with category weighting rationale
+3. Update `docs/QUALITY_SCORING_GUIDE.md` with category weighting rationale
 4. Update docs/ARCHITECTURE.md if needed
 5. Test quality scoring with the new use case: `cd src && uv run pytest ../tests/quality_scoring/test_scoring.py -v`
 
