@@ -33,6 +33,11 @@ def render_configuration_tab():
 
     def _on_mode_change():
         new_mode = st.session_state.deployment_mode_radio.lower()
+        # Skip if the radio value matches what we already synced from the backend —
+        # this avoids a false trigger when Streamlit detects a programmatic state change.
+        current = st.session_state.deployment_mode_selection.lower()
+        if new_mode == current:
+            return
         result = update_deployment_mode(new_mode)
         if result:
             st.session_state.deployment_mode_selection = st.session_state.deployment_mode_radio
