@@ -248,7 +248,7 @@ Every use case includes `overall` to ensure at least one high-coverage dual-sour
 
 1. **ScoringEngine initialization**: `build_scoring_engine()` in `src/planner/recommendation/quality/scoring.py` constructs a `ScoringEngine` from cached data in `src/quality_scoring/data/` (or auto-updates from `.quality_cache/` if `QUALITY_AUTO_UPDATE=true`).
 
-2. **Per-model scoring**: `compute_quality_score(scorecard, category_weights)` takes a `ModelScorecard` from the engine and a dict of category weights, applies the per-category weights (with 0.8× fallback discount for missing categories), and returns a single float percentile (0–100).
+2. **Per-model scoring**: `ConfigFinder` calls `engine.get_scores(model_hf_repo, fuzzy=True)` for each benchmark model, enabling fuzzy matching so that quantized variants (e.g., `redhatai/llama-3.3-70b-instruct-fp8-dynamic`) resolve to their base model's quality scores. `compute_quality_score(scorecard, category_weights)` then takes the resulting `ModelScorecard` and a dict of category weights, applies the per-category weights (with 0.8× fallback discount for missing categories), and returns a single float percentile (0–100).
 
 3. **Integration with ConfigurationScores**: The quality score becomes `ConfigurationScores.quality_score`, replacing the old `accuracy_score`. This score is used in multi-criteria ranking alongside `price_score`, `latency_score`, and `complexity_score`.
 
@@ -280,6 +280,30 @@ make quality-sync
 ```
 
 Fetches fresh data from Arena (HuggingFace) and AA (free V2 API), updates `src/quality_scoring/data/` snapshots, and commits the changes. Run this periodically (e.g., weekly) to keep the baseline cache current. Requires `AA_API_KEY` environment variable.
+
+### Checking Model Name Resolution
+
+The `scripts/check_model_resolution.py` script checks how model names from a catalog (or a comma-separated list) resolve against Arena and AA data sources. Use it to verify resolver coverage after adding models to the catalog or after a data sync.
+
+**Check the full model catalog (with fuzzy matching, as planner uses):**
+
+```bash
+uv run python scripts/check_model_resolution.py --catalog src/planner/data/configuration/model_catalog.json --fuzzy
+```
+
+**Check specific models:**
+
+```bash
+uv run python scripts/check_model_resolution.py -m "meta-llama/llama-3.1-8b-instruct,qwen/qwen2.5-72b-instruct"
+```
+
+**Flags:**
+
+- `--catalog PATH` or `-m NAMES`: Mutually exclusive; provide either a catalog JSON file or comma-separated model names
+- `--fuzzy`: Accept fuzzy matches (without this flag, fuzzy matches are shown but flagged as "not accepted")
+- `--cache-dir PATH`: Override cache directory; falls back to bundled snapshots if the cache is empty
+
+The output shows each model's resolution status per source (exact, equivalent, fuzzy, or not found) with similar-name suggestions for unmatched models, plus a summary of resolution coverage.
 
 ## ScoringEngine API
 
