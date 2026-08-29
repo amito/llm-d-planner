@@ -8,7 +8,7 @@ import os
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any
 
 from quality_scoring.cache import get_cache_dir as _shared_get_cache_dir
 from quality_scoring.cache import is_cache_stale  # noqa: F401 — re-export for backward compat
@@ -28,14 +28,6 @@ def get_cache_path(cache_dir: Path | None = None) -> Path:
 
 
 _MAX_PAGES = 100
-
-
-class AAModelRecord(TypedDict):
-    name: str
-    slug: str
-    intelligence_index: int | None
-    coding_index: int | None
-    agentic_index: int | None
 
 
 def fetch_from_api(api_key: str) -> list[dict[str, Any]]:
@@ -92,20 +84,20 @@ def _safe_int(val: object) -> int | None:
         return None
 
 
-def _map_api_model(api_obj: dict) -> AAModelRecord:
+def _map_api_model(api_obj: dict) -> dict[str, Any]:
     """Map a single API model object to a normalized model dict.
 
-    Only fields consumed by the scoring engine are saved.
+    Preserves all fields from the API response and promotes scoring-relevant
+    evaluation indices to top-level keys for backward compatibility.
     """
     evals = api_obj.get("evaluations") or {}
 
-    return {
-        "name": api_obj.get("name", ""),
-        "slug": api_obj.get("slug", ""),
-        "intelligence_index": _safe_int(evals.get("artificial_analysis_intelligence_index")),
-        "coding_index": _safe_int(evals.get("artificial_analysis_coding_index")),
-        "agentic_index": _safe_int(evals.get("artificial_analysis_agentic_index")),
-    }
+    # Shallow copy — safe because records are serialized to JSON cache immediately.
+    record: dict[str, Any] = dict(api_obj)
+    record["intelligence_index"] = _safe_int(evals.get("artificial_analysis_intelligence_index"))
+    record["coding_index"] = _safe_int(evals.get("artificial_analysis_coding_index"))
+    record["agentic_index"] = _safe_int(evals.get("artificial_analysis_agentic_index"))
+    return record
 
 
 def save_cache(models: list[dict[str, Any]], cache_dir: Path | None = None) -> Path:
