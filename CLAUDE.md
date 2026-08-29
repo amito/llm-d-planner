@@ -290,6 +290,8 @@ Environment variables:
 - `AA_API_KEY`: Artificial Analysis API key (required for AA data sync)
 - `LLM_QUALITY_CACHE_DIR`: Override cache directory (default: `.quality_cache/`)
 
+**IMPORTANT**: Never run `make quality-sync` or any command that calls the AA or Arena APIs unless the user explicitly asks for it. The AA free tier has tight rate limits, and an unnecessary sync can block the user from syncing when they need to. For development and testing, use the bundled snapshot files in `src/quality_scoring/data/` — they are always available locally.
+
 API endpoints for runtime management:
 - `GET /api/v1/quality/auto-update` - Check auto-update status and cache stats
 - `PUT /api/v1/quality/auto-update` - Enable/disable auto-update

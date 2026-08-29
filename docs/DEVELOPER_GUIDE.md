@@ -39,6 +39,8 @@ This checks for:
 - kubectl
 - KIND
 
+**Additional requirement for container image builds:** Docker Buildx is required for `make image-build` on non-amd64 hosts (e.g., Apple Silicon Macs). It is included with Docker Desktop; for manual install see [DOCKER.md](DOCKER.md#installing-buildx).
+
 ### Container Runtime Support
 
 Planner supports both **Docker** and **Podman** as container runtimes.

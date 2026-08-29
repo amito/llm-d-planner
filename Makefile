@@ -282,7 +282,9 @@ open-backend: ## Open backend API docs in browser
 
 image-build-backend: ## Build backend container image
 	@printf "$(BLUE)Building backend image...$(NC)\n"
-	$(CONTAINER_TOOL) build --platform linux/amd64 -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
+	@PKG_VERSION=$$(uv run python -c "from importlib.metadata import version; print(version('llm-d-planner'))" 2>/dev/null) && \
+	  [ -n "$$PKG_VERSION" ] || { printf "$(RED)Error: Could not determine llm-d-planner version. Run 'make setup-backend' first.$(NC)\n"; exit 1; } && \
+	  $(CONTAINER_TOOL) build --platform linux/amd64 --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=$$PKG_VERSION -f Dockerfile -t $(BACKEND_IMAGE):$(BACKEND_TAG) -t $(BACKEND_FULL_IMAGE) .
 	@printf "$(GREEN)✓ Backend image built:$(NC)\n"
 	@printf "  - $(BACKEND_IMAGE):$(BACKEND_TAG)\n"
 	@printf "  - $(BACKEND_FULL_IMAGE)\n"

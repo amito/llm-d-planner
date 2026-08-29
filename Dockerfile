@@ -17,6 +17,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Copy dependency files and README (hatchling requires README.md for package metadata)
 COPY pyproject.toml uv.lock README.md ./
 
+# Provide version for hatch-vcs (backed by setuptools-scm) since .git is excluded
+# by .dockerignore. ARG is available to RUN instructions; no ENV needed at runtime.
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
+
+# Create src/planner/ so uv sync can invoke the hatch-vcs hook to write _version.py
+RUN mkdir -p src/planner
+
 # Install Python dependencies (frozen = use lockfile exactly, no-dev = skip dev deps)
 RUN uv sync --frozen --no-dev --extra server --extra llm --extra openai --extra vertex --extra kubernetes --extra estimation --extra quality-sync
 RUN uv pip install "llm-optimizer @ git+https://github.com/bentoml/llm-optimizer.git"

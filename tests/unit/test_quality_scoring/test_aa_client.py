@@ -47,14 +47,11 @@ class TestMapApiModel:
         assert result["intelligence_index"] == 42
         assert result["coding_index"] == 35
         assert result["agentic_index"] == 30
-        # Only scoring-relevant fields should be present
-        assert set(result.keys()) == {
-            "name",
-            "slug",
-            "intelligence_index",
-            "coding_index",
-            "agentic_index",
-        }
+        # All original fields preserved, plus promoted index fields
+        assert result["release_date"] == "2025-06-15"
+        assert result["model_creator"] == {"name": "TestOrg"}
+        assert result["performance"]["median_output_tokens_per_second"] == 100.5
+        assert result["pricing"]["price_1m_input_tokens"] == 1.0
 
     def test_missing_fields(self) -> None:
         api_obj = {"name": "Minimal", "slug": "minimal"}
