@@ -15,6 +15,7 @@ Planner is containerized into the following services:
 
 - Docker Engine 20.10+ or Docker Desktop
 - Docker Compose v2.0+
+- Docker Buildx (required for `make image-build` on non-amd64 hosts such as Apple Silicon Macs; included with Docker Desktop, or install separately — see [Installing Buildx](#installing-buildx))
 - At least 8GB of RAM available for Docker
 - 10GB of free disk space (for Ollama models)
 
@@ -431,6 +432,22 @@ server {
 - 4+ CPU cores
 - 16GB RAM
 - 50GB disk space (for Ollama models)
+
+## Installing Buildx
+
+Docker Buildx is required for `make image-build`. It is included with Docker Desktop, but if you installed Docker Engine separately (e.g., via Homebrew), you need to install it manually:
+
+```bash
+brew install docker-buildx
+mkdir -p ~/.docker/cli-plugins
+ln -sfn $(brew --prefix docker-buildx)/lib/docker/cli-plugins/docker-buildx ~/.docker/cli-plugins/docker-buildx
+```
+
+Verify the installation:
+
+```bash
+docker buildx version
+```
 
 ## Next Steps
 
