@@ -376,6 +376,10 @@ guidelines.
 
 See [CLAUDE.md](https://github.com/llm-d-incubation/llm-d-planner/blob/main/CLAUDE.md) for AI assistant guidance when making changes.
 
+## Attribution
+
+Quality data provided by [Artificial Analysis](https://artificialanalysis.ai) and [Arena](https://lmarena.ai).
+
 ## License
 
 This project is licensed under Apache License 2.0. See the [LICENSE
