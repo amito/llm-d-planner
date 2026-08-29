@@ -121,6 +121,12 @@ def save_cache(models: list[dict[str, Any]], cache_dir: Path | None = None) -> P
             os.unlink(tmp_path)
         raise
 
+    # mkstemp creates files with 0o600; relax so cache is readable by other processes
+    try:
+        os.chmod(cache_path, 0o644)
+    except OSError:
+        logger.warning("Could not set permissions on %s", cache_path)
+
     return cache_path
 
 
@@ -210,6 +216,12 @@ def save_dist_cache(dist: dict, cache_dir: Path | None = None) -> Path:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
         raise
+
+    # mkstemp creates files with 0o600; relax so cache is readable by other processes
+    try:
+        os.chmod(cache_path, 0o644)
+    except OSError:
+        logger.warning("Could not set permissions on %s", cache_path)
 
     return cache_path
 
